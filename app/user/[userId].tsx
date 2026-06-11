@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { usersApi, friendsApi, chatApi, type UserProfile } from '@/lib/api';
+import { usersApi, friendsApi, reportsApi, type UserProfile } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -102,17 +102,46 @@ export default function UserProfileScreen() {
     ]);
   }
 
-  async function openDm() {
-    if (!profile || actionLoading) return;
-    setActionLoading(true);
-    try {
-      const res = await chatApi.openDm(profile._id);
-      router.push(`/chat/${res.room._id}`);
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not open chat.');
-    } finally {
-      setActionLoading(false);
-    }
+  function handleMoreOptions() {
+    if (!profile) return;
+    const name = profile.displayName ?? 'this user';
+    Alert.alert(`Options for ${name}`, undefined, [
+      {
+        text: 'Report user',
+        onPress: () => {
+          Alert.alert('Report user', 'What\'s the issue?', [
+            { text: 'Inappropriate behaviour', onPress: () => reportsApi.create('user', profile._id, 'inappropriate').catch(() => {}) },
+            { text: 'Felt unsafe', onPress: () => reportsApi.create('user', profile._id, 'unsafe').catch(() => {}) },
+            { text: 'Fake profile', onPress: () => reportsApi.create('user', profile._id, 'fake').catch(() => {}) },
+            { text: 'Spam', onPress: () => reportsApi.create('user', profile._id, 'spam').catch(() => {}) },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
+        },
+      },
+      {
+        text: 'Block user',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(`Block ${name}?`, 'They won\'t be able to see your pings or contact you.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await friendsApi.block(profile._id);
+                  Alert.alert('Blocked', `${name} has been blocked.`);
+                  router.back();
+                } catch (e: any) {
+                  Alert.alert('Error', e.message);
+                }
+              },
+            },
+          ]);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   if (loading) {
@@ -140,6 +169,11 @@ export default function UserProfileScreen() {
   const isPendingSent = profile.friendshipStatus === 'pending_sent';
   const isPendingReceived = profile.friendshipStatus === 'pending_received';
 
+  const accountAgeDays = profile.createdAt
+    ? (Date.now() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    : 0;
+  const isVerified = !!profile.phoneVerifiedAt && accountAgeDays >= 7;
+
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       {/* Header */}
@@ -148,7 +182,13 @@ export default function UserProfileScreen() {
           <Ionicons name="arrow-back" size={22} color={c.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: c.text }]}>Profile</Text>
-        <View style={{ width: 36 }} />
+        {!isSelf && profile ? (
+          <TouchableOpacity onPress={handleMoreOptions} hitSlop={12}>
+            <Ionicons name="ellipsis-vertical" size={20} color={c.textSecondary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 36 }} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -161,9 +201,16 @@ export default function UserProfileScreen() {
         </View>
 
         {/* Name + username */}
-        <Text style={[styles.name, { color: c.text }]}>
-          {profile.displayName ?? 'User'}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={[styles.name, { color: c.text }]}>
+            {profile.displayName ?? 'User'}
+          </Text>
+          {isVerified && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={18} color="#3B82F6" />
+            </View>
+          )}
+        </View>
         {profile.username ? (
           <Text style={[styles.username, { color: c.textSecondary }]}>@{profile.username}</Text>
         ) : null}
@@ -188,32 +235,15 @@ export default function UserProfileScreen() {
         {!isSelf && (
           <View style={styles.actionsWrap}>
             {isAccepted && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnPrimary]}
-                  onPress={openDm}
-                  disabled={actionLoading}
-                  activeOpacity={0.85}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <>
-                      <Ionicons name="chatbubble" size={17} color="#FFF" />
-                      <Text style={styles.actionBtnTextPrimary}>Message</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnSecondary, { borderColor: c.border }]}
-                  onPress={removeFriend}
-                  disabled={actionLoading}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="person-remove-outline" size={17} color={c.textSecondary} />
-                  <Text style={[styles.actionBtnTextSecondary, { color: c.textSecondary }]}>Remove</Text>
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnSecondary, styles.actionBtnFull, { borderColor: c.border }]}
+                onPress={removeFriend}
+                disabled={actionLoading}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="person-remove-outline" size={17} color={c.textSecondary} />
+                <Text style={[styles.actionBtnTextSecondary, { color: c.textSecondary }]}>Remove Friend</Text>
+              </TouchableOpacity>
             )}
 
             {profile.friendshipStatus === 'none' && (
@@ -321,7 +351,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#080815',
   },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...Typography.h3, textAlign: 'center' },
+  verifiedBadge: { marginTop: 2 },
   username: { ...Typography.bodySm, marginTop: 2 },
   bio: {
     ...Typography.bodySm,

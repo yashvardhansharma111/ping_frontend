@@ -4,7 +4,7 @@ const ROOT = process.env.EXPO_PUBLIC_API_URL ?? 'https://app.pingnow.in';
 const BASE_URL = `${ROOT}/api/v1`;
 export const WEB_BASE = ROOT;
 
-export interface ApiResponse<T = unknown> {
+export interface ApiResponse {
   ok: boolean;
   [key: string]: unknown;
 }
@@ -84,7 +84,7 @@ export const authApi = {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email'> & { dob: string }>) =>
+  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email'> & { dob: string; gender: string; institute: string; hobbies: string[] }>) =>
     patch<{ ok: boolean; user: User }>('/users/me', data),
   updatePrivacy: (data: Partial<{ ghostMode: boolean; locationSharing: boolean }>) =>
     patch<{ ok: boolean; privacy: User['privacy'] }>('/users/me/privacy', data),
@@ -103,6 +103,7 @@ export interface CreateActivityPayload {
   title: string;
   type: string;
   visibility: 'public' | 'friends';
+  genderFilter?: 'all' | 'women_only' | 'men_only';
   lat: number;
   lng: number;
   durationMinutes?: number;
@@ -132,6 +133,7 @@ export const activitiesApi = {
   },
   join: (id: string) => post<{ ok: boolean }>(`/activities/${id}/join`),
   leave: (id: string) => post<{ ok: boolean }>(`/activities/${id}/leave`),
+  leaveQuietly: (id: string) => post<{ ok: boolean }>(`/activities/${id}/leave-quietly`),
   cancel: (id: string) => del<{ ok: boolean }>(`/activities/${id}`),
   onMyWay: (id: string) => post<{ ok: boolean }>(`/activities/${id}/on-my-way`),
   arrived: (id: string) => post<{ ok: boolean }>(`/activities/${id}/arrived`),
@@ -146,12 +148,21 @@ export const friendsApi = {
   accept: (userId: string) => post(`/friends/${userId}/accept`),
   reject: (userId: string) => post(`/friends/${userId}/reject`),
   remove: (userId: string) => del(`/friends/${userId}`),
+  block: (userId: string) => post<{ ok: boolean }>(`/friends/${userId}/block`),
+  unblock: (userId: string) => post<{ ok: boolean }>(`/friends/${userId}/unblock`),
+  mutual: (userId: string) => get<{ ok: boolean; count: number; mutualIds: string[] }>(`/friends/${userId}/mutual`),
+};
+
+export const reportsApi = {
+  create: (targetType: 'user' | 'ping' | 'message', targetId: string, reason: string, notes?: string) =>
+    post<{ ok: boolean }>('/reports', { targetType, targetId, reason, notes }),
 };
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface User {
   _id: string;
+  id?: string; // backend also sends id (alias of _id)
   phone: string;
   displayName?: string;
   username?: string;
@@ -159,8 +170,10 @@ export interface User {
   bio?: string;
   email?: string;
   dob?: string;
+  gender?: 'male' | 'female' | 'other';
   status: string;
   strikeCount: number;
+  phoneVerifiedAt?: string | null;
   privacy?: {
     ghostMode: boolean;
     locationSharing: boolean;
@@ -188,7 +201,8 @@ export interface Activity {
   participants: ActivityParticipant[];
   maxParticipants?: number;
   visibility: 'public' | 'friends' | 'squad';
-  creator?: { _id?: string; displayName?: string; username?: string; avatarUrl?: string };
+  genderFilter?: 'all' | 'women_only' | 'men_only';
+  creator?: { _id?: string; displayName?: string; username?: string; avatarUrl?: string; trustRate?: number; createdAt?: string };
   creatorId?: string;
   distance?: number;
 }
@@ -208,6 +222,8 @@ export interface UserProfile {
   avatarUrl?: string;
   bio?: string;
   trustRate?: number;
+  createdAt?: string;
+  phoneVerifiedAt?: string | null;
   status: string;
   friendshipStatus: 'self' | 'none' | 'accepted' | 'pending_sent' | 'pending_received' | 'blocked';
 }

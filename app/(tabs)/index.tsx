@@ -8,6 +8,9 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  AppState,
+  ScrollView,
+  type AppStateStatus,
 } from 'react-native';
 import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
@@ -40,6 +43,8 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const knownIdsRef = useRef<Set<string>>(new Set());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryCountRef = useRef(0);
   const bannerAnim = useRef(new Animated.Value(0)).current;
 
   const { coords, granted, loading: locLoading } = useLocation();
@@ -54,7 +59,19 @@ export default function MapScreen() {
   const [loaded, setLoaded] = useState(false);
   const [lastLoad, setLastLoad] = useState<Date | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string>('');
   const { user } = useAuthStore();
+
+  const FILTER_TYPES = [
+    { key: '', label: 'All' },
+    { key: 'sport', label: '🏋️ Sport' },
+    { key: 'food', label: '🍔 Food' },
+    { key: 'music', label: '🎵 Music' },
+    { key: 'study', label: '📚 Study' },
+    { key: 'outdoor', label: '🌿 Outdoor' },
+    { key: 'gaming', label: '🎮 Gaming' },
+    { key: 'meetup', label: '🤝 Meetup' },
+  ] as const;
 
   useEffect(() => {
     console.log(`[Location] granted=${granted} loading=${locLoading} lat=${coords.latitude.toFixed(5)} lng=${coords.longitude.toFixed(5)}`);
@@ -96,11 +113,11 @@ export default function MapScreen() {
       const fresh = res.activities ?? [];
 
       console.log(`[Map] API OK — ${fresh.length} activities`);
-      fresh.forEach((a) => {
-        const aLat = a.location?.coordinates?.[1];
-        const aLng = a.location?.coordinates?.[0];
-        console.log(`[Map] Activity: "${a.title}" lat=${aLat} lng=${aLng} dist=${a.distance}m creator=${a.creator?.displayName}`);
-      });
+
+      // Clear any pending retry loop on success
+      if (retryRef.current) { clearInterval(retryRef.current); retryRef.current = null; }
+      retryCountRef.current = 0;
+
       setApiError(false);
       setApiErrMsg('');
       setLoaded(true);
@@ -120,10 +137,36 @@ export default function MapScreen() {
       setApiError(true);
       setApiErrMsg(msg);
       setLoaded(true);
+
+      // Auto-retry up to 5 times with 6s interval
+      if (!retryRef.current) {
+        retryRef.current = setInterval(() => {
+          retryCountRef.current += 1;
+          console.log(`[Map] Auto-retry attempt ${retryCountRef.current}`);
+          loadNearby(true);
+          if (retryCountRef.current >= 5) {
+            clearInterval(retryRef.current!);
+            retryRef.current = null;
+          }
+        }, 6_000);
+      }
     } finally {
       if (!silent) setRefreshing(false);
     }
   }
+
+  // Reload when app comes back to foreground
+  useEffect(() => {
+    function handleAppState(next: AppStateStatus) {
+      if (next === 'active' && !locLoading) {
+        console.log('[Map] App foregrounded — refreshing');
+        loadNearby(true);
+      }
+    }
+    const sub = AppState.addEventListener('change', handleAppState);
+    return () => sub.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locLoading]);
 
   useFocusEffect(useCallback(() => {
     // Skip loading with placeholder coords — wait for real GPS fix
@@ -135,8 +178,13 @@ export default function MapScreen() {
     pollRef.current = setInterval(() => loadNearby(true), 30_000);
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      if (retryRef.current) { clearInterval(retryRef.current); retryRef.current = null; }
     };
   }, [coords.latitude, coords.longitude, locLoading]));
+
+  const filteredActivities = typeFilter
+    ? activities.filter((a) => a.type === typeFilter)
+    : activities;
 
   function recenter() {
     mapRef.current?.animateToRegion(
@@ -172,14 +220,11 @@ export default function MapScreen() {
           </Marker>
         )}
 
-        {activities.map((a) => {
+        {filteredActivities.map((a) => {
           const isSelected = selected?._id === a._id;
           const mLat = a.location?.coordinates?.[1];
           const mLng = a.location?.coordinates?.[0];
-          if (!mLat || !mLng) {
-            console.warn(`[Map] Activity "${a.title}" has no coordinates — skipping`);
-            return null;
-          }
+          if (!mLat || !mLng) return null;
           return (
             <Marker
               key={a._id}
@@ -194,6 +239,7 @@ export default function MapScreen() {
                 count={a.participants?.length ?? 0}
                 creatorName={a.creator?.displayName ?? a.creator?.username}
                 title={a.title}
+                genderFilter={a.genderFilter}
               />
             </Marker>
           );
@@ -218,7 +264,7 @@ export default function MapScreen() {
             ) : (
               <>
                 <View style={styles.liveDot} />
-                <Text style={styles.countText}>{activities.length} pings</Text>
+                <Text style={styles.countText}>{filteredActivities.length} pings</Text>
               </>
             )}
           </View>
@@ -233,6 +279,32 @@ export default function MapScreen() {
         </View>
       </View>
 
+      {/* Filter chips row */}
+      <View style={styles.filterRow} pointerEvents="box-none">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScroll}
+          pointerEvents="box-none"
+        >
+          {FILTER_TYPES.map(({ key, label }) => {
+            const active = typeFilter === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                onPress={() => setTypeFilter(key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Attribution */}
       <Text style={styles.attribution} pointerEvents="none">
         © OpenStreetMap · CartoDB
@@ -242,8 +314,10 @@ export default function MapScreen() {
       {apiError && (
         <View style={styles.errorBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#EF4444" />
-          <Text style={styles.errorText}>Can't reach server · tap to retry</Text>
-          <TouchableOpacity onPress={() => loadNearby()} hitSlop={10}>
+          <Text style={styles.errorText}>
+            {retryRef.current ? 'Reconnecting...' : "Can't reach server · tap to retry"}
+          </Text>
+          <TouchableOpacity onPress={() => { if (retryRef.current) { clearInterval(retryRef.current); retryRef.current = null; } loadNearby(); }} hitSlop={10}>
             <Ionicons name="refresh" size={14} color="#EF4444" />
           </TouchableOpacity>
         </View>
@@ -498,6 +572,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+
+  // ── Filter chips ──────────────────────────────────────────────────────────
+  filterRow: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 108 : 90,
+    left: 0,
+    right: 0,
+    zIndex: 9,
+  },
+  filterScroll: {
+    paddingHorizontal: Spacing.md,
+    gap: 7,
+  },
+  filterChip: {
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(8,8,21,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.25)',
+  },
+  filterChipActive: {
+    backgroundColor: Ping.purple,
+    borderColor: Ping.purple,
+    shadowColor: Ping.purple,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(241,240,255,0.7)',
+  },
+  filterChipTextActive: {
+    color: '#FFF',
   },
 
   // ── Attribution ───────────────────────────────────────────────────────────

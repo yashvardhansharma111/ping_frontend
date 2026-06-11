@@ -21,6 +21,7 @@ interface Props {
   count?: number;
   creatorName?: string;
   title?: string;
+  genderFilter?: 'all' | 'women_only' | 'men_only';
 }
 
 export default function PingMarker({
@@ -29,6 +30,7 @@ export default function PingMarker({
   count = 0,
   creatorName,
   title,
+  genderFilter,
 }: Props) {
   const cfg = TYPE_CFG[type] ?? TYPE_CFG.default;
   const size = selected ? 58 : 46;
@@ -89,6 +91,17 @@ export default function PingMarker({
             {initials}
           </Text>
         </View>
+
+        {/* Gender badge — top-left (women_only / men_only) */}
+        {genderFilter && genderFilter !== 'all' && (
+          <View style={[s.genderBadge, { backgroundColor: genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' }]}>
+            <Ionicons
+              name={genderFilter === 'women_only' ? 'female' : 'male'}
+              size={9}
+              color="#FFF"
+            />
+          </View>
+        )}
 
         {/* Participant count badge — top-right */}
         {count > 1 && (
@@ -172,6 +185,19 @@ const s = StyleSheet.create({
   },
 
   // ── Badges ─────────────────────────────────────────────────────────────────
+  genderBadge: {
+    position: 'absolute',
+    top: -5,
+    left: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#080815',
+    zIndex: 2,
+  },
   countBadge: {
     position: 'absolute',
     top: -5,

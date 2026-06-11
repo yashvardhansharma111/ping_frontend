@@ -3,7 +3,7 @@
  * Shows: header info, participants, creator, all action buttons.
  * Used inside the map screen's selected-activity sheet.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { activitiesApi, chatApi, type Activity, type ActivityParticipant } from '@/lib/api';
+import { activitiesApi, chatApi, friendsApi, reportsApi, type Activity, type ActivityParticipant } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -119,19 +119,35 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
 
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [leavingQuietly, setLeavingQuietly] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [onMyWayLoading, setOnMyWayLoading] = useState(false);
   const [arrivedLoading, setArrivedLoading] = useState(false);
+  const [mutualCount, setMutualCount] = useState<number | null>(null);
+
+  // Fetch mutual friends count for the Safety Card (only when not creator)
+  useEffect(() => {
+    const cId = a.creator?._id ?? a.creatorId;
+    if (!cId || cId === myId) return;
+    friendsApi.mutual(cId)
+      .then((r) => setMutualCount(r.count))
+      .catch(() => setMutualCount(0));
+  }, [a._id]);
 
   async function handleJoin() {
     if (joining || isExpired) return;
     setJoining(true);
+    const isFirstJoin = count === 0; // no other participants yet
     try {
       await activitiesApi.join(a._id);
       onRefresh();
-      // Seamlessly open the group chat right after joining
       const res = await chatApi.openActivityRoom(a._id);
+      // If we're the first to join, drop a welcome message in the room
+      if (isFirstJoin) {
+        const name = a.creator?.displayName ?? 'The host';
+        chatApi.sendMessage(res.room._id, `👋 ${name} started this ping — say hi!`).catch(() => {});
+      }
       router.push(`/chat/${res.room._id}`);
     } catch (e: any) {
       Alert.alert('Could not join', e.message);
@@ -157,6 +173,30 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
           }
         },
       },
+    ]);
+  }
+
+  async function handleLeaveQuietly() {
+    setLeavingQuietly(true);
+    try {
+      await activitiesApi.leaveQuietly(a._id);
+      onRefresh();
+      onDismiss();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLeavingQuietly(false);
+    }
+  }
+
+  function handleReport() {
+    const targetId = a._id;
+    Alert.alert('Report this ping', 'What\'s the issue?', [
+      { text: 'Inappropriate content', onPress: () => reportsApi.create('ping', targetId, 'inappropriate').catch(() => {}) },
+      { text: 'Felt unsafe', onPress: () => reportsApi.create('ping', targetId, 'unsafe').catch(() => {}) },
+      { text: 'Spam', onPress: () => reportsApi.create('ping', targetId, 'spam').catch(() => {}) },
+      { text: 'Fake activity', onPress: () => reportsApi.create('ping', targetId, 'fake').catch(() => {}) },
+      { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
@@ -275,12 +315,30 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
         </View>
       </View>
 
+      {/* Gender filter badge */}
+      {a.genderFilter && a.genderFilter !== 'all' && (
+        <View style={[
+          styles.genderBadge,
+          { backgroundColor: a.genderFilter === 'women_only' ? 'rgba(236,72,153,0.15)' : 'rgba(59,130,246,0.15)',
+            borderColor: a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' },
+        ]}>
+          <Ionicons
+            name={a.genderFilter === 'women_only' ? 'female' : 'male'}
+            size={13}
+            color={a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6'}
+          />
+          <Text style={[styles.genderBadgeText, { color: a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' }]}>
+            {a.genderFilter === 'women_only' ? 'Women only' : 'Men only'}
+          </Text>
+        </View>
+      )}
+
       {/* Description */}
       {a.description ? (
         <Text style={[styles.description, { color: c.textSecondary }]}>{a.description}</Text>
       ) : null}
 
-      {/* Creator */}
+      {/* Creator Safety Card (shown before joining a stranger's ping) */}
       {a.creator?.displayName && (
         <TouchableOpacity
           style={[styles.creatorRow, { backgroundColor: c.surface, borderColor: c.border }]}
@@ -294,7 +352,41 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.creatorName, { color: c.text }]}>{a.creator.displayName}</Text>
-            <Text style={[styles.creatorLabel, { color: c.textSecondary }]}>Created this ping</Text>
+            <View style={styles.creatorMeta}>
+              {/* Trust Rate */}
+              {a.creator.trustRate !== undefined && (
+                <View style={styles.trustChip}>
+                  <View style={[styles.trustDot, {
+                    backgroundColor: a.creator.trustRate >= 70 ? '#22C55E'
+                      : a.creator.trustRate >= 40 ? '#F59E0B' : '#9490C0',
+                  }]} />
+                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
+                    {a.creator.trustRate}% trust
+                  </Text>
+                </View>
+              )}
+              {/* Mutual friends */}
+              {mutualCount !== null && mutualCount > 0 && (
+                <View style={styles.trustChip}>
+                  <Ionicons name="people-outline" size={10} color={Ping.purpleLight} />
+                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
+                    {mutualCount} mutual
+                  </Text>
+                </View>
+              )}
+              {/* Account age */}
+              {a.creator.createdAt && (
+                <View style={styles.trustChip}>
+                  <Ionicons name="calendar-outline" size={10} color={c.icon} />
+                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
+                    {(() => {
+                      const months = Math.floor((Date.now() - new Date(a.creator.createdAt!).getTime()) / (30 * 24 * 3600 * 1000));
+                      return months < 1 ? 'New member' : `${months}mo ago`;
+                    })()}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
           {creatorId && <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />}
         </TouchableOpacity>
@@ -426,7 +518,38 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
                 )}
               </TouchableOpacity>
             </View>
+
+            {/* Discreet exit + report row */}
+            <View style={styles.safetyRow}>
+              <TouchableOpacity
+                style={styles.safetyBtn}
+                onPress={handleLeaveQuietly}
+                disabled={leavingQuietly}
+                activeOpacity={0.7}
+              >
+                {leavingQuietly ? (
+                  <ActivityIndicator size="small" color="#9490C0" />
+                ) : (
+                  <>
+                    <Ionicons name="eye-off-outline" size={13} color="#9490C0" />
+                    <Text style={styles.safetyBtnText}>Leave Quietly</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.safetyBtn} onPress={handleReport} activeOpacity={0.7}>
+                <Ionicons name="flag-outline" size={13} color="#9490C0" />
+                <Text style={styles.safetyBtnText}>Report</Text>
+              </TouchableOpacity>
+            </View>
           </>
+        )}
+
+        {/* Not joined — report button */}
+        {!isJoined && !isCreator && (
+          <TouchableOpacity style={[styles.safetyRow, { justifyContent: 'flex-end' }]} onPress={handleReport} activeOpacity={0.7}>
+            <Ionicons name="flag-outline" size={13} color="#9490C0" />
+            <Text style={styles.safetyBtnText}>Report this ping</Text>
+          </TouchableOpacity>
         )}
 
         {/* Creator actions */}
@@ -511,6 +634,17 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   metaText: { ...Typography.caption, fontSize: 12 },
   description: { ...Typography.bodySm, lineHeight: 20 },
+  genderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  genderBadgeText: { ...Typography.caption, fontWeight: '700', fontSize: 12 },
   creatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -529,6 +663,26 @@ const styles = StyleSheet.create({
   creatorInitial: { color: '#FFF', fontWeight: '700', fontSize: 14 },
   creatorName: { ...Typography.bodyMed, fontSize: 14 },
   creatorLabel: { ...Typography.caption, marginTop: 1 },
+  creatorMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  trustChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  trustDot: { width: 6, height: 6, borderRadius: 3 },
+  trustText: { ...Typography.caption, fontSize: 11 },
+  safetyRow: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  safetyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(148,144,192,0.1)',
+  },
+  safetyBtnText: { ...Typography.caption, color: '#9490C0', fontSize: 11, fontWeight: '600' },
   section: { gap: 8 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionLabel: { ...Typography.caption, textTransform: 'uppercase', letterSpacing: 0.5 },

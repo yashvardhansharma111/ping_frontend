@@ -183,6 +183,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
   const [title, setTitle] = useState('');
   const [type, setType] = useState('meetup');
   const [visibility, setVisibility] = useState<'public' | 'friends'>('public');
+  const [genderFilter, setGenderFilter] = useState<'all' | 'women_only' | 'men_only'>('all');
   const [duration, setDuration] = useState(60);
   const [maxPeople, setMaxPeople] = useState('');
   const [isNow, setIsNow] = useState(true);
@@ -193,6 +194,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
     setTitle('');
     setType('meetup');
     setVisibility('public');
+    setGenderFilter('all');
     setDuration(60);
     setMaxPeople('');
     setIsNow(true);
@@ -225,6 +227,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
         title: trimmed,
         type,
         visibility,
+        genderFilter,
         lat,
         lng,
         durationMinutes: duration,
@@ -395,6 +398,37 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
                       <Text style={[styles.visLabel, active && styles.visLabelActive]}>
                         {v === 'public' ? 'Everyone' : 'Friends only'}
                       </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Gender filter */}
+            <View style={styles.section}>
+              <Text style={styles.label}>Who can join?</Text>
+              <View style={styles.genderRow}>
+                {([
+                  { key: 'all',        label: 'Everyone', icon: 'earth-outline'      },
+                  { key: 'women_only', label: 'Women only', icon: 'female-outline'   },
+                  { key: 'men_only',   label: 'Men only',   icon: 'male-outline'     },
+                ] as const).map((g) => {
+                  const active = genderFilter === g.key;
+                  const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : Ping.purple;
+                  return (
+                    <TouchableOpacity
+                      key={g.key}
+                      style={[
+                        styles.genderChip,
+                        active
+                          ? { backgroundColor: color, borderColor: color }
+                          : { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(167,139,250,0.2)' },
+                      ]}
+                      onPress={() => setGenderFilter(g.key)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={g.icon as any} size={14} color={active ? '#FFF' : '#9490C0'} />
+                      <Text style={[styles.genderLabel, active && styles.genderLabelActive]}>{g.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -585,6 +619,19 @@ const styles = StyleSheet.create({
   visChipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
   visLabel: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600' },
   visLabelActive: { color: '#FFF' },
+  genderRow: { flexDirection: 'row', gap: Spacing.sm },
+  genderChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+  },
+  genderLabel: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600', fontSize: 11 },
+  genderLabelActive: { color: '#FFF' },
   numberInput: {
     backgroundColor: '#1A1A38',
     borderRadius: Radius.md,

@@ -16,7 +16,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { friendsApi, chatApi, usersApi, type Friendship, type User } from '@/lib/api';
+import { friendsApi, usersApi, type Friendship, type User } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -276,7 +276,6 @@ export default function FriendsScreen() {
   const [requests, setRequests] = useState<Friendship[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [openingDm, setOpeningDm] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -330,24 +329,14 @@ export default function FriendsScreen() {
     ]);
   }
 
-  async function openDm(userId: string) {
-    if (openingDm) return;
-    setOpeningDm(userId);
-    try {
-      const res = await chatApi.openDm(userId);
-      router.push(`/chat/${res.room._id}`);
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not open chat.');
-    } finally {
-      setOpeningDm(null);
-    }
-  }
-
   function renderFriend({ item }: { item: Friendship }) {
     const u = item.friend;
-    const isDmLoading = openingDm === u._id;
     return (
-      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+        onPress={() => router.push(`/user/${u._id}`)}
+        activeOpacity={0.8}
+      >
         <Avatar user={u} size={48} />
         <View style={styles.info}>
           <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
@@ -358,25 +347,13 @@ export default function FriendsScreen() {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: `${Ping.purple}22`, borderColor: c.border }]}
-          onPress={() => openDm(u._id)}
-          disabled={!!openingDm}
-          activeOpacity={0.75}
-        >
-          {isDmLoading ? (
-            <ActivityIndicator size="small" color={Ping.purpleLight} />
-          ) : (
-            <Ionicons name="chatbubble" size={16} color={Ping.purpleLight} />
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.actionBtn, { borderColor: c.border }]}
           onPress={() => removeFriend(u._id, u.displayName ?? 'this user')}
           activeOpacity={0.75}
         >
           <Ionicons name="person-remove-outline" size={16} color={c.textSecondary} />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   }
 

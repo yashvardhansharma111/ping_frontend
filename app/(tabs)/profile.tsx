@@ -119,6 +119,12 @@ function ToggleRow({
 
 // ── Edit Profile Modal ────────────────────────────────────────────────────────
 
+const GENDERS = [
+  { key: 'male', label: 'Male' },
+  { key: 'female', label: 'Female' },
+  { key: 'other', label: 'Other' },
+] as const;
+
 function EditProfileModal({
   visible,
   onClose,
@@ -133,15 +139,17 @@ function EditProfileModal({
   const [username, setUsername] = useState(user?.username ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>(user?.gender ?? '');
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
 
   async function save() {
-    const payload: Record<string, string> = {};
+    const payload: Record<string, any> = {};
     if (displayName.trim()) payload.displayName = displayName.trim();
     if (username.trim()) payload.username = username.trim();
     payload.bio = bio.trim();
     if (email.trim()) payload.email = email.trim();
+    if (gender) payload.gender = gender;
 
     if (!payload.displayName) {
       Alert.alert('Name required', 'Please enter a display name.');
@@ -205,6 +213,32 @@ function EditProfileModal({
               autoCapitalize="none"
               c={c}
             />
+
+            {/* Gender selector */}
+            <View style={sh.fieldWrap}>
+              <Text style={[sh.fieldLabel, { color: c.textSecondary }]}>Gender</Text>
+              <View style={sh.genderRow}>
+                {GENDERS.map(({ key, label }) => {
+                  const active = gender === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        sh.genderChip,
+                        { borderColor: active ? Ping.purple : c.border, backgroundColor: active ? `${Ping.purple}22` : c.card },
+                      ]}
+                      onPress={() => setGender(active ? '' : key)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[sh.genderLabel, { color: active ? Ping.purpleLight : c.textSecondary }]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             <TouchableOpacity
               style={[sh.saveBtn, saving && { opacity: 0.6 }]}
               onPress={save}
@@ -731,6 +765,16 @@ const sh = StyleSheet.create({
     elevation: 8,
   },
   saveBtnText: { ...Typography.bodyMed, color: '#FFF', fontWeight: '600' },
+  genderRow: { flexDirection: 'row', gap: Spacing.sm },
+  genderChip: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 40,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+  },
+  genderLabel: { ...Typography.bodySm, fontWeight: '600' },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
