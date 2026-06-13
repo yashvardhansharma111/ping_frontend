@@ -25,7 +25,9 @@ import PingMarker from '@/components/PingMarker';
 import ActivityDetailSheet from '@/components/ActivityDetailSheet';
 import CreatePingModal from '@/components/CreatePingModal';
 
-const { height: SCREEN_H } = Dimensions.get('window');
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
+const POPUP_W = 290;   // max width of popup card
+const PIN_VISUAL_H = 75; // approx height of pin marker (50 head + 16 tip + 5 shadow + 4 glow)
 
 // ── Type config (matches PingMarker) ─────────────────────────────────────────
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -40,7 +42,7 @@ const TYPE_CFG: Record<string, { icon: IoniconName; color: string; label: string
   default: { icon: 'location-outline',       color: '#6B7280', label: 'Ping' },
 };
 
-// ── Popup card (shown in Callout above pin) ───────────────────────────────────
+// ── Popup card (floats above the map as a RN overlay, NOT inside Callout) ────
 function PopupCard({
   activity,
   onOpen,
@@ -62,52 +64,75 @@ function PopupCard({
 
   return (
     <View style={pc.wrap}>
-      <View style={[pc.iconWrap, { backgroundColor: `${cfg.color}20` }]}>
-        <Ionicons name={cfg.icon} size={16} color={cfg.color} />
-      </View>
-      <View style={pc.body} onStartShouldSetResponder={() => { onOpen(); return true; }}>
-        <Text style={pc.title} numberOfLines={1}>{activity.title}</Text>
-        <Text style={pc.sub}>{cfg.label} · {timeStr}</Text>
-      </View>
-      <View style={pc.closeHit} onStartShouldSetResponder={() => { onClose(); return true; }}>
-        <Ionicons name="close" size={14} color="#9CA3AF" />
-      </View>
+      <TouchableOpacity style={pc.card} onPress={onOpen} activeOpacity={0.88}>
+        <View style={[pc.iconWrap, { backgroundColor: `${cfg.color}22` }]}>
+          <Ionicons name={cfg.icon} size={17} color={cfg.color} />
+        </View>
+        <View style={pc.body}>
+          <Text style={pc.title} numberOfLines={1}>{activity.title}</Text>
+          <Text style={pc.sub}>{cfg.label} · {timeStr}</Text>
+        </View>
+        <TouchableOpacity
+          style={pc.closeHit}
+          onPress={onClose}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={15} color="#9CA3AF" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+      {/* Downward caret pointing toward the selected pin */}
+      <View style={pc.caret} />
     </View>
   );
 }
 
 const pc = StyleSheet.create({
-  wrap: {
+  wrap: { alignItems: 'center' },
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingLeft: 10,
-    paddingRight: 8,
-    minWidth: 200,
-    maxWidth: 260,
+    backgroundColor: '#18181E',
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingLeft: 11,
+    paddingRight: 9,
+    minWidth: 210,
+    maxWidth: 290,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  caret: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderTopWidth: 9,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#18181E',
+    alignSelf: 'center',
+    marginTop: -1,
   },
   iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   body: { flex: 1 },
   title: { fontSize: 13, fontWeight: '700', color: '#F3F4F6' },
-  sub: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
+  sub: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
   closeHit: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -188,6 +213,9 @@ export default function MapScreen() {
   const retryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryCountRef = useRef(0);
   const bannerAnim = useRef(new Animated.Value(0)).current;
+  const popupAnim = useRef(new Animated.Value(0)).current;
+  const popupScaleAnim = useRef(new Animated.Value(0.88)).current;
+  const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
 
   const { coords, granted, loading: locLoading } = useLocation();
   const router = useRouter();
@@ -299,6 +327,35 @@ export default function MapScreen() {
     }
   }
 
+  // Resolve pin screen coords and animate popup in/out
+  useEffect(() => {
+    if (selected) {
+      const lat = selected.location?.coordinates?.[1];
+      const lng = selected.location?.coordinates?.[0];
+      if (lat && lng && mapRef.current) {
+        // pointForCoordinate gives the ANCHOR point (bottom tip of pin) in screen space
+        (mapRef.current as any)
+          .pointForCoordinate({ latitude: lat, longitude: lng })
+          .then((pt: { x: number; y: number }) => {
+            setPopupPos(pt);
+            // Animate in only after we have position
+            Animated.parallel([
+              Animated.spring(popupAnim, { toValue: 1, damping: 16, stiffness: 260, useNativeDriver: true }),
+              Animated.spring(popupScaleAnim, { toValue: 1, damping: 16, stiffness: 260, useNativeDriver: true }),
+            ]).start();
+          })
+          .catch(() => {
+            setPopupPos(null);
+          });
+      }
+    } else {
+      Animated.parallel([
+        Animated.timing(popupAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(popupScaleAnim, { toValue: 0.88, duration: 150, useNativeDriver: true }),
+      ]).start(() => setPopupPos(null));
+    }
+  }, [selected?._id]);
+
   // Reload when app comes back to foreground
   useEffect(() => {
     function handleAppState(next: AppStateStatus) {
@@ -380,7 +437,7 @@ export default function MapScreen() {
               coordinate={{ latitude: mLat, longitude: mLng }}
               anchor={{ x: 0.5, y: 1 }}
               onPress={() => setSelected((prev) => prev?._id === a._id ? null : a)}
-              tracksViewChanges={isSelected}
+              tracksViewChanges
             >
               <PingMarker
                 type={a.type}
@@ -388,17 +445,42 @@ export default function MapScreen() {
                 count={a.participants?.length ?? 0}
                 genderFilter={a.genderFilter}
               />
-              <Callout tooltip onPress={() => setSheetActivity(a)}>
-                <PopupCard
-                  activity={a}
-                  onOpen={() => setSheetActivity(a)}
-                  onClose={clearSelection}
-                />
-              </Callout>
             </Marker>
           );
         })}
       </MapView>
+
+      {/* ── Popup card — rendered in RN layer above the map, positioned over the pin ── */}
+      {selected && popupPos && (
+        <Animated.View
+          style={[
+            styles.popupOverlay,
+            {
+              // Centre horizontally on the pin, clamp to screen edges
+              left: Math.max(12, Math.min(SCREEN_W - POPUP_W - 12, popupPos.x - POPUP_W / 2)),
+              // Sit just above the pin tip (anchor is at the bottom of the pin)
+              top: popupPos.y - PIN_VISUAL_H - 70,
+              opacity: popupAnim,
+              transform: [
+                { scale: popupScaleAnim },
+                {
+                  translateY: popupAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <PopupCard
+            activity={selected}
+            onOpen={() => setSheetActivity(selected)}
+            onClose={clearSelection}
+          />
+        </Animated.View>
+      )}
 
       {/* ── Top bar ── */}
       <View style={styles.topBar} pointerEvents="box-none">
@@ -954,6 +1036,12 @@ const styles = StyleSheet.create({
   },
 
   // ── Empty state ───────────────────────────────────────────────────────────
+  // ── Popup card overlay ────────────────────────────────────────────────────
+  popupOverlay: {
+    position: 'absolute',
+    zIndex: 50,
+  },
+
   emptyHint: {
     position: 'absolute',
     bottom: '38%',

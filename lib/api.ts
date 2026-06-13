@@ -9,6 +9,37 @@ export interface ApiResponse {
   [key: string]: unknown;
 }
 
+// Singleton refresh promise — prevents concurrent 401s from each triggering a separate refresh
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    if (!refreshToken) throw new Error('No refresh token stored');
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as any).message || 'Token refresh failed');
+    const newToken: string = (data as any).accessToken;
+    await SecureStore.setItemAsync('accessToken', newToken);
+    // Update in-memory store so all subsequent requests use the new token immediately
+    const { default: useAuthStore } = await import('./stores/authStore');
+    useAuthStore.setState({ accessToken: newToken });
+    return newToken;
+  })().finally(() => { _refreshPromise = null; });
+  return _refreshPromise;
+}
+
+function makeSignal() {
+  const c = new AbortController();
+  setTimeout(() => c.abort(), 15_000);
+  return c.signal;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -22,14 +53,35 @@ async function request<T>(
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  let res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 15_000); return c.signal; })(),
+    signal: makeSignal(),
   });
 
-  const data = await res.json().catch(() => ({}));
+  let data = await res.json().catch(() => ({}));
+
+  // Auto-refresh on 401 then retry once
+  if (auth && res.status === 401) {
+    try {
+      const newToken = await refreshAccessToken();
+      headers['Authorization'] = `Bearer ${newToken}`;
+      res = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: makeSignal(),
+      });
+      data = await res.json().catch(() => ({}));
+    } catch {
+      // Refresh failed — clear session and let the router redirect to login
+      const { default: useAuthStore } = await import('./stores/authStore');
+      await useAuthStore.getState().logout();
+      throw new Error('Session expired. Please log in again.');
+    }
+  }
+
   if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `HTTP ${res.status}`);
   return data as T;
 }
