@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,41 @@ export default function PhoneScreen() {
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
+
+  // Logo entrance + radial glow animations
+  const logoScale = useRef(new Animated.Value(0.4)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const pulse1 = useRef(new Animated.Value(0)).current;
+  const pulse2 = useRef(new Animated.Value(0)).current;
+  const cardSlide = useRef(new Animated.Value(40)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Logo spring entrance
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, damping: 12, stiffness: 180, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+    // Card slides up
+    Animated.parallel([
+      Animated.timing(cardSlide, { toValue: 0, duration: 500, delay: 200, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
+    ]).start();
+    // Two staggered pulsing glow rings
+    Animated.loop(
+      Animated.timing(pulse1, { toValue: 1, duration: 2200, useNativeDriver: true })
+    ).start();
+    setTimeout(() => {
+      Animated.loop(
+        Animated.timing(pulse2, { toValue: 1, duration: 2200, useNativeDriver: true })
+      ).start();
+    }, 1100);
+  }, []);
+
+  const p1Scale = pulse1.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.4] });
+  const p1Opacity = pulse1.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.5, 0.2, 0] });
+  const p2Scale = pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.4] });
+  const p2Opacity = pulse2.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.4, 0.15, 0] });
 
   const isValid = INDIA_PHONE_RE.test(phone.trim());
 
@@ -51,17 +87,21 @@ export default function PhoneScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Logo */}
-      <View style={styles.logoWrap}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>P</Text>
+      {/* Logo with radial glow */}
+      <Animated.View style={[styles.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+        <View style={styles.glowWrap}>
+          <Animated.View style={[styles.glowRing, { transform: [{ scale: p1Scale }], opacity: p1Opacity }]} />
+          <Animated.View style={[styles.glowRing, { transform: [{ scale: p2Scale }], opacity: p2Opacity }]} />
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoText}>P</Text>
+          </View>
         </View>
         <Text style={styles.appName}>Ping</Text>
         <Text style={styles.tagline}>Discover what's happening around you</Text>
-      </View>
+      </Animated.View>
 
       {/* Form */}
-      <View style={styles.card}>
+      <Animated.View style={[styles.card, { opacity: cardOpacity, transform: [{ translateY: cardSlide }] }]}>
         <Text style={styles.label}>Mobile number</Text>
         <TouchableOpacity
           style={[styles.inputRow, isValid && styles.inputRowActive]}
@@ -106,7 +146,7 @@ export default function PhoneScreen() {
             </>
           )}
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       <Text style={styles.fine}>
         By continuing you agree to our Terms & Privacy Policy
@@ -126,6 +166,19 @@ const styles = StyleSheet.create({
   logoWrap: {
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  glowWrap: {
+    width: 100,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Ping.purple,
   },
   logoCircle: {
     width: 72,

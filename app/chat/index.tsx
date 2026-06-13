@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatApi, type ChatRoom } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import SkeletonList from '@/components/SkeletonLoader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -143,9 +143,7 @@ export default function ChatListScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={Ping.purpleLight} size="large" />
-        </View>
+        <SkeletonList count={5} variant="chat" />
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
           <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}22` }]}>

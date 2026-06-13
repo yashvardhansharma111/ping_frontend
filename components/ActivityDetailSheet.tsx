@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { activitiesApi, chatApi, friendsApi, reportsApi, type Activity, type ActivityParticipant } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   isParticipant,
@@ -137,6 +138,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
 
   async function handleJoin() {
     if (joining || isExpired) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setJoining(true);
     const isFirstJoin = count === 0; // no other participants yet
     try {
@@ -156,6 +158,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
   }
 
   async function handleLeave() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert('Leave ping?', 'You can rejoin later if it\'s still open.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -273,46 +276,43 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       keyboardShouldPersistTaps="handled"
       key={a._id}
     >
-      {/* Type + title + status */}
-      <View style={styles.titleRow}>
-        <View style={[styles.typeBadge, { backgroundColor: `${typeCfg.color}1A` }]}>
-          <Ionicons name={typeCfg.icon} size={20} color={typeCfg.color} />
+      {/* Gradient header strip */}
+      <View style={[styles.gradientHeader, { backgroundColor: `${typeCfg.color}18` }]}>
+        <View style={[styles.gradientHeaderAccent, { backgroundColor: typeCfg.color }]} />
+        <View style={[styles.headerIconWrap, { backgroundColor: `${typeCfg.color}33` }]}>
+          <Ionicons name={typeCfg.icon} size={22} color={typeCfg.color} />
         </View>
         <View style={{ flex: 1 }}>
-          <View style={styles.titleMeta}>
-            <Text style={[styles.title, { color: c.text }]} numberOfLines={2}>{a.title}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusCfg.dot }]} />
-              <Text style={[styles.statusText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
-            </View>
+          <Text style={[styles.headerTitle, { color: typeCfg.color }]} numberOfLines={1}>{a.title}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg, alignSelf: 'flex-start' }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusCfg.dot }]} />
+            <Text style={[styles.statusText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
           </View>
+        </View>
+      </View>
 
-          {/* Time */}
+      {/* Meta row (time / place / distance) */}
+      <View style={styles.metaBlock}>
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={13} color={c.icon} />
+          <Text style={[styles.metaText, { color: timeStatus === 'live' ? '#22C55E' : c.textSecondary }]}>
+            {timeStatus === 'live' ? 'Happening now' : formatStartTime(a.startsAt)}
+          </Text>
+        </View>
+        {a.placeName ? (
           <View style={styles.metaRow}>
-            <Ionicons name="time-outline" size={13} color={c.icon} />
-            <Text style={[styles.metaText, { color: timeStatus === 'live' ? '#22C55E' : c.textSecondary }]}>
-              {timeStatus === 'live' ? 'Happening now' : formatStartTime(a.startsAt)}
+            <Ionicons name="location-outline" size={13} color={c.icon} />
+            <Text style={[styles.metaText, { color: c.textSecondary }]}>{a.placeName}</Text>
+          </View>
+        ) : null}
+        {a.distance !== undefined && a.distance !== null && (
+          <View style={styles.metaRow}>
+            <Ionicons name="navigate-outline" size={13} color={c.icon} />
+            <Text style={[styles.metaText, { color: c.textSecondary }]}>
+              {a.distance < 1000 ? `${Math.round(a.distance)}m away` : `${(a.distance / 1000).toFixed(1)}km away`}
             </Text>
           </View>
-
-          {/* Place */}
-          {a.placeName ? (
-            <View style={styles.metaRow}>
-              <Ionicons name="location-outline" size={13} color={c.icon} />
-              <Text style={[styles.metaText, { color: c.textSecondary }]}>{a.placeName}</Text>
-            </View>
-          ) : null}
-
-          {/* Distance */}
-          {a.distance !== undefined && a.distance !== null && (
-            <View style={styles.metaRow}>
-              <Ionicons name="navigate-outline" size={13} color={c.icon} />
-              <Text style={[styles.metaText, { color: c.textSecondary }]}>
-                {a.distance < 1000 ? `${Math.round(a.distance)}m away` : `${(a.distance / 1000).toFixed(1)}km away`}
-              </Text>
-            </View>
-          )}
-        </View>
+        )}
       </View>
 
       {/* Gender filter badge */}
@@ -611,15 +611,35 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
 
 const styles = StyleSheet.create({
   root: { paddingBottom: Spacing.lg, gap: Spacing.md },
-  titleRow: { flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
-  typeBadge: {
-    width: 44,
-    height: 44,
+  gradientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  gradientHeaderAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: Radius.lg,
+    borderBottomLeftRadius: Radius.lg,
+  },
+  headerIconWrap: {
+    width: 46,
+    height: 46,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
   },
-  titleMeta: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs, marginBottom: 4 },
+  headerTitle: { ...Typography.bodyMed, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  metaBlock: { gap: 4 },
   title: { ...Typography.bodyMed, flex: 1, fontSize: 17 },
   statusBadge: {
     flexDirection: 'row',

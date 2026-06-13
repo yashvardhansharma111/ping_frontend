@@ -18,6 +18,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { friendsApi, usersApi, type Friendship, type User } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
+import SkeletonList from '@/components/SkeletonLoader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAuthStore from '@/lib/stores/authStore';
@@ -80,6 +82,7 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
 
   async function sendRequest(userId: string) {
     if (sending || sentIds.has(userId)) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSending(userId);
     try {
       await friendsApi.send(userId);
@@ -441,9 +444,7 @@ export default function FriendsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={Ping.purpleLight} size="large" />
-        </View>
+        <SkeletonList count={6} variant="friends" />
       ) : (
         <FlatList
           data={data}

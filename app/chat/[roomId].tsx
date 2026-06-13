@@ -10,12 +10,14 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { chatApi, type ChatMessage, type ChatRoom } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 function formatTime(iso: string) {
@@ -71,11 +73,30 @@ const sep = StyleSheet.create({
   label: { ...Typography.caption, paddingHorizontal: Spacing.sm, fontSize: 11 },
 });
 
-function MessageBubble({ msg, myId }: { msg: ChatMessage; myId?: string }) {
+// Colour palette for sender avatars (cycles by name hash)
+const AVATAR_COLORS = ['#7C3AED', '#F97316', '#22C55E', '#3B82F6', '#EC4899', '#10B981', '#EF4444', '#8B5CF6'];
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function MessageBubble({ msg, myId, animate }: { msg: ChatMessage; myId?: string; animate?: boolean }) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const senderId = typeof msg.senderId === 'object' ? (msg.senderId as any)._id : msg.senderId;
   const isMine = senderId === myId;
+
+  const slideAnim = useRef(new Animated.Value(animate ? 18 : 0)).current;
+  const opacityAnim = useRef(new Animated.Value(animate ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!animate) return;
+    Animated.parallel([
+      Animated.spring(slideAnim, { toValue: 0, damping: 18, stiffness: 260, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   if (msg.type === 'system') {
     return (
@@ -86,16 +107,28 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId?: string }) {
   }
 
   const sender = typeof msg.senderId === 'object' ? (msg.senderId as any) : null;
+  const senderName = sender?.displayName || sender?.username || 'User';
   const bodyText =
     msg.body ||
     (msg.type === 'image' ? '📷 Photo' : msg.type === 'location' ? '📍 Location' : '');
+  const initials = senderName[0].toUpperCase();
+  const bg = avatarColor(senderName);
 
   return (
-    <View style={[styles.bubbleWrap, isMine ? styles.mine : styles.theirs]}>
-      {!isMine && sender && (
-        <Text style={[styles.senderName, { color: Ping.purpleLight }]}>
-          {sender.displayName || sender.username || 'User'}
-        </Text>
+    <Animated.View
+      style={[
+        styles.bubbleWrap,
+        isMine ? styles.mine : styles.theirs,
+        { opacity: opacityAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      {!isMine && (
+        <View style={styles.senderRow}>
+          <View style={[styles.senderAvatar, { backgroundColor: `${bg}33`, borderColor: `${bg}66` }]}>
+            <Text style={[styles.senderAvatarText, { color: bg }]}>{initials}</Text>
+          </View>
+          <Text style={[styles.senderName, { color: Ping.purpleLight }]}>{senderName}</Text>
+        </View>
       )}
       <View
         style={[
@@ -112,7 +145,7 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId?: string }) {
       <Text style={[styles.msgTime, { color: c.textSecondary }, isMine && { alignSelf: 'flex-end' }]}>
         {formatTime(msg.createdAt)}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -156,11 +189,20 @@ export default function ChatRoomScreen() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const newMsgIdsRef = useRef<Set<string>>(new Set());
 
   async function loadMessages() {
     try {
       const res = await chatApi.listMessages(roomId);
       const msgs = res.messages ?? [];
+      // Track IDs that are brand-new since last load (animate them in)
+      if (lastCountRef.current > 0 && msgs.length > lastCountRef.current) {
+        const knownCount = lastCountRef.current;
+        msgs.slice(knownCount).forEach((m) => newMsgIdsRef.current.add(m._id));
+        setTimeout(() => {
+          newMsgIdsRef.current.clear();
+        }, 600);
+      }
       setMessages(msgs);
       if (msgs.length !== lastCountRef.current) {
         lastCountRef.current = msgs.length;
@@ -190,6 +232,7 @@ export default function ChatRoomScreen() {
   async function send() {
     const body = text.trim();
     if (!body || sending) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSending(true);
     setText('');
     try {
@@ -266,7 +309,11 @@ export default function ChatRoomScreen() {
             item.kind === 'sep' ? (
               <DateSeparator label={item.label} />
             ) : (
-              <MessageBubble msg={item.msg} myId={user?._id} />
+              <MessageBubble
+                msg={item.msg}
+                myId={user?._id}
+                animate={newMsgIdsRef.current.has(item.msg._id)}
+              />
             )
           }
           ListEmptyComponent={
@@ -364,10 +411,20 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.sm,
   },
-  bubbleWrap: { marginBottom: 6, maxWidth: '80%' },
+  bubbleWrap: { marginBottom: 8, maxWidth: '80%' },
   mine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   theirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
-  senderName: { ...Typography.caption, marginBottom: 3, marginLeft: 4, fontWeight: '600' },
+  senderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  senderAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  senderAvatarText: { fontSize: 10, fontWeight: '800' },
+  senderName: { ...Typography.caption, fontWeight: '600' },
   bubble: {
     paddingHorizontal: 14,
     paddingVertical: 9,

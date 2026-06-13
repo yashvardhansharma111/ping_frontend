@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,19 @@ export default function OtpScreen() {
   const inputs = useRef<(TextInput | null)[]>([]);
   const router = useRouter();
   const { login } = useAuthStore();
+
+  // Per-box spring animations
+  const boxAnims = useRef(Array.from({ length: OTP_LENGTH }, () => new Animated.Value(1))).current;
+
+  // Screen entrance
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   // Countdown timer
   useEffect(() => {
@@ -48,8 +62,13 @@ export default function OtpScreen() {
     const next = [...digits];
     next[index] = digit;
     setDigits(next);
-    if (digit && index < OTP_LENGTH - 1) {
-      inputs.current[index + 1]?.focus();
+    if (digit) {
+      // Spring pop on fill
+      Animated.sequence([
+        Animated.spring(boxAnims[index], { toValue: 1.18, damping: 6, stiffness: 300, useNativeDriver: true }),
+        Animated.spring(boxAnims[index], { toValue: 1, damping: 10, stiffness: 200, useNativeDriver: true }),
+      ]).start();
+      if (index < OTP_LENGTH - 1) inputs.current[index + 1]?.focus();
     }
     // Auto-submit when complete
     if (digit && next.every(Boolean) && index === OTP_LENGTH - 1) {
@@ -107,70 +126,73 @@ export default function OtpScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <TouchableOpacity style={styles.back} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={22} color="#A78BFA" />
-      </TouchableOpacity>
+      <Animated.View style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <TouchableOpacity style={styles.back} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#A78BFA" />
+        </TouchableOpacity>
 
-      <View style={styles.header}>
-        <Text style={styles.title}>Enter OTP</Text>
-        <Text style={styles.subtitle}>
-          Sent to{' '}
-          <Text style={styles.phoneHighlight}>{phone}</Text>
-        </Text>
-        {debugCode ? (
-          <View style={styles.debugBadge}>
-            <Ionicons name="construct-outline" size={12} color={Ping.orange} />
-            <Text style={styles.debugText}>Dev: {debugCode}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* OTP boxes */}
-      <View style={styles.boxRow}>
-        {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-          <TextInput
-            key={i}
-            ref={(el) => { inputs.current[i] = el; }}
-            style={[
-              styles.box,
-              digits[i] ? styles.boxFilled : null,
-            ]}
-            value={digits[i]}
-            onChangeText={(v) => handleDigit(i, v)}
-            onKeyPress={({ nativeEvent }) => {
-              if (nativeEvent.key === 'Backspace') handleBackspace(i);
-            }}
-            keyboardType="number-pad"
-            maxLength={1}
-            textAlign="center"
-            autoFocus={i === 0}
-            selectionColor={Ping.purple}
-          />
-        ))}
-      </View>
-
-      <TouchableOpacity
-        style={[styles.btn, filled < OTP_LENGTH && styles.btnDisabled]}
-        onPress={() => verifyOtp()}
-        disabled={filled < OTP_LENGTH || loading}
-        activeOpacity={0.85}
-      >
-        {loading ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={styles.btnText}>Verify & Continue</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.resendRow} onPress={resend} disabled={resendSecs > 0}>
-        {resendSecs > 0 ? (
-          <Text style={styles.resendWait}>
-            Resend in <Text style={{ color: Ping.purpleLight }}>{resendSecs}s</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Enter OTP</Text>
+          <Text style={styles.subtitle}>
+            Sent to{' '}
+            <Text style={styles.phoneHighlight}>{phone}</Text>
           </Text>
-        ) : (
-          <Text style={styles.resendActive}>Resend OTP</Text>
-        )}
-      </TouchableOpacity>
+          {debugCode ? (
+            <View style={styles.debugBadge}>
+              <Ionicons name="construct-outline" size={12} color={Ping.orange} />
+              <Text style={styles.debugText}>Dev: {debugCode}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* OTP boxes */}
+        <View style={styles.boxRow}>
+          {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+            <Animated.View key={i} style={{ flex: 1, transform: [{ scale: boxAnims[i] }] }}>
+              <TextInput
+                ref={(el) => { inputs.current[i] = el; }}
+                style={[
+                  styles.box,
+                  digits[i] ? styles.boxFilled : null,
+                ]}
+                value={digits[i]}
+                onChangeText={(v) => handleDigit(i, v)}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === 'Backspace') handleBackspace(i);
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                textAlign="center"
+                autoFocus={i === 0}
+                selectionColor={Ping.purple}
+              />
+            </Animated.View>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.btn, filled < OTP_LENGTH && styles.btnDisabled]}
+          onPress={() => verifyOtp()}
+          disabled={filled < OTP_LENGTH || loading}
+          activeOpacity={0.85}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.btnText}>Verify & Continue</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.resendRow} onPress={resend} disabled={resendSecs > 0}>
+          {resendSecs > 0 ? (
+            <Text style={styles.resendWait}>
+              Resend in <Text style={{ color: Ping.purpleLight }}>{resendSecs}s</Text>
+            </Text>
+          ) : (
+            <Text style={styles.resendActive}>Resend OTP</Text>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -179,6 +201,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#080815',
+  },
+  inner: {
+    flex: 1,
     paddingHorizontal: Spacing.lg,
     paddingTop: 60,
     gap: Spacing.xl,
@@ -225,7 +250,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   box: {
-    flex: 1,
+    width: '100%',
     height: 56,
     borderRadius: Radius.md,
     backgroundColor: '#1A1A38',

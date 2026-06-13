@@ -3,7 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Ping } from '@/constants/theme';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Animated } from 'react-native';
+import { useRef, useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -18,11 +20,30 @@ function TabIcon({
   focused: boolean;
   color: string;
 }) {
+  const anim = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(anim, {
+      toValue: focused ? 1 : 0,
+      useNativeDriver: false,
+      damping: 14,
+      mass: 0.8,
+      stiffness: 220,
+    }).start();
+  }, [focused]);
+
+  const bg = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(124,58,237,0)', 'rgba(124,58,237,0.18)'],
+  });
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] });
+  const dotOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+
   return (
-    <View style={[s.iconWrap, focused && s.iconWrapActive]}>
+    <Animated.View style={[s.iconWrap, { backgroundColor: bg, transform: [{ scale }] }]}>
       <Ionicons name={focused ? nameFilled : name} size={22} color={color} />
-      {focused && <View style={[s.dot, { backgroundColor: color }]} />}
-    </View>
+      <Animated.View style={[s.dot, { backgroundColor: color, opacity: dotOpacity }]} />
+    </Animated.View>
   );
 }
 
@@ -66,6 +87,7 @@ export default function TabLayout() {
             <TabIcon name="map-outline" nameFilled="map" focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="explore"
@@ -75,6 +97,7 @@ export default function TabLayout() {
             <TabIcon name="flash-outline" nameFilled="flash" focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="friends"
@@ -84,6 +107,7 @@ export default function TabLayout() {
             <TabIcon name="people-outline" nameFilled="people" focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="profile"
@@ -93,6 +117,7 @@ export default function TabLayout() {
             <TabIcon name="person-outline" nameFilled="person" focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
     </Tabs>
   );
@@ -106,9 +131,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 22,
     gap: 3,
-  },
-  iconWrapActive: {
-    backgroundColor: 'rgba(124,58,237,0.15)',
   },
   dot: {
     width: 5,

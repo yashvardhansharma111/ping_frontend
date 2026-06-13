@@ -27,6 +27,148 @@ import CreatePingModal from '@/components/CreatePingModal';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
+// ── Type config (matches PingMarker) ─────────────────────────────────────────
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+const TYPE_CFG: Record<string, { icon: IoniconName; color: string; label: string }> = {
+  sport:   { icon: 'barbell-outline',        color: '#EF4444', label: 'Sport' },
+  food:    { icon: 'restaurant-outline',     color: '#F97316', label: 'Food' },
+  music:   { icon: 'musical-notes-outline',  color: '#8B5CF6', label: 'Music' },
+  study:   { icon: 'book-outline',           color: '#3B82F6', label: 'Study' },
+  outdoor: { icon: 'walk-outline',           color: '#10B981', label: 'Outdoor' },
+  gaming:  { icon: 'game-controller-outline',color: '#EC4899', label: 'Gaming' },
+  meetup:  { icon: 'people-outline',         color: '#7C3AED', label: 'Meetup' },
+  default: { icon: 'location-outline',       color: '#6B7280', label: 'Ping' },
+};
+
+// ── Popup card (shown in Callout above pin) ───────────────────────────────────
+function PopupCard({
+  activity,
+  onOpen,
+  onClose,
+}: {
+  activity: Activity;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const cfg = TYPE_CFG[activity.type] ?? TYPE_CFG.default;
+  const timeStr = (() => {
+    const d = new Date(activity.startsAt);
+    const now = new Date();
+    const diff = d.getTime() - now.getTime();
+    if (diff < 0) return 'Live now';
+    if (diff < 60 * 60_000) return `in ${Math.round(diff / 60_000)}m`;
+    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+  })();
+
+  return (
+    <View style={pc.wrap}>
+      <View style={[pc.iconWrap, { backgroundColor: `${cfg.color}20` }]}>
+        <Ionicons name={cfg.icon} size={16} color={cfg.color} />
+      </View>
+      <View style={pc.body} onStartShouldSetResponder={() => { onOpen(); return true; }}>
+        <Text style={pc.title} numberOfLines={1}>{activity.title}</Text>
+        <Text style={pc.sub}>{cfg.label} · {timeStr}</Text>
+      </View>
+      <View style={pc.closeHit} onStartShouldSetResponder={() => { onClose(); return true; }}>
+        <Ionicons name="close" size={14} color="#9CA3AF" />
+      </View>
+    </View>
+  );
+}
+
+const pc = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    paddingRight: 8,
+    minWidth: 200,
+    maxWidth: 260,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  iconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  body: { flex: 1 },
+  title: { fontSize: 13, fontWeight: '700', color: '#F3F4F6' },
+  sub: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
+  closeHit: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+});
+
+// ── User dot (pulsing) ────────────────────────────────────────────────────────
+function UserDot() {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(pulse, { toValue: 1, duration: 2000, useNativeDriver: true })
+    ).start();
+  }, []);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.8] });
+  const opacity = pulse.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.9, 0.4, 0] });
+
+  return (
+    <View style={ud.outer}>
+      <Animated.View style={[ud.pulse, { transform: [{ scale }], opacity }]} />
+      <View style={ud.ring} />
+      <View style={ud.dot} />
+    </View>
+  );
+}
+
+const ud = StyleSheet.create({
+  outer: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  pulse: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#3B82F6',
+  },
+  ring: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(59,130,246,0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(59,130,246,0.5)',
+  },
+  dot: {
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: '#3B82F6',
+    borderWidth: 2.5,
+    borderColor: '#FFF',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+});
+
 const DEFAULT_REGION = {
   latitude: 23.2599,
   longitude: 77.4126,
@@ -34,7 +176,7 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.05,
 };
 
-const DARK_TILES = 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png';
+const LIGHT_TILES = 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png';
 
 export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
@@ -50,7 +192,8 @@ export default function MapScreen() {
   const { coords, granted, loading: locLoading } = useLocation();
   const router = useRouter();
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [selected, setSelected] = useState<Activity | null>(null);
+  const [selected, setSelected] = useState<Activity | null>(null); // marker with open callout
+  const [sheetActivity, setSheetActivity] = useState<Activity | null>(null); // full detail sheet
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newPingCount, setNewPingCount] = useState(0);
@@ -131,6 +274,7 @@ export default function MapScreen() {
 
       setActivities(fresh);
       setSelected((prev) => prev ? fresh.find((a) => a._id === prev._id) ?? prev : null);
+      setSheetActivity((prev) => prev ? fresh.find((a) => a._id === prev._id) ?? prev : null);
     } catch (err: any) {
       const msg = err?.message ?? 'Unknown error';
       console.error(`[Map] API ERROR — ${msg}`);
@@ -193,6 +337,11 @@ export default function MapScreen() {
     );
   }
 
+  function clearSelection() {
+    setSelected(null);
+    setSheetActivity(null);
+  }
+
   return (
     <View style={styles.root}>
       <MapView
@@ -200,21 +349,21 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFillObject}
         mapType="none"
         initialRegion={DEFAULT_REGION}
-        onPress={() => setSelected(null)}
+        onPress={clearSelection}
         showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
         toolbarEnabled={false}
         rotateEnabled={false}
       >
-        <UrlTile urlTemplate={DARK_TILES} maximumZ={19} flipY={false} tileSize={256} />
+        <UrlTile urlTemplate={LIGHT_TILES} maximumZ={19} flipY={false} tileSize={256} />
 
         {granted && (
           <Marker
             coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
             anchor={{ x: 0.5, y: 0.5 }}
             flat
-            tracksViewChanges={false}
+            tracksViewChanges
           >
             <UserDot />
           </Marker>
@@ -230,17 +379,22 @@ export default function MapScreen() {
               key={a._id}
               coordinate={{ latitude: mLat, longitude: mLng }}
               anchor={{ x: 0.5, y: 1 }}
-              onPress={() => setSelected((prev) => (prev?._id === a._id ? null : a))}
-              tracksViewChanges={true}
+              onPress={() => setSelected((prev) => prev?._id === a._id ? null : a)}
+              tracksViewChanges={isSelected}
             >
               <PingMarker
                 type={a.type}
                 selected={isSelected}
                 count={a.participants?.length ?? 0}
-                creatorName={a.creator?.displayName ?? a.creator?.username}
-                title={a.title}
                 genderFilter={a.genderFilter}
               />
+              <Callout tooltip onPress={() => setSheetActivity(a)}>
+                <PopupCard
+                  activity={a}
+                  onOpen={() => setSheetActivity(a)}
+                  onClose={clearSelection}
+                />
+              </Callout>
             </Marker>
           );
         })}
@@ -359,40 +513,38 @@ export default function MapScreen() {
         </Animated.View>
       )}
 
-      {/* Selected activity bottom sheet */}
-      {selected && (
-        <View style={[styles.sheet, { maxHeight: SCREEN_H * 0.58, paddingBottom: insets.bottom + 80 }]}>
-          {/* Drag handle + dismiss */}
+      {/* Full detail bottom sheet (opens when popup is tapped) */}
+      {sheetActivity && (
+        <View style={[styles.sheet, { maxHeight: SCREEN_H * 0.62, paddingBottom: insets.bottom + 80 }]}>
           <TouchableOpacity
             activeOpacity={1}
-            onPress={() => setSelected(null)}
+            onPress={clearSelection}
             style={styles.sheetHandleArea}
           >
             <View style={styles.sheetHandle} />
           </TouchableOpacity>
-
           <ActivityDetailSheet
-            activity={selected}
+            activity={sheetActivity}
             onRefresh={() => loadNearby()}
-            onDismiss={() => setSelected(null)}
+            onDismiss={clearSelection}
           />
         </View>
       )}
 
       {/* Recenter button */}
-      {!selected && (
+      {!sheetActivity && (
         <TouchableOpacity
           style={[styles.recenterBtn, { bottom: insets.bottom + 90 }]}
           onPress={recenter}
           activeOpacity={0.85}
         >
-          <Ionicons name="navigate" size={20} color={Ping.purpleLight} />
+          <Ionicons name="navigate" size={20} color="#3B82F6" />
         </TouchableOpacity>
       )}
 
       {/* Create ping FAB */}
       <TouchableOpacity
-        style={[styles.fab, { bottom: selected ? SCREEN_H * 0.52 : insets.bottom + 90 }]}
+        style={[styles.fab, { bottom: sheetActivity ? SCREEN_H * 0.56 : insets.bottom + 90 }]}
         onPress={() => setShowCreate(true)}
         activeOpacity={0.85}
       >
@@ -474,7 +626,7 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#060612' },
+  root: { flex: 1, backgroundColor: '#E8E8E8' },
 
   // ── Top bar ──────────────────────────────────────────────────────────────
   topBar: {
@@ -590,9 +742,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 6,
     borderRadius: Radius.full,
-    backgroundColor: 'rgba(8,8,21,0.82)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.25)',
+    borderColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   filterChipActive: {
     backgroundColor: Ping.purple,
@@ -606,7 +763,7 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(241,240,255,0.7)',
+    color: '#374151',
   },
   filterChipTextActive: {
     color: '#FFF',
@@ -616,9 +773,9 @@ const styles = StyleSheet.create({
   attribution: {
     position: 'absolute',
     bottom: Spacing.sm,
-    left: Spacing.sm,
+    right: Spacing.sm,
     fontSize: 9,
-    color: 'rgba(255,255,255,0.3)',
+    color: 'rgba(0,0,0,0.35)',
   },
 
   // ── Bottom sheet ──────────────────────────────────────────────────────────
@@ -629,16 +786,16 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: Spacing.md,
     paddingTop: 6,
-    backgroundColor: 'rgba(8,8,21,0.98)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: 'rgba(167,139,250,0.22)',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.12)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    elevation: 30,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
   },
   sheetHandleArea: {
     paddingVertical: 10,
@@ -648,7 +805,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(167,139,250,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
 
   // ── Floating buttons ──────────────────────────────────────────────────────
@@ -827,37 +984,3 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── User location dot ─────────────────────────────────────────────────────────
-function UserDot() {
-  return (
-    <View pointerEvents="none">
-      <View style={dot.halo} />
-      <View style={dot.center} />
-    </View>
-  );
-}
-
-const dot = StyleSheet.create({
-  halo: {
-    position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(124,58,237,0.15)',
-    top: -14,
-    left: -14,
-  },
-  center: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Ping.purpleLight,
-    borderWidth: 3,
-    borderColor: '#FFF',
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-});

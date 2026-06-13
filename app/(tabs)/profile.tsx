@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,16 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import useAuthStore from '@/lib/stores/authStore';
-import { authApi, usersApi } from '@/lib/api';
+import { authApi, usersApi, friendsApi } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import SafetyHubModal from '@/components/SafetyHubModal';
 
 // ── tiny reusable components ─────────────────────────────────────────────────
 
@@ -391,81 +393,6 @@ function NotificationsModal({
   );
 }
 
-// ── Safety Modal ──────────────────────────────────────────────────────────────
-
-function SafetyModal({
-  visible,
-  onClose,
-  c,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  c: (typeof Colors)['dark'];
-}) {
-  const { logout } = useAuthStore();
-  const [deleting, setDeleting] = useState(false);
-  const insets = useSafeAreaInsets();
-
-  function confirmDelete() {
-    Alert.alert(
-      'Delete account?',
-      'This permanently removes your profile, activities and friend connections. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete my account',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await usersApi.deleteMe();
-              await logout();
-            } catch (err: any) {
-              setDeleting(false);
-              Alert.alert('Error', err.message || 'Could not delete account.');
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={sh.overlay}>
-        <TouchableOpacity style={sh.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={[sh.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + Spacing.md }]}>
-          <SheetHeader title="Safety & Account" onClose={onClose} c={c} />
-          <View style={{ padding: Spacing.lg, gap: Spacing.md }}>
-            <View style={[sh.infoBox, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Ionicons name="shield-checkmark-outline" size={22} color={Ping.purpleLight} />
-              <Text style={[sh.infoText, { color: c.textSecondary }]}>
-                To block or report another user, tap their profile and use the menu there.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[sh.dangerBtn, deleting && { opacity: 0.6 }]}
-              onPress={confirmDelete}
-              disabled={deleting}
-              activeOpacity={0.85}
-            >
-              {deleting ? (
-                <ActivityIndicator color={Ping.red} />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={18} color={Ping.red} />
-                  <Text style={sh.dangerBtnText}>Delete my account</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 // ── Main Profile Screen ───────────────────────────────────────────────────────
 
 type ModalKey = 'editProfile' | 'privacy' | 'notifications' | 'safety' | null;
@@ -477,6 +404,25 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, refreshToken, logout } = useAuthStore();
   const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+
+  const halo1 = useRef(new Animated.Value(0)).current;
+  const halo2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Fetch real friend count
+    friendsApi.list().then((r) => setFriendCount(r.friends?.length ?? 0)).catch(() => {});
+    // Staggered halo pulses
+    Animated.loop(Animated.timing(halo1, { toValue: 1, duration: 2600, useNativeDriver: true })).start();
+    setTimeout(() => {
+      Animated.loop(Animated.timing(halo2, { toValue: 1, duration: 2600, useNativeDriver: true })).start();
+    }, 1300);
+  }, []);
+
+  const h1Scale = halo1.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
+  const h1Opacity = halo1.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.45, 0.15, 0] });
+  const h2Scale = halo2.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
+  const h2Opacity = halo2.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.35, 0.1, 0] });
 
   const initials = (user?.displayName ?? user?.phone ?? '?')
     .split(' ')
@@ -555,6 +501,8 @@ export default function ProfileScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.avatarWrap}>
+            <Animated.View style={[styles.haloRing, { transform: [{ scale: h1Scale }], opacity: h1Opacity }]} />
+            <Animated.View style={[styles.haloRing, { transform: [{ scale: h2Scale }], opacity: h2Opacity }]} />
             <View style={[styles.avatarFallback, { backgroundColor: Ping.purple }]}>
               <Text style={styles.avatarText}>{initials}</Text>
             </View>
@@ -574,7 +522,7 @@ export default function ProfileScreen() {
         {/* Stats */}
         <View style={[styles.statsRow, { backgroundColor: c.surface, borderColor: c.border }]}>
           {[
-            { label: 'Friends', value: '—' },
+            { label: 'Friends', value: friendCount !== null ? String(friendCount) : '—' },
             { label: 'Activities', value: '—' },
             { label: 'Squads', value: '—' },
           ].map((s, i) => (
@@ -645,10 +593,9 @@ export default function ProfileScreen() {
         onClose={() => setOpenModal(null)}
         c={c}
       />
-      <SafetyModal
+      <SafetyHubModal
         visible={openModal === 'safety'}
         onClose={() => setOpenModal(null)}
-        c={c}
       />
     </>
   );
@@ -661,12 +608,23 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
   hero: { alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.md },
   avatarWrap: {
+    width: 100,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: Ping.purple,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 8,
     marginBottom: Spacing.xs,
+  },
+  haloRing: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: Ping.purple,
   },
   avatarFallback: {
     width: 88,
