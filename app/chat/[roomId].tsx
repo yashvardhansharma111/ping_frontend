@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 import { chatApi, type ChatMessage, type ChatRoom } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
@@ -101,7 +103,11 @@ function MessageBubble({ msg, myId, animate }: { msg: ChatMessage; myId?: string
   if (msg.type === 'system') {
     return (
       <View style={styles.systemRow}>
-        <Text style={[styles.systemText, { color: c.textSecondary }]}>{msg.body}</Text>
+        <View style={[styles.systemLine, { backgroundColor: c.border }]} />
+        <View style={[styles.systemPill, { backgroundColor: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.22)' }]}>
+          <Text style={[styles.systemText, { color: '#9490C0' }]}>{msg.body}</Text>
+        </View>
+        <View style={[styles.systemLine, { backgroundColor: c.border }]} />
       </View>
     );
   }
@@ -167,15 +173,52 @@ function buildListItems(messages: ChatMessage[]): ListItem[] {
   return items;
 }
 
-const QUICK_ACTIONS = [
-  { label: '🚶 On my way!', msg: 'On my way! 🚶' },
-  { label: '📍 I\'m here!', msg: 'I\'m here! 📍' },
-  { label: '👍 Sounds good!', msg: 'Sounds good! 👍' },
-  { label: '⏱ Running late', msg: 'Running a bit late, sorry!' },
+type QuickAction = { label: string; icon: MCIName; msg: string };
+
+const BASE_QUICK: QuickAction[] = [
+  { label: 'On my way',    icon: 'walk',                  msg: 'On my way!'                  },
+  { label: "I'm here",     icon: 'map-marker-check',      msg: "I'm here!"                   },
+  { label: 'Running late', icon: 'clock-alert-outline',   msg: 'Running a bit late, sorry!'  },
 ];
 
+const TYPE_QUICK: Record<string, QuickAction[]> = {
+  sport:   [
+    { label: "Let's go!",     icon: 'lightning-bolt',  msg: "Let's go!"                    },
+    { label: 'Workout?',      icon: 'dumbbell',        msg: "What's the workout today?"    },
+  ],
+  food:    [
+    { label: "What's on?",   icon: 'food-fork-drink', msg: "What are we eating?"          },
+    { label: "I'm hungry!",  icon: 'food',            msg: "I'm starving, let's eat!"     },
+  ],
+  music:   [
+    { label: "Vibe check",   icon: 'music',           msg: "What's the vibe tonight?"     },
+    { label: 'Hyped!',       icon: 'music-note',      msg: 'So hyped for this!'           },
+  ],
+  study:   [
+    { label: 'Studying what?', icon: 'book-open-variant', msg: "What are you studying today?" },
+    { label: 'Coffee break?',  icon: 'coffee',            msg: 'Coffee break anyone?'         },
+  ],
+  outdoor: [
+    { label: "Ready!",       icon: 'hiking',                  msg: 'Ready for the adventure!'  },
+    { label: 'Weather?',     icon: 'weather-partly-cloudy',   msg: 'Weather looking good?'     },
+  ],
+  gaming:  [
+    { label: 'Game on!',     icon: 'gamepad-variant',  msg: 'Game on!'                    },
+    { label: "Let's win!",   icon: 'trophy',           msg: "Let's get that win!"         },
+  ],
+  meetup:  [
+    { label: 'Hey everyone!', icon: 'account-group',  msg: 'Hey everyone!'                },
+    { label: 'So excited!',   icon: 'heart',          msg: 'Super excited to meet you all!' },
+  ],
+};
+
+function getQuickActions(type?: string): QuickAction[] {
+  const extras = type && TYPE_QUICK[type] ? TYPE_QUICK[type] : [{ label: 'Sounds good!', icon: 'thumb-up' as MCIName, msg: 'Sounds good!' }];
+  return [...extras, ...BASE_QUICK];
+}
+
 export default function ChatRoomScreen() {
-  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { roomId, type: pingType } = useLocalSearchParams<{ roomId: string; type?: string }>();
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const router = useRouter();
@@ -261,6 +304,7 @@ export default function ChatRoomScreen() {
   const title = getRoomTitle(room, user?._id);
   const subtitle = getRoomSubtitle(room);
   const listItems = buildListItems(messages);
+  const quickActions = getQuickActions(pingType);
 
   return (
     <KeyboardAvoidingView
@@ -332,7 +376,7 @@ export default function ChatRoomScreen() {
       {/* Quick actions */}
       <View style={[styles.quickBar, { backgroundColor: c.surface, borderTopColor: c.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
-          {QUICK_ACTIONS.map((qa) => (
+          {quickActions.map((qa) => (
             <TouchableOpacity
               key={qa.label}
               style={[styles.quickPill, { borderColor: `${Ping.purple}55`, backgroundColor: `${Ping.purple}18` }]}
@@ -340,6 +384,7 @@ export default function ChatRoomScreen() {
               disabled={sending}
               activeOpacity={0.7}
             >
+              <MaterialCommunityIcons name={qa.icon} size={13} color={Ping.purpleLight} />
               <Text style={[styles.quickText, { color: Ping.purpleLight }]}>{qa.label}</Text>
             </TouchableOpacity>
           ))}
@@ -447,8 +492,23 @@ const styles = StyleSheet.create({
   },
   bubbleText: { ...Typography.bodySm, lineHeight: 20 },
   msgTime: { ...Typography.caption, fontSize: 10, marginTop: 3, marginHorizontal: 4 },
-  systemRow: { alignSelf: 'center', marginVertical: 8 },
-  systemText: { ...Typography.caption, fontStyle: 'italic', fontSize: 11 },
+  systemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    marginVertical: 10,
+    paddingHorizontal: Spacing.md,
+    gap: 8,
+  },
+  systemLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  systemPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    maxWidth: '72%',
+  },
+  systemText: { ...Typography.caption, fontSize: 11, textAlign: 'center', color: '#9490C0' },
   quickBar: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingVertical: Spacing.xs,
@@ -458,7 +518,10 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   quickPill: {
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: Radius.full,
     borderWidth: 1,

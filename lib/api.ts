@@ -40,6 +40,16 @@ function makeSignal() {
   return c.signal;
 }
 
+async function getAccessToken(): Promise<string | null> {
+  // In-memory store is always the most up-to-date source (updated synchronously
+  // on login and after refresh). SecureStore writes are async so reading from
+  // there can miss a token that was just set.
+  const { default: useAuthStore } = await import('./stores/authStore');
+  const inMemory = useAuthStore.getState().accessToken;
+  if (inMemory) return inMemory;
+  return SecureStore.getItemAsync('accessToken');
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -49,8 +59,9 @@ async function request<T>(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (auth) {
-    const token = await SecureStore.getItemAsync('accessToken');
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const token = await getAccessToken();
+    if (!token) throw new Error('Not authenticated');
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   let res = await fetch(`${BASE_URL}${path}`, {
@@ -65,7 +76,7 @@ async function request<T>(
   // Auto-refresh on 401 then retry once
   if (auth && res.status === 401) {
     try {
-      const newToken = await refreshAccessToken();
+      const newToken = await refreshAccessToken(); // also updates authStore in-memory
       headers['Authorization'] = `Bearer ${newToken}`;
       res = await fetch(`${BASE_URL}${path}`, {
         method,
@@ -91,12 +102,39 @@ const post = <T>(path: string, body?: unknown, auth = true) => request<T>('POST'
 const patch = <T>(path: string, body?: unknown, auth = true) => request<T>('PATCH', path, body, auth);
 const del = <T>(path: string, auth = true) => request<T>('DELETE', path, undefined, auth);
 
+// ── Image upload (multipart — bypasses request() which is JSON-only) ──────────
+
+export const uploadApi = {
+  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'misc' = 'misc'): Promise<string> => {
+    const token = await getAccessToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const filename = localUri.split('/').pop() ?? 'image.jpg';
+    const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    const form = new FormData();
+    form.append('image', { uri: localUri, name: filename, type: mime } as any);
+    form.append('folder', folder);
+
+    const res = await fetch(`${BASE_URL}/upload/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `Upload failed (${res.status})`);
+    return (data as any).url as string;
+  },
+};
+
 const ADMIN_BASE = `${ROOT}/api/admin/v1`;
 
 async function adminRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = await SecureStore.getItemAsync('adminToken');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (!token) throw new Error('Not authenticated');
+  headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${ADMIN_BASE}${path}`, {
     method,
     headers,
@@ -407,14 +445,30 @@ export const adsApi = {
     get<{ ok: boolean; ad: Ad }>(`/ads/${adId}`),
   analytics: (adId: string) =>
     get<{ ok: boolean; ad: Ad; totals: AdAnalyticsTotals; daily: unknown[] }>(`/ads/${adId}/analytics`),
+  feed: (lat: number, lng: number) =>
+    get<{ ok: boolean; ads: Ad[] }>(`/ads/feed?lat=${lat}&lng=${lng}`),
+  recordEvent: (adId: string, type: 'view' | 'contact_tap' | 'thumbs_up' | 'want_to_visit' | 'product_swipe') => {
+    const path = type === 'view' ? 'view' : type === 'contact_tap' ? 'contact' : type === 'thumbs_up' ? 'thumbs-up' : type === 'want_to_visit' ? 'want-to-visit' : 'view';
+    return post<{ ok: boolean }>(`/ads/${adId}/${path}`, {}, false);
+  },
 };
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
+
+export interface AdminDailyPoint {
+  date: string; // YYYY-MM-DD
+  day: string;  // MM-DD
+  signups: number;
+  pings: number;
+  ads: number;
+  revenueMinor: number;
+}
 
 export interface AdminOverview {
   live: { activeNow: number; activePings: number; activeAds: number; todaysRevenueMinor: number };
   last7d: { newSignups: number; pingsCreated: number; adsLaunched: number; reportsSubmitted: number; bansIssued: number };
   queues: { pendingReports: number; pendingAppeals: number };
+  daily?: AdminDailyPoint[];
 }
 
 export interface AdminUser {

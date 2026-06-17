@@ -42,12 +42,15 @@ const useAuthStore = create<AuthState>((set) => ({
         SecureStore.getItemAsync('adminToken'),
       ]);
       if (accessToken && refreshToken && userStr) {
+        const user = JSON.parse(userStr) as User;
+        const isAdmin = !!adminToken;
+        console.log(`[AuthStore] loadFromStorage — phone=${user.phone} isAdmin=${isAdmin}`);
         set({
           accessToken,
           refreshToken,
-          user: JSON.parse(userStr) as User,
+          user,
           adminToken: adminToken ?? null,
-          isAdmin: !!adminToken,
+          isAdmin,
           isLoading: false,
         });
       } else {

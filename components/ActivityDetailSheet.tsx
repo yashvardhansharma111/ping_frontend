@@ -28,8 +28,20 @@ import {
   formatStartTime,
   STATUS_CONFIG,
 } from './ActivityCard';
+import PingFullCelebration from './PingFullCelebration';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TYPE_OPENERS: Record<string, string> = {
+  sport:   "Ready to get active! Who's in and what's the plan?",
+  food:    "Food time! What are we eating today?",
+  music:   "Music vibes incoming! What are we listening to?",
+  study:   "Study session starting! What are you working on?",
+  outdoor: "Adventure time! Ready to explore?",
+  gaming:  "Game on! What are we playing?",
+  meetup:  "Hey everyone! Super excited to meet you all!",
+  default: "Hey! Excited to connect with everyone in this ping!",
+};
 
 const TYPE_META: Record<string, { icon: IoniconName; color: string }> = {
   sport:   { icon: 'barbell-outline',        color: '#22C55E' },
@@ -126,6 +138,8 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
   const [onMyWayLoading, setOnMyWayLoading] = useState(false);
   const [arrivedLoading, setArrivedLoading] = useState(false);
   const [mutualCount, setMutualCount] = useState<number | null>(null);
+  const [chatMsgCount, setChatMsgCount] = useState<number | null>(null);
+  const [celebration, setCelebration] = useState<{ names: string[]; count: number } | null>(null);
 
   // Fetch mutual friends count for the Safety Card (only when not creator)
   useEffect(() => {
@@ -136,21 +150,33 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       .catch(() => setMutualCount(0));
   }, [a._id]);
 
+  // Fetch chat message count for the live chat teaser (non-members)
+  useEffect(() => {
+    if (isJoined || isCreator) return;
+    chatApi.openActivityRoom(a._id)
+      .then((r) => chatApi.listMessages(r.room._id))
+      .then((r) => setChatMsgCount(r.messages.length))
+      .catch(() => setChatMsgCount(0));
+  }, [a._id, isJoined, isCreator]);
+
   async function handleJoin() {
     if (joining || isExpired) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setJoining(true);
-    const isFirstJoin = count === 0; // no other participants yet
+    const myName = user?.displayName ?? user?.username ?? 'Someone';
+    const willBeFull = !!a.maxParticipants && (count + 1 >= a.maxParticipants);
     try {
       await activitiesApi.join(a._id);
       onRefresh();
       const res = await chatApi.openActivityRoom(a._id);
-      // If we're the first to join, drop a welcome message in the room
-      if (isFirstJoin) {
-        const name = a.creator?.displayName ?? 'The host';
-        chatApi.sendMessage(res.room._id, `👋 ${name} started this ping — say hi!`).catch(() => {});
+      chatApi.sendMessage(res.room._id, `${myName} joined the ping!`).catch(() => {});
+      if (willBeFull) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const existingNames = (a.participants ?? []).map((p: any) => p.displayName ?? p.username ?? '').filter(Boolean);
+        setCelebration({ names: [...existingNames, myName], count: a.maxParticipants! });
+      } else {
+        router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`);
       }
-      router.push(`/chat/${res.room._id}`);
     } catch (e: any) {
       Alert.alert('Could not join', e.message);
       setJoining(false);
@@ -167,6 +193,10 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
         onPress: async () => {
           setLeaving(true);
           try {
+            const name = user?.displayName ?? user?.username ?? 'Someone';
+            await chatApi.openActivityRoom(a._id)
+              .then((r) => chatApi.sendMessage(r.room._id, `${name} left the ping.`).catch(() => {}))
+              .catch(() => {});
             await activitiesApi.leave(a._id);
             onRefresh();
           } catch (e: any) {
@@ -229,7 +259,14 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
     setChatLoading(true);
     try {
       const res = await chatApi.openActivityRoom(a._id);
-      router.push(`/chat/${res.room._id}`);
+      if (isCreator) {
+        const msgRes = await chatApi.listMessages(res.room._id);
+        if (msgRes.messages.length === 0) {
+          const opener = TYPE_OPENERS[a.type] ?? TYPE_OPENERS.default;
+          chatApi.sendMessage(res.room._id, opener).catch(() => {});
+        }
+      }
+      router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -270,6 +307,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
   const creatorId = a.creator?._id ?? a.creatorId;
 
   return (
+    <>
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.root}
@@ -422,6 +460,26 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
               </View>
             )}
           </ScrollView>
+        </View>
+      )}
+
+      {/* Chat teaser for non-members */}
+      {!isJoined && !isCreator && chatMsgCount !== null && chatMsgCount > 0 && (
+        <View style={styles.chatTeaser}>
+          <View style={styles.chatTeaserLeft}>
+            <View style={styles.chatTeaserIconWrap}>
+              <Ionicons name="chatbubbles" size={16} color="#7C3AED" />
+            </View>
+            <View>
+              <Text style={styles.chatTeaserTitle}>Group chat is live</Text>
+              <Text style={styles.chatTeaserSub}>
+                {chatMsgCount} {chatMsgCount === 1 ? 'message' : 'messages'} · Join to read
+              </Text>
+            </View>
+          </View>
+          <View style={styles.chatTeaserLock}>
+            <Ionicons name="lock-closed" size={12} color="#9490C0" />
+          </View>
         </View>
       )}
 
@@ -606,6 +664,22 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
         )}
       </View>
     </ScrollView>
+
+    {celebration && (
+      <PingFullCelebration
+        count={celebration.count}
+        names={celebration.names}
+        color={typeCfg.color}
+        visible={!!celebration}
+        onDone={() => {
+          setCelebration(null);
+          chatApi.openActivityRoom(a._id)
+            .then((res) => router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`))
+            .catch(() => {});
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -741,4 +815,33 @@ const styles = StyleSheet.create({
   btnDanger: { backgroundColor: 'rgba(239,68,68,0.06)' },
   btnSecondaryEmoji: { fontSize: 14 },
   btnSecondaryText: { ...Typography.bodySm, fontWeight: '600' },
+  chatTeaser: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.3)',
+    backgroundColor: 'rgba(124,58,237,0.08)',
+  },
+  chatTeaserLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  chatTeaserIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(124,58,237,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatTeaserTitle: { ...Typography.bodySm, color: '#E8E0FF', fontWeight: '700', fontSize: 13 },
+  chatTeaserSub: { ...Typography.caption, color: '#9490C0', fontSize: 11, marginTop: 2 },
+  chatTeaserLock: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(148,144,192,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

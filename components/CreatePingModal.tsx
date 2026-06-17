@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,19 +14,21 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { activitiesApi } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-const TYPES: { key: string; label: string; icon: IoniconName; color: string }[] = [
-  { key: 'sport',   label: 'Sport',   icon: 'barbell-outline',          color: '#22C55E' },
-  { key: 'food',    label: 'Food',    icon: 'restaurant-outline',        color: '#F97316' },
-  { key: 'music',   label: 'Music',   icon: 'musical-notes-outline',     color: '#8B5CF6' },
-  { key: 'study',   label: 'Study',   icon: 'book-outline',              color: '#3B82F6' },
-  { key: 'outdoor', label: 'Outdoor', icon: 'walk-outline',              color: '#10B981' },
-  { key: 'gaming',  label: 'Gaming',  icon: 'game-controller-outline',   color: '#EC4899' },
-  { key: 'meetup',  label: 'Meetup',  icon: 'people-outline',            color: Ping.purple },
+const TYPES: { key: string; label: string; icon: MCIName; color: string }[] = [
+  { key: 'sport',   label: 'Sport',   icon: 'dumbbell',              color: '#22C55E' },
+  { key: 'food',    label: 'Food',    icon: 'food-fork-drink',       color: '#F97316' },
+  { key: 'music',   label: 'Music',   icon: 'music',                 color: '#8B5CF6' },
+  { key: 'study',   label: 'Study',   icon: 'book-open-variant',     color: '#3B82F6' },
+  { key: 'outdoor', label: 'Outdoor', icon: 'walk',                  color: '#10B981' },
+  { key: 'gaming',  label: 'Gaming',  icon: 'gamepad-variant',       color: '#EC4899' },
+  { key: 'meetup',  label: 'Meetup',  icon: 'account-group',         color: Ping.purple },
+  { key: 'custom',  label: 'Custom',  icon: 'pencil-box-outline',    color: '#A78BFA' },
 ];
 
 const DURATIONS: { label: string; value: number }[] = [
@@ -175,13 +177,33 @@ interface Props {
   onCreated: () => void;
   lat: number;
   lng: number;
+  defaultType?: string;
+  defaultTitle?: string;
 }
 
-export default function CreatePingModal({ visible, onClose, onCreated, lat, lng }: Props) {
+export default function CreatePingModal({ visible, onClose, onCreated, lat, lng, defaultType, defaultTitle }: Props) {
   const insets = useSafeAreaInsets();
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState('meetup');
+  const [customTypeName, setCustomTypeName] = useState('');
+
+  // Apply defaults whenever the modal opens
+  useEffect(() => {
+    if (visible) {
+      const knownKeys = TYPES.filter(t => t.key !== 'custom').map(t => t.key);
+      const dt = defaultType ?? 'meetup';
+      if (knownKeys.includes(dt)) {
+        setType(dt);
+        setCustomTypeName('');
+      } else if (dt) {
+        // defaultType is already a custom string
+        setType('custom');
+        setCustomTypeName(dt);
+      }
+      setTitle(defaultTitle ?? '');
+    }
+  }, [visible]);
   const [visibility, setVisibility] = useState<'public' | 'friends'>('public');
   const [genderFilter, setGenderFilter] = useState<'all' | 'women_only' | 'men_only'>('all');
   const [duration, setDuration] = useState(60);
@@ -193,6 +215,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
   function reset() {
     setTitle('');
     setType('meetup');
+    setCustomTypeName('');
     setVisibility('public');
     setGenderFilter('all');
     setDuration(60);
@@ -213,6 +236,14 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
       return;
     }
 
+    const finalType = type === 'custom'
+      ? customTypeName.trim().toLowerCase().replace(/\s+/g, '_')
+      : type;
+    if (type === 'custom' && !finalType) {
+      Alert.alert('Type required', 'Enter a custom activity type (e.g. yoga, chess).');
+      return;
+    }
+
     const maxP = maxPeople.trim() ? parseInt(maxPeople, 10) : undefined;
     if (maxP !== undefined && (isNaN(maxP) || maxP < 2 || maxP > 100)) {
       Alert.alert('Invalid count', 'Max participants must be between 2 and 100.');
@@ -225,7 +256,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
     try {
       await activitiesApi.create({
         title: trimmed,
-        type,
+        type: finalType,
         visibility,
         genderFilter,
         lat,
@@ -244,7 +275,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
     }
   }
 
-  const selectedType = TYPES.find((t) => t.key === type)!;
+  const selectedType = TYPES.find((t) => t.key === type) ?? TYPES[TYPES.length - 1];
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -262,7 +293,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <View style={[styles.headerIcon, { backgroundColor: `${selectedType.color}22` }]}>
-                <Ionicons name={selectedType.icon} size={20} color={selectedType.color} />
+                <MaterialCommunityIcons name={selectedType.icon} size={20} color={selectedType.color} />
               </View>
               <Text style={styles.headerTitle}>New Ping</Text>
             </View>
@@ -310,7 +341,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
                         onPress={() => setType(t.key)}
                         activeOpacity={0.75}
                       >
-                        <Ionicons name={t.icon} size={15} color={active ? '#FFF' : '#9490C0'} />
+                        <MaterialCommunityIcons name={t.icon} size={15} color={active ? '#FFF' : '#9490C0'} />
                         <Text style={[styles.typeLabel, { color: active ? '#FFF' : '#9490C0' }]}>
                           {t.label}
                         </Text>
@@ -319,6 +350,24 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng 
                   })}
                 </View>
               </ScrollView>
+
+              {/* Custom type text input — visible only when Custom chip is selected */}
+              {type === 'custom' && (
+                <View style={styles.customTypeWrap}>
+                  <MaterialCommunityIcons name="tag-outline" size={16} color="#A78BFA" />
+                  <TextInput
+                    style={styles.customTypeInput}
+                    placeholder="e.g. yoga, chess, cycling…"
+                    placeholderTextColor="#5C5A80"
+                    value={customTypeName}
+                    onChangeText={setCustomTypeName}
+                    maxLength={30}
+                    autoFocus
+                    returnKeyType="done"
+                    autoCapitalize="none"
+                  />
+                </View>
+              )}
             </View>
 
             {/* When */}
@@ -644,6 +693,24 @@ const styles = StyleSheet.create({
   },
   locNote: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   locText: { ...Typography.caption, color: '#5C5A80' },
+  customTypeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1A1A38',
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(167,139,250,0.35)',
+    paddingHorizontal: Spacing.md,
+    height: 46,
+    marginTop: Spacing.sm,
+  },
+  customTypeInput: {
+    flex: 1,
+    ...Typography.bodyMed,
+    color: '#F1F0FF',
+    paddingVertical: 0,
+  },
   footer: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,

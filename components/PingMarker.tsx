@@ -1,17 +1,17 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-const TYPE_CFG: Record<string, { icon: IoniconName; color: string }> = {
-  sport:   { icon: 'barbell',              color: '#EF4444' },
-  food:    { icon: 'restaurant',           color: '#F97316' },
-  music:   { icon: 'musical-notes',        color: '#8B5CF6' },
-  study:   { icon: 'book',                 color: '#3B82F6' },
-  outdoor: { icon: 'walk',                 color: '#10B981' },
-  gaming:  { icon: 'game-controller',      color: '#EC4899' },
-  meetup:  { icon: 'people',               color: '#7C3AED' },
-  default: { icon: 'location',             color: '#6B7280' },
+const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
+  sport:   { icon: 'dumbbell',              color: '#EF4444' },
+  food:    { icon: 'food-fork-drink',       color: '#F97316' },
+  music:   { icon: 'music',                 color: '#8B5CF6' },
+  study:   { icon: 'book-open-variant',     color: '#3B82F6' },
+  outdoor: { icon: 'walk',                  color: '#10B981' },
+  gaming:  { icon: 'gamepad-variant',       color: '#EC4899' },
+  meetup:  { icon: 'account-group',         color: '#7C3AED' },
+  default: { icon: 'map-marker',            color: '#6B7280' },
 };
 
 interface Props {
@@ -28,11 +28,10 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
   const ICON  = selected ? 28 : 22;
   const tipW  = selected ? 16 : 13;
   const tipH  = selected ? 20 : 16;
-  const GLOW  = SIZE + 16; // outer ambient ring
+  const GLOW  = SIZE + 16;
 
   return (
-    <View style={s.outer} pointerEvents="none">
-
+    <View style={s.outer}>
       {/* Outer ambient glow ring */}
       <View
         style={{
@@ -56,7 +55,6 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
             height: SIZE,
             borderRadius: SIZE / 2,
             backgroundColor: cfg.color,
-            // Colored shadow for depth
             shadowColor: cfg.color,
             shadowOpacity: selected ? 0.75 : 0.55,
             shadowRadius: selected ? 16 : 10,
@@ -66,9 +64,9 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           },
         ]}
       >
-        <Ionicons name={cfg.icon} size={ICON} color="#FFF" />
+        <MaterialCommunityIcons name={cfg.icon} size={ICON} color="#FFF" />
 
-        {/* 3D specular highlight — top-right light source */}
+        {/* 3D specular highlight */}
         <View
           style={[
             s.specular,
@@ -81,7 +79,7 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           ]}
         />
 
-        {/* Subtle inner bottom dark rim for depth */}
+        {/* Inner bottom rim for sphere depth */}
         <View
           style={[
             s.innerRim,
@@ -94,7 +92,7 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           ]}
         />
 
-        {/* Participant count badge */}
+        {/* Count badge */}
         {count > 1 && (
           <View style={[s.countBadge, { backgroundColor: '#FFF' }]}>
             <Text style={[s.countText, { color: cfg.color }]}>
@@ -103,7 +101,7 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           </View>
         )}
 
-        {/* Gender filter badge */}
+        {/* Gender badge */}
         {genderFilter && genderFilter !== 'all' && (
           <View
             style={[
@@ -111,8 +109,8 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
               { backgroundColor: genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' },
             ]}
           >
-            <Ionicons
-              name={genderFilter === 'women_only' ? 'female' : 'male'}
+            <MaterialCommunityIcons
+              name={genderFilter === 'women_only' ? 'gender-female' : 'gender-male'}
               size={9}
               color="#FFF"
             />
@@ -120,7 +118,7 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
         )}
       </View>
 
-      {/* Pin tip — pointed downward */}
+      {/* Pin tip */}
       <View
         style={[
           s.tip,
@@ -133,7 +131,7 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
         ]}
       />
 
-      {/* Ground shadow ellipse */}
+      {/* Ground shadow */}
       <View
         style={[
           s.groundShadow,
@@ -159,7 +157,6 @@ const s = StyleSheet.create({
     position: 'absolute',
     borderRadius: 30,
     backgroundColor: 'rgba(255,255,255,0.45)',
-    // Slight rotation to look more natural
     transform: [{ rotate: '-20deg' }],
   },
   innerRim: {
@@ -192,10 +189,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
     elevation: 3,
   },
   countText: { fontSize: 10, fontWeight: '800', lineHeight: 11 },
@@ -210,10 +203,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
     elevation: 3,
   },
 });

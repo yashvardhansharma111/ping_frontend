@@ -12,16 +12,19 @@ import {
   ScrollView,
   type AppStateStatus,
 } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
+import { Map as MapLibreMap, Camera, Marker, type MapRef, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocation } from '@/hooks/useLocation';
-import { activitiesApi, type Activity } from '@/lib/api';
+import { activitiesApi, adsApi, type Activity, type Ad } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import PingMarker from '@/components/PingMarker';
+import AdMapMarker from '@/components/AdMapMarker';
+import AdDetailSheet from '@/components/AdDetailSheet';
 import ActivityDetailSheet from '@/components/ActivityDetailSheet';
 import CreatePingModal from '@/components/CreatePingModal';
 
@@ -30,17 +33,28 @@ const POPUP_W = 290;   // max width of popup card
 const PIN_VISUAL_H = 75; // approx height of pin marker (50 head + 16 tip + 5 shadow + 4 glow)
 
 // ── Type config (matches PingMarker) ─────────────────────────────────────────
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-const TYPE_CFG: Record<string, { icon: IoniconName; color: string; label: string }> = {
-  sport:   { icon: 'barbell-outline',        color: '#EF4444', label: 'Sport' },
-  food:    { icon: 'restaurant-outline',     color: '#F97316', label: 'Food' },
-  music:   { icon: 'musical-notes-outline',  color: '#8B5CF6', label: 'Music' },
-  study:   { icon: 'book-outline',           color: '#3B82F6', label: 'Study' },
-  outdoor: { icon: 'walk-outline',           color: '#10B981', label: 'Outdoor' },
-  gaming:  { icon: 'game-controller-outline',color: '#EC4899', label: 'Gaming' },
-  meetup:  { icon: 'people-outline',         color: '#7C3AED', label: 'Meetup' },
-  default: { icon: 'location-outline',       color: '#6B7280', label: 'Ping' },
+type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+const TYPE_CFG: Record<string, { icon: MCIName; color: string; label: string }> = {
+  sport:   { icon: 'dumbbell',           color: '#EF4444', label: 'Sport' },
+  food:    { icon: 'food-fork-drink',    color: '#F97316', label: 'Food' },
+  music:   { icon: 'music',             color: '#8B5CF6', label: 'Music' },
+  study:   { icon: 'book-open-variant', color: '#3B82F6', label: 'Study' },
+  outdoor: { icon: 'walk',              color: '#10B981', label: 'Outdoor' },
+  gaming:  { icon: 'gamepad-variant',   color: '#EC4899', label: 'Gaming' },
+  meetup:  { icon: 'account-group',     color: '#7C3AED', label: 'Meetup' },
+  default: { icon: 'map-marker',        color: '#6B7280', label: 'Ping' },
 };
+
+// ── Suggestions shown when the map is empty ───────────────────────────────────
+const SUGGESTIONS: { type: string; title: string; desc: string; icon: MCIName; color: string }[] = [
+  { type: 'sport',   title: 'Gym Session',    desc: 'Work out together',  icon: 'dumbbell',           color: '#EF4444' },
+  { type: 'food',    title: 'Food Meetup',    desc: 'Grab a bite',        icon: 'food-fork-drink',    color: '#F97316' },
+  { type: 'music',   title: 'Jam Session',    desc: 'Make music',         icon: 'music',              color: '#8B5CF6' },
+  { type: 'study',   title: 'Study Group',    desc: 'Learn together',     icon: 'book-open-variant',  color: '#3B82F6' },
+  { type: 'outdoor', title: 'Outdoor Walk',   desc: 'Explore around',     icon: 'walk',               color: '#10B981' },
+  { type: 'gaming',  title: 'Gaming Night',   desc: 'Play together',      icon: 'gamepad-variant',    color: '#EC4899' },
+  { type: 'meetup',  title: 'Chill Hangout',  desc: 'Meet new people',    icon: 'account-group',      color: '#7C3AED' },
+];
 
 // ── Popup card (floats above the map as a RN overlay, NOT inside Callout) ────
 function PopupCard({
@@ -66,7 +80,7 @@ function PopupCard({
     <View style={pc.wrap}>
       <TouchableOpacity style={pc.card} onPress={onOpen} activeOpacity={0.88}>
         <View style={[pc.iconWrap, { backgroundColor: `${cfg.color}22` }]}>
-          <Ionicons name={cfg.icon} size={17} color={cfg.color} />
+          <MaterialCommunityIcons name={cfg.icon} size={17} color={cfg.color} />
         </View>
         <View style={pc.body}>
           <Text style={pc.title} numberOfLines={1}>{activity.title}</Text>
@@ -194,17 +208,14 @@ const ud = StyleSheet.create({
   },
 });
 
-const DEFAULT_REGION = {
-  latitude: 23.2599,
-  longitude: 77.4126,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
-
-const LIGHT_TILES = 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png';
+// OpenFreeMap Liberty — beautiful OSM vector tiles, completely free, no API key
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const DEFAULT_CENTER: [number, number] = [77.4126, 23.2599]; // [lng, lat] — GeoJSON order
+const DEFAULT_ZOOM = 12;
 
 export default function MapScreen() {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapRef>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const hasFlownRef = useRef(false);
   const lastFlownCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const insets = useSafeAreaInsets();
@@ -220,10 +231,13 @@ export default function MapScreen() {
   const { coords, granted, loading: locLoading } = useLocation();
   const router = useRouter();
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [ads, setAds] = useState<Ad[]>([]);
+  const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
   const [selected, setSelected] = useState<Activity | null>(null); // marker with open callout
   const [sheetActivity, setSheetActivity] = useState<Activity | null>(null); // full detail sheet
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [createDefaults, setCreateDefaults] = useState<{ type: string; title: string } | null>(null);
   const [newPingCount, setNewPingCount] = useState(0);
   const [apiError, setApiError] = useState(false);
   const [apiErrMsg, setApiErrMsg] = useState('');
@@ -258,10 +272,11 @@ export default function MapScreen() {
       hasFlownRef.current = true;
       lastFlownCoordsRef.current = { lat: coords.latitude, lng: coords.longitude };
       console.log(`[Map] Flying to ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)} (moved ${distMoved < Infinity ? distMoved.toFixed(0) + 'm' : 'first fix'})`);
-      mapRef.current?.animateToRegion(
-        { latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 0.012, longitudeDelta: 0.012 },
-        900,
-      );
+      cameraRef.current?.flyTo({
+        center: [coords.longitude, coords.latitude],
+        zoom: 14,
+        duration: 900,
+      });
     }
   }, [granted, locLoading, coords.latitude, coords.longitude]);
 
@@ -280,7 +295,11 @@ export default function MapScreen() {
     console.log(`[Map] loadNearby  lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}  silent=${silent}`);
     try {
       if (!silent) setRefreshing(true);
-      const res = await activitiesApi.nearby(lat, lng);
+      const [res, adsRes] = await Promise.all([
+        activitiesApi.nearby(lat, lng),
+        adsApi.feed(lat, lng).catch(() => ({ ads: [] as Ad[] })),
+      ]);
+      setAds(adsRes.ads ?? []);
       const fresh = res.activities ?? [];
 
       console.log(`[Map] API OK — ${fresh.length} activities`);
@@ -333,20 +352,17 @@ export default function MapScreen() {
       const lat = selected.location?.coordinates?.[1];
       const lng = selected.location?.coordinates?.[0];
       if (lat && lng && mapRef.current) {
-        // pointForCoordinate gives the ANCHOR point (bottom tip of pin) in screen space
-        (mapRef.current as any)
-          .pointForCoordinate({ latitude: lat, longitude: lng })
-          .then((pt: { x: number; y: number }) => {
-            setPopupPos(pt);
-            // Animate in only after we have position
+        // getPointInView converts geo coord → screen [x, y]
+        mapRef.current
+          .project([lng, lat])
+          .then((screenXY: [number, number]) => {
+            setPopupPos({ x: screenXY[0], y: screenXY[1] });
             Animated.parallel([
               Animated.spring(popupAnim, { toValue: 1, damping: 16, stiffness: 260, useNativeDriver: true }),
               Animated.spring(popupScaleAnim, { toValue: 1, damping: 16, stiffness: 260, useNativeDriver: true }),
             ]).start();
           })
-          .catch(() => {
-            setPopupPos(null);
-          });
+          .catch(() => setPopupPos(null));
       }
     } else {
       Animated.parallel([
@@ -388,56 +404,70 @@ export default function MapScreen() {
     : activities;
 
   function recenter() {
-    mapRef.current?.animateToRegion(
-      { latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-      600,
-    );
+    cameraRef.current?.flyTo({
+      center: [coords.longitude, coords.latitude],
+      zoom: 15,
+      duration: 600,
+    });
   }
 
   function clearSelection() {
     setSelected(null);
     setSheetActivity(null);
+    setSelectedAd(null);
   }
 
   return (
     <View style={styles.root}>
-      <MapView
+      <MapLibreMap
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType="none"
-        initialRegion={DEFAULT_REGION}
-        onPress={clearSelection}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        showsCompass={false}
-        toolbarEnabled={false}
-        rotateEnabled={false}
+        mapStyle={STYLE_URL}
+        onPress={() => { console.log('[Map] background tapped → clearSelection'); clearSelection(); }}
+        touchRotate={false}
+        touchPitch={false}
+        compass={false}
+        logo={false}
+        attribution={false}
       >
-        <UrlTile urlTemplate={LIGHT_TILES} maximumZ={19} flipY={false} tileSize={256} />
+        <Camera
+          ref={cameraRef}
+          initialViewState={{
+            center: DEFAULT_CENTER,
+            zoom: DEFAULT_ZOOM,
+          }}
+        />
 
+        {/* User location dot */}
         {granted && (
           <Marker
-            coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            flat
-            tracksViewChanges
+            lngLat={[coords.longitude, coords.latitude]}
+            anchor="center"
           >
             <UserDot />
           </Marker>
         )}
 
+        {/* Activity ping markers */}
         {filteredActivities.map((a) => {
           const isSelected = selected?._id === a._id;
           const mLat = a.location?.coordinates?.[1];
           const mLng = a.location?.coordinates?.[0];
-          if (!mLat || !mLng) return null;
+          if (!mLat || !mLng) {
+            console.warn(`[Marker] SKIP ping ${a._id} — missing coords (lat=${mLat} lng=${mLng})`);
+            return null;
+          }
+          console.log(`[Marker] Render ping ${a._id} type=${a.type} lngLat=[${mLng.toFixed(5)},${mLat.toFixed(5)}]`);
           return (
             <Marker
               key={a._id}
-              coordinate={{ latitude: mLat, longitude: mLng }}
-              anchor={{ x: 0.5, y: 1 }}
-              onPress={() => setSelected((prev) => prev?._id === a._id ? null : a)}
-              tracksViewChanges
+              lngLat={[mLng, mLat]}
+              anchor="bottom"
+              onPress={() => {
+                console.log(`[Marker] onPress FIRED ping ${a._id} type=${a.type}`);
+                setSelectedAd(null);
+                setSelected((prev) => prev?._id === a._id ? null : a);
+              }}
             >
               <PingMarker
                 type={a.type}
@@ -448,7 +478,31 @@ export default function MapScreen() {
             </Marker>
           );
         })}
-      </MapView>
+
+        {/* Micro Ad markers */}
+        {ads.map((ad) => {
+          const aLat = ad.location?.coordinates?.[1];
+          const aLng = ad.location?.coordinates?.[0];
+          if (!aLat || !aLng) {
+            console.warn(`[Marker] SKIP ad ${ad._id} — missing coords`);
+            return null;
+          }
+          console.log(`[Marker] Render ad ${ad._id} lngLat=[${aLng.toFixed(5)},${aLat.toFixed(5)}]`);
+          return (
+            <Marker
+              key={`ad-${ad._id}`}
+              lngLat={[aLng, aLat]}
+              anchor="bottom"
+              onPress={() => {
+                console.log(`[Marker] onPress FIRED ad ${ad._id}`);
+                setSelected(null); setSheetActivity(null); setSelectedAd(ad);
+              }}
+            >
+              <AdMapMarker ad={ad} selected={selectedAd?._id === ad._id} />
+            </Marker>
+          );
+        })}
+      </MapLibreMap>
 
       {/* ── Popup card — rendered in RN layer above the map, positioned over the pin ── */}
       {selected && popupPos && (
@@ -543,7 +597,7 @@ export default function MapScreen() {
 
       {/* Attribution */}
       <Text style={styles.attribution} pointerEvents="none">
-        © OpenStreetMap · CartoDB
+        © OpenStreetMap contributors · OpenFreeMap
       </Text>
 
       {/* API error banner */}
@@ -559,14 +613,47 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Empty state — no pings nearby */}
-      {loaded && !apiError && activities.length === 0 && !selected && (
-        <View style={styles.emptyHint} pointerEvents="none">
-          <View style={styles.emptyHintInner}>
-            <Text style={styles.emptyHintEmoji}>📍</Text>
-            <Text style={styles.emptyHintText}>No pings near you yet</Text>
-            <Text style={styles.emptyHintSub}>Be the first — tap + to drop one</Text>
+      {/* Suggestion panel — shown when no pings are nearby */}
+      {loaded && !apiError && activities.length === 0 && !selected && !showCreate && (
+        <View style={[styles.suggestionPanel, { bottom: insets.bottom + 98 }]}>
+          {/* Header */}
+          <View style={styles.suggestionHeader}>
+            <View style={styles.suggestionHeaderLeft}>
+              <View style={styles.suggestionLiveDot} />
+              <Text style={styles.suggestionHeading}>No pings nearby · Start one!</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => { setCreateDefaults(null); setShowCreate(true); }}
+              hitSlop={10}
+            >
+              <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#A78BFA" />
+            </TouchableOpacity>
           </View>
+
+          {/* Horizontally scrollable suggestion cards */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestionScroll}
+          >
+            {SUGGESTIONS.map((s) => (
+              <TouchableOpacity
+                key={s.type}
+                style={[styles.suggestionCard, { borderColor: `${s.color}40` }]}
+                onPress={() => {
+                  setCreateDefaults({ type: s.type, title: s.title });
+                  setShowCreate(true);
+                }}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.suggestionIconWrap, { backgroundColor: `${s.color}1E` }]}>
+                  <MaterialCommunityIcons name={s.icon} size={24} color={s.color} />
+                </View>
+                <Text style={styles.suggestionCardTitle}>{s.title}</Text>
+                <Text style={styles.suggestionCardDesc}>{s.desc}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -593,6 +680,13 @@ export default function MapScreen() {
             <Ionicons name="refresh" size={13} color={Ping.purpleLight} />
           </TouchableOpacity>
         </Animated.View>
+      )}
+
+      {/* Ad detail sheet */}
+      {selectedAd && (
+        <View style={[styles.sheet, { maxHeight: SCREEN_H * 0.62, paddingBottom: insets.bottom + 80 }]}>
+          <AdDetailSheet ad={selectedAd} onClose={() => setSelectedAd(null)} />
+        </View>
       )}
 
       {/* Full detail bottom sheet (opens when popup is tapped) */}
@@ -635,10 +729,12 @@ export default function MapScreen() {
 
       <CreatePingModal
         visible={showCreate}
-        onClose={() => setShowCreate(false)}
+        onClose={() => { setShowCreate(false); setCreateDefaults(null); }}
         onCreated={loadNearby}
         lat={coords.latitude}
         lng={coords.longitude}
+        defaultType={createDefaults?.type}
+        defaultTitle={createDefaults?.title}
       />
 
       {/* ── DEBUG PANEL (tap header to collapse) ── */}
@@ -1035,40 +1131,87 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ── Empty state ───────────────────────────────────────────────────────────
   // ── Popup card overlay ────────────────────────────────────────────────────
   popupOverlay: {
     position: 'absolute',
     zIndex: 50,
   },
 
-  emptyHint: {
+  // ── Suggestion panel ─────────────────────────────────────────────────────
+  suggestionPanel: {
     position: 'absolute',
-    bottom: '38%',
-    alignSelf: 'center',
-    zIndex: 5,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: 'rgba(10,10,28,0.96)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(167,139,250,0.15)',
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 16,
   },
-  emptyHintInner: {
+  suggestionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(8,8,21,0.82)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: Radius.xl,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
-  emptyHintEmoji: { fontSize: 28, marginBottom: 2 },
-  emptyHintText: {
-    ...Typography.bodyMed,
-    color: '#F1F0FF',
-    fontSize: 15,
+  suggestionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  suggestionLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#A78BFA',
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 4,
+  },
+  suggestionHeading: {
+    fontSize: 13,
     fontWeight: '700',
+    color: '#E2E0FF',
   },
-  emptyHintSub: {
-    ...Typography.caption,
-    color: '#9490C0',
+  suggestionScroll: {
+    paddingHorizontal: Spacing.md,
+    gap: 10,
+    paddingBottom: 2,
+  },
+  suggestionCard: {
+    width: 118,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: 11,
+    gap: 5,
+    alignItems: 'flex-start',
+  },
+  suggestionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  suggestionCardTitle: {
     fontSize: 12,
+    fontWeight: '700',
+    color: '#F1F0FF',
+  },
+  suggestionCardDesc: {
+    fontSize: 10,
+    color: '#7B78A8',
+    fontWeight: '500',
   },
 });
 

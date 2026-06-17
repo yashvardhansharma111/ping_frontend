@@ -11,11 +11,13 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import { adsApi, type AdTier, type AdCategory, type AdProduct, WEB_BASE } from '@/lib/api';
+import * as ImagePicker from 'expo-image-picker';
+import { adsApi, uploadApi, type AdTier, type AdCategory, type AdProduct, WEB_BASE } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -93,6 +95,7 @@ export default function CreateAdModal({ visible, onClose, onCreated, lat, lng }:
   const [saving, setSaving] = useState(false);
   const [waitingPayment, setWaitingPayment] = useState(false);
   const [createdAdId, setCreatedAdId] = useState<string | null>(null);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
 
   const maxProducts = TIERS.find(t => t.key === tier)!.maxProducts;
 
@@ -149,12 +152,40 @@ export default function CreateAdModal({ visible, onClose, onCreated, lat, lng }:
     setProducts(prev => prev.filter((_, i) => i !== index));
   }
 
+  async function pickProductImage(index: number) {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to upload product images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingIdx(index);
+    try {
+      const url = await uploadApi.uploadImage(result.assets[0].uri, 'ads');
+      setProducts(prev => {
+        const next = [...prev];
+        next[index] = { ...next[index], imageUrl: url };
+        return next;
+      });
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message || 'Could not upload image.');
+    } finally {
+      setUploadingIdx(null);
+    }
+  }
+
   // ── step 2 → 3 (create draft + open payment) ────────────────────────────────
 
   async function createAndPay() {
     const validProducts = products.filter(p => p.name.trim() && p.imageUrl.trim());
     if (validProducts.length === 0) {
-      Alert.alert('Required', 'Add at least one product with a name and image URL.');
+      Alert.alert('Required', 'Add at least one product with a name and image.');
       return;
     }
 
@@ -385,15 +416,29 @@ export default function CreateAdModal({ visible, onClose, onCreated, lat, lng }:
                     onChangeText={v => updateProduct(i, 'name', v)}
                     maxLength={40}
                   />
-                  <TextInput
-                    style={[styles.input, { marginTop: 8 }]}
-                    placeholder="Image URL (https://...)"
-                    placeholderTextColor="#5C5A80"
-                    value={p.imageUrl}
-                    onChangeText={v => updateProduct(i, 'imageUrl', v)}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
+                  <TouchableOpacity
+                    style={styles.imagePicker}
+                    onPress={() => pickProductImage(i)}
+                    activeOpacity={0.75}
+                    disabled={uploadingIdx === i}
+                  >
+                    {uploadingIdx === i ? (
+                      <ActivityIndicator size="small" color={Ping.purple} />
+                    ) : p.imageUrl ? (
+                      <>
+                        <Image source={{ uri: p.imageUrl }} style={styles.imagePreview} />
+                        <View style={styles.imagePickerOverlay}>
+                          <Ionicons name="camera-outline" size={18} color="#FFF" />
+                          <Text style={styles.imagePickerOverlayText}>Change</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="image-outline" size={28} color="#5C5A80" />
+                        <Text style={styles.imagePickerText}>Tap to upload product image</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                   <TextInput
                     style={[styles.input, { marginTop: 8 }]}
                     placeholder="Price in ₹ (optional)"
@@ -583,6 +628,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: Spacing.sm,
   },
   productTitle: { ...Typography.bodyMed, color: '#9490C0', fontWeight: '700' },
+  imagePicker: {
+    marginTop: 8, height: 120, borderRadius: Radius.md, borderWidth: 1.5,
+    borderColor: 'rgba(167,139,250,0.2)', borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  imagePickerText: { ...Typography.caption, color: '#5C5A80' },
+  imagePreview: { width: '100%', height: '100%', resizeMode: 'cover', position: 'absolute' },
+  imagePickerOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)', paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+  },
+  imagePickerOverlayText: { ...Typography.caption, color: '#FFF', fontWeight: '600' },
   addProductBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingVertical: 12, borderRadius: Radius.md, borderWidth: 1.5,

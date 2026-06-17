@@ -13,12 +13,14 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
-import { authApi, usersApi, friendsApi } from '@/lib/api';
+import { authApi, usersApi, friendsApi, uploadApi } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import SafetyHubModal from '@/components/SafetyHubModal';
@@ -402,9 +404,10 @@ export default function ProfileScreen() {
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, refreshToken, logout } = useAuthStore();
+  const { user, setUser, refreshToken, logout } = useAuthStore();
   const [openModal, setOpenModal] = useState<ModalKey>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const halo1 = useRef(new Animated.Value(0)).current;
   const halo2 = useRef(new Animated.Value(0)).current;
@@ -430,6 +433,31 @@ export default function ProfileScreen() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  async function pickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to update your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingAvatar(true);
+    try {
+      const url = await uploadApi.uploadImage(result.assets[0].uri, 'avatars');
+      const res = await usersApi.updateMe({ avatarUrl: url });
+      setUser(res.user);
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message || 'Could not update profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   async function handleLogout() {
     Alert.alert('Log out?', 'You can log back in with your phone number.', [
@@ -500,13 +528,22 @@ export default function ProfileScreen() {
       >
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.avatarWrap}>
+          <TouchableOpacity style={styles.avatarWrap} onPress={pickAvatar} activeOpacity={0.85}>
             <Animated.View style={[styles.haloRing, { transform: [{ scale: h1Scale }], opacity: h1Opacity }]} />
             <Animated.View style={[styles.haloRing, { transform: [{ scale: h2Scale }], opacity: h2Opacity }]} />
-            <View style={[styles.avatarFallback, { backgroundColor: Ping.purple }]}>
-              <Text style={styles.avatarText}>{initials}</Text>
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: Ping.purple }]}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </View>
+            )}
+            <View style={styles.avatarCameraBtn}>
+              {uploadingAvatar
+                ? <ActivityIndicator size="small" color="#FFF" />
+                : <Ionicons name="camera" size={14} color="#FFF" />}
             </View>
-          </View>
+          </TouchableOpacity>
           <Text style={[styles.name, { color: c.text }]}>
             {user?.displayName ?? 'No name set'}
           </Text>
@@ -634,6 +671,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { fontSize: 32, fontWeight: '800', color: '#FFF' },
+  avatarImage: { width: 88, height: 88, borderRadius: 44 },
+  avatarCameraBtn: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: Ping.purple, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#080815',
+  },
   name: { ...Typography.h3 },
   username: { ...Typography.bodySm },
   bio: { ...Typography.bodySm, textAlign: 'center', maxWidth: 260 },
