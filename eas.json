@@ -8,19 +8,25 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://app.pingnow.in"
+        "EXPO_PUBLIC_API_URL": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app"
       }
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://app.pingnow.in"
+        "EXPO_PUBLIC_API_URL": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app"
       }
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://app.pingnow.in"
+        "EXPO_PUBLIC_API_URL": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app"
       }
     }
   },

@@ -12,15 +12,15 @@ export const Colors = {
   light: {
     primary: Ping.purple,
     accent: Ping.orange,
-    text: '#1A1730',
-    textSecondary: '#6B7280',
-    background: '#F5F3FF',
-    surface: '#FFFFFF',
+    text: '#1C1040',
+    textSecondary: '#7B6DAA',
+    background: '#FFFFFF',
+    surface: '#F9F8FF',
     card: '#FFFFFF',
-    border: 'rgba(124, 58, 237, 0.12)',
+    border: 'rgba(124, 58, 237, 0.1)',
     tint: Ping.purple,
-    icon: '#6B7280',
-    tabIconDefault: '#9BA1A6',
+    icon: '#7B6DAA',
+    tabIconDefault: '#A89CC8',
     tabIconSelected: Ping.purple,
     online: Ping.green,
     danger: Ping.red,
@@ -61,11 +61,52 @@ export const Radius = {
 };
 
 export const Typography = {
-  h1: { fontSize: 32, fontWeight: '700' as const, lineHeight: 40 },
-  h2: { fontSize: 24, fontWeight: '700' as const, lineHeight: 32 },
-  h3: { fontSize: 20, fontWeight: '600' as const, lineHeight: 28 },
-  body: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
+  display: { fontSize: 36, fontWeight: '800' as const, lineHeight: 44, letterSpacing: -0.5 },
+  h1:      { fontSize: 28, fontWeight: '700' as const, lineHeight: 36, letterSpacing: -0.3 },
+  h2:      { fontSize: 22, fontWeight: '700' as const, lineHeight: 30, letterSpacing: -0.2 },
+  h3:      { fontSize: 18, fontWeight: '600' as const, lineHeight: 26 },
+  h4:      { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
+  body:    { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
   bodyMed: { fontSize: 16, fontWeight: '500' as const, lineHeight: 24 },
-  bodySm: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+  bodySm:  { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
   caption: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
+  label:   { fontSize: 11, fontWeight: '600' as const, lineHeight: 14, letterSpacing: 0.6, textTransform: 'uppercase' as const },
+  micro:   { fontSize: 10, fontWeight: '500' as const, lineHeight: 13 },
+};
+
+export const Shadow = {
+  sm: {
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  md: {
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  lg: {
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+};
+
+export const Glass = {
+  dark: {
+    backgroundColor: 'rgba(17,17,42,0.72)',
+    borderColor: 'rgba(167,139,250,0.18)',
+    borderWidth: 1 as const,
+  },
+  light: {
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(124,58,237,0.12)',
+    borderWidth: 1 as const,
+  },
 };

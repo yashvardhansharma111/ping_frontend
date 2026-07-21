@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
   KeyboardAvoidingView,
   ScrollView,
+  Animated,
+  Dimensions,
+  Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -20,11 +22,22 @@ import { friendsApi, usersApi, type Friendship, type User } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import SkeletonList from '@/components/SkeletonLoader';
+import FadeInItem from '@/components/FadeInItem';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAuthStore from '@/lib/stores/authStore';
+import SuccessToast from '@/components/SuccessToast';
+import ConfirmSheet from '@/components/ConfirmSheet';
 
-type Tab = 'friends' | 'requests';
+type Tab = 'received' | 'sent' | 'friends';
+
+const TAB_LABELS: Record<Tab, string> = {
+  received: 'Received',
+  sent:     'Sent',
+  friends:  'Friends',
+};
+
+const TABS: Tab[] = ['received', 'sent', 'friends'];
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function Avatar({ user, size = 48 }: { user: Pick<User, 'displayName' | 'phone' | 'avatarUrl'>; size?: number }) {
@@ -88,8 +101,8 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
       await friendsApi.send(userId);
       setSentIds((prev) => new Set([...prev, userId]));
       onSent();
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not send request.');
+    } catch {
+      // silently ignore — button returns to idle state
     } finally {
       setSending(null);
     }
@@ -110,7 +123,6 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
       >
         <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={close} />
         <View style={[m.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + Spacing.md }]}>
-          {/* Handle */}
           <View style={[m.handle, { backgroundColor: c.border }]} />
 
           <View style={[m.header, { borderBottomColor: c.border }]}>
@@ -268,24 +280,68 @@ const m = StyleSheet.create({
   hintText: { ...Typography.caption, flex: 1 },
 });
 
+const SCREEN_W = Dimensions.get('window').width;
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function FriendsScreen() {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('friends');
+
+  const [tab, setTab] = useState<Tab>('received');
   const [friends, setFriends] = useState<Friendship[]>([]);
-  const [requests, setRequests] = useState<Friendship[]>([]);
+  const [received, setReceived] = useState<Friendship[]>([]);
+  const [sent, setSent] = useState<Friendship[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [acceptToast, setAcceptToast] = useState(false);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+
+  const [confirm, setConfirm] = useState({
+    visible: false,
+    title: '',
+    subtitle: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Keep',
+    danger: false,
+    icon: 'alert-circle-outline' as React.ComponentProps<typeof Ionicons>['name'],
+    onConfirm: () => {},
+  });
+
+  const tabW = (SCREEN_W - Spacing.lg * 2) / 3;
+
+  // Sliding tab underline — value 0..3 maps to tab positions
+  const tabIndicator = useRef(new Animated.Value(0)).current;
+  const headerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(headerAnim, {
+      toValue: 1, damping: 18, stiffness: 160, mass: 0.9, useNativeDriver: true,
+    }).start();
+  }, []);
+
+  function switchTab(t: Tab) {
+    setTab(t);
+    const idx = TABS.indexOf(t);
+    Animated.spring(tabIndicator, {
+      toValue: idx,
+      damping: 18, stiffness: 280, mass: 0.8, useNativeDriver: true,
+    }).start();
+    Haptics.selectionAsync();
+  }
 
   async function load() {
     setLoading(true);
     try {
-      const [fr, rq] = await Promise.all([friendsApi.list(), friendsApi.requests()]);
+      const [fr, recv, snt] = await Promise.all([
+        friendsApi.list(),
+        friendsApi.requests('received'),
+        friendsApi.requests('sent'),
+      ]);
       setFriends(fr.friends ?? []);
-      setRequests(rq.requests ?? []);
+      setReceived(recv.requests ?? []);
+      setSent(snt.requests ?? []);
     } catch {
       // keep stale
     } finally {
@@ -298,125 +354,233 @@ export default function FriendsScreen() {
   async function accept(userId: string) {
     try {
       await friendsApi.accept(userId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setAcceptToast(true);
       load();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      setErrorToast(e.message || 'Something went wrong');
     }
   }
 
-  async function reject(userId: string) {
-    Alert.alert('Decline request?', 'This will remove the pending request.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Decline',
-        style: 'destructive',
-        onPress: async () => {
-          try { await friendsApi.reject(userId); load(); }
-          catch (e: any) { Alert.alert('Error', e.message); }
-        },
+  function decline(userId: string) {
+    setConfirm({
+      visible: true,
+      title: 'Decline this request?',
+      subtitle: 'This will remove the pending request.',
+      confirmLabel: 'Decline',
+      cancelLabel: 'Keep',
+      danger: true,
+      icon: 'close-circle-outline',
+      onConfirm: async () => {
+        try { await friendsApi.reject(userId); load(); }
+        catch (e: any) { setErrorToast(e.message || 'Something went wrong'); }
       },
-    ]);
+    });
   }
 
-  async function removeFriend(userId: string, name: string) {
-    Alert.alert(`Remove ${name}?`, 'They will no longer be in your friends list.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try { await friendsApi.remove(userId); load(); }
-          catch (e: any) { Alert.alert('Error', e.message); }
-        },
+  function cancelSent(userId: string, name: string) {
+    setConfirm({
+      visible: true,
+      title: `Withdraw request to ${name}?`,
+      subtitle: 'Your request will be cancelled.',
+      confirmLabel: 'Withdraw',
+      cancelLabel: 'Keep',
+      danger: true,
+      icon: 'person-remove-outline',
+      onConfirm: async () => {
+        try { await friendsApi.reject(userId); load(); }
+        catch (e: any) { setErrorToast(e.message || 'Something went wrong'); }
       },
-    ]);
+    });
   }
 
-  function renderFriend({ item }: { item: Friendship }) {
+  function removeFriend(userId: string, name: string) {
+    setConfirm({
+      visible: true,
+      title: `Remove ${name}?`,
+      subtitle: 'They will no longer be in your friends list.',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep',
+      danger: true,
+      icon: 'person-remove-outline',
+      onConfirm: async () => {
+        try { await friendsApi.remove(userId); load(); }
+        catch (e: any) { setErrorToast(e.message || 'Something went wrong'); }
+      },
+    });
+  }
+
+  // ── Render: Received request card ──────────────────────────────────────────
+  function renderReceived({ item, index }: { item: Friendship; index: number }) {
+    const u = item.friend;
+    const acceptSc = new Animated.Value(1);
+    const declineSc = new Animated.Value(1);
+    function bounce(sc: Animated.Value) {
+      Animated.sequence([
+        Animated.spring(sc, { toValue: 0.8, damping: 20, stiffness: 500, useNativeDriver: true }),
+        Animated.spring(sc, { toValue: 1, damping: 12, stiffness: 220, mass: 0.8, useNativeDriver: true }),
+      ]).start();
+    }
+    return (
+      <FadeInItem delay={index * 55}>
+        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+          <TouchableOpacity onPress={() => router.push(`/user/${u._id}`)} activeOpacity={0.8}>
+            <Avatar user={u} size={48} />
+          </TouchableOpacity>
+          <View style={styles.info}>
+            <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
+              {u.displayName ?? 'User'}
+            </Text>
+            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
+              {u.username ? `@${u.username}` : u.phone}
+            </Text>
+            <Text style={[styles.timeLabel, { color: c.textSecondary }]}>
+              Wants to connect
+            </Text>
+          </View>
+          <View style={styles.reqActions}>
+            <Animated.View style={{ transform: [{ scale: acceptSc }] }}>
+              <TouchableOpacity
+                style={styles.acceptBtn}
+                onPress={() => { bounce(acceptSc); accept(u._id); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark" size={18} color="#FFF" />
+              </TouchableOpacity>
+            </Animated.View>
+            <Animated.View style={{ transform: [{ scale: declineSc }] }}>
+              <TouchableOpacity
+                style={[styles.declineBtn, { borderColor: c.border }]}
+                onPress={() => { bounce(declineSc); decline(u._id); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close" size={18} color={c.icon} />
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </View>
+      </FadeInItem>
+    );
+  }
+
+  // ── Render: Sent request card ──────────────────────────────────────────────
+  function renderSent({ item, index }: { item: Friendship; index: number }) {
     const u = item.friend;
     return (
-      <TouchableOpacity
-        style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
-        onPress={() => router.push(`/user/${u._id}`)}
-        activeOpacity={0.8}
-      >
-        <Avatar user={u} size={48} />
-        <View style={styles.info}>
-          <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
-            {u.displayName ?? 'User'}
-          </Text>
-          <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
-            {u.username ? `@${u.username}` : u.phone}
-          </Text>
+      <FadeInItem delay={index * 55}>
+        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+          <TouchableOpacity onPress={() => router.push(`/user/${u._id}`)} activeOpacity={0.8}>
+            <Avatar user={u} size={48} />
+          </TouchableOpacity>
+          <View style={styles.info}>
+            <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
+              {u.displayName ?? 'User'}
+            </Text>
+            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
+              {u.username ? `@${u.username}` : u.phone}
+            </Text>
+            <View style={styles.pendingBadge}>
+              <View style={[styles.pendingDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={[styles.pendingText, { color: '#F59E0B' }]}>Pending</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.cancelBtn, { borderColor: c.border }]}
+            onPress={() => cancelSent(u._id, u.displayName ?? 'this user')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.cancelBtnText, { color: c.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
         </View>
+      </FadeInItem>
+    );
+  }
+
+  // ── Render: Accepted friend card ──────────────────────────────────────────
+  function renderFriend({ item, index }: { item: Friendship; index: number }) {
+    const u = item.friend;
+    return (
+      <FadeInItem delay={index * 55}>
         <TouchableOpacity
-          style={[styles.actionBtn, { borderColor: c.border }]}
-          onPress={() => removeFriend(u._id, u.displayName ?? 'this user')}
-          activeOpacity={0.75}
+          style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+          onPress={() => router.push(`/user/${u._id}`)}
+          activeOpacity={0.8}
         >
-          <Ionicons name="person-remove-outline" size={16} color={c.textSecondary} />
+          <Avatar user={u} size={48} />
+          <View style={styles.info}>
+            <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
+              {u.displayName ?? 'User'}
+            </Text>
+            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
+              {u.username ? `@${u.username}` : u.phone}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.actionBtn, { borderColor: c.border }]}
+            onPress={() => removeFriend(u._id, u.displayName ?? 'this user')}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="person-remove-outline" size={16} color={c.textSecondary} />
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </FadeInItem>
     );
   }
 
-  function renderRequest({ item }: { item: Friendship }) {
-    const u = item.friend;
-    return (
-      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <Avatar user={u} size={48} />
-        <View style={styles.info}>
-          <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
-            {u.displayName ?? 'User'}
-          </Text>
-          <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
-            {u.username ? `@${u.username}` : u.phone}
-          </Text>
-        </View>
-        <View style={styles.reqActions}>
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={() => accept(u._id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="checkmark" size={18} color="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.declineBtn, { borderColor: c.border }]}
-            onPress={() => reject(u._id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close" size={18} color={c.icon} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  const data = tab === 'friends' ? friends : requests;
-  const renderItem = tab === 'friends' ? renderFriend : renderRequest;
+  // ── Data and render dispatch ───────────────────────────────────────────────
+  const dataMap: Record<Tab, Friendship[]> = {
+    received,
+    sent,
+    friends,
+  };
+  const renderMap: Record<Tab, (info: { item: Friendship; index: number }) => React.ReactElement> = {
+    received: renderReceived,
+    sent:     renderSent,
+    friends:  renderFriend,
+  };
 
   const EMPTY: Record<Tab, { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; sub: string }> = {
+    received: {
+      icon: 'mail-outline',
+      title: 'No incoming requests',
+      sub: 'When someone sends you a friend request, it shows up here',
+    },
+    sent: {
+      icon: 'paper-plane-outline',
+      title: 'No sent requests',
+      sub: "Requests you send will appear here while they're pending",
+    },
     friends: {
       icon: 'people-outline',
       title: 'No friends yet',
-      sub: 'Search for people to add as friends',
-    },
-    requests: {
-      icon: 'mail-outline',
-      title: 'No pending requests',
-      sub: 'When someone adds you, it shows up here',
+      sub: 'Search for people and send friend requests',
     },
   };
+
+  const currentData = dataMap[tab];
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + 12 },
+          {
+            opacity: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+            transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
+          },
+        ]}
+      >
         <View>
-          <Text style={[styles.title, { color: c.text }]}>Friends</Text>
+          <View style={styles.titleRow}>
+            <Image source={require('../../assets/images/icon.png')} style={styles.headerIcon} />
+            <Text style={[styles.title, { color: c.text }]}>Friends</Text>
+          </View>
           <Text style={[styles.titleSub, { color: c.textSecondary }]}>
-            {friends.length > 0 ? `${friends.length} friend${friends.length === 1 ? '' : 's'}` : 'Find people near you'}
+            {friends.length > 0
+              ? `${friends.length} friend${friends.length === 1 ? '' : 's'}`
+              : 'Find people near you'}
           </Text>
         </View>
         <TouchableOpacity
@@ -426,46 +590,82 @@ export default function FriendsScreen() {
         >
           <Ionicons name="person-add" size={18} color="#FFF" />
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
-      {/* Tabs */}
+      {/* 4-tab bar with sliding indicator */}
       <View style={[styles.tabBar, { borderBottomColor: c.border }]}>
-        {(['friends', 'requests'] as Tab[]).map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.tabItem, tab === t && { borderBottomColor: Ping.purple }]}
-            onPress={() => setTab(t)}
-          >
-            <Text style={[styles.tabLabel, { color: tab === t ? Ping.purpleLight : c.textSecondary }]}>
-              {t === 'friends' ? 'Friends' : `Requests${requests.length > 0 ? ` · ${requests.length}` : ''}`}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {TABS.map((t) => {
+          const isActive = tab === t;
+          const badge = t === 'received' && received.length > 0 ? received.length : null;
+          return (
+            <TouchableOpacity
+              key={t}
+              style={[styles.tabItem, { width: tabW }]}
+              onPress={() => switchTab(t)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.tabLabelRow}>
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    { color: isActive ? c.tint : c.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {TAB_LABELS[t]}
+                </Text>
+                {badge !== null && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Sliding underline pill */}
+        <Animated.View
+          style={[
+            styles.tabUnderline,
+            { backgroundColor: Ping.purple, width: tabW },
+            {
+              transform: [{
+                translateX: tabIndicator.interpolate({
+                  inputRange: [0, 1, 2],
+                  outputRange: [0, tabW, tabW * 2],
+                }),
+              }],
+            },
+          ]}
+        />
       </View>
 
       {loading ? (
         <SkeletonList count={6} variant="friends" />
       ) : (
         <FlatList
-          data={data}
+          data={currentData}
           keyExtractor={(i) => i._id}
-          contentContainerStyle={[styles.list, data.length === 0 && { flex: 1 }]}
-          renderItem={renderItem as any}
+          contentContainerStyle={[styles.list, currentData.length === 0 && { flex: 1 }]}
+          renderItem={({ item, index }) => renderMap[tab]({ item, index })}
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}18` }]}>
-                <Ionicons name={EMPTY[tab].icon} size={36} color={Ping.purpleLight} />
+                <Ionicons name={EMPTY[tab].icon} size={36} color={c.tint} />
               </View>
               <Text style={[styles.emptyTitle, { color: c.text }]}>{EMPTY[tab].title}</Text>
               <Text style={[styles.emptySub, { color: c.textSecondary }]}>{EMPTY[tab].sub}</Text>
-              {tab === 'friends' && (
+              {(tab === 'friends' || tab === 'received') && (
                 <TouchableOpacity
                   style={styles.emptyAddBtn}
                   onPress={() => setShowAdd(true)}
                   activeOpacity={0.85}
                 >
                   <Ionicons name="person-add" size={16} color="#FFF" />
-                  <Text style={styles.emptyAddText}>Add friends</Text>
+                  <Text style={styles.emptyAddText}>
+                    {tab === 'friends' ? 'Add friends' : 'Find people'}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -477,6 +677,35 @@ export default function FriendsScreen() {
         visible={showAdd}
         onClose={() => setShowAdd(false)}
         onSent={load}
+      />
+
+      <ConfirmSheet
+        visible={confirm.visible}
+        onClose={() => setConfirm((p) => ({ ...p, visible: false }))}
+        title={confirm.title}
+        subtitle={confirm.subtitle}
+        confirmLabel={confirm.confirmLabel}
+        cancelLabel={confirm.cancelLabel}
+        danger={confirm.danger}
+        icon={confirm.icon}
+        onConfirm={confirm.onConfirm}
+      />
+
+      <SuccessToast
+        visible={acceptToast}
+        message="Friend request accepted!"
+        subMessage="You're now connected"
+        icon="people"
+        color="#22C55E"
+        onDone={() => setAcceptToast(false)}
+      />
+
+      <SuccessToast
+        visible={!!errorToast}
+        message={errorToast ?? ''}
+        icon="alert-circle"
+        color="#EF4444"
+        onDone={() => setErrorToast(null)}
       />
     </View>
   );
@@ -491,6 +720,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIcon: { width: 28, height: 28 },
   title: { ...Typography.h2, fontSize: 26 },
   titleSub: { ...Typography.caption, marginTop: 2 },
   addBtn: {
@@ -509,16 +740,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     marginHorizontal: Spacing.lg,
+    position: 'relative',
   },
   tabItem: {
-    flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
   },
-  tabLabel: { ...Typography.bodyMed, fontSize: 14 },
-  list: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: 130, gap: Spacing.sm },
+  tabLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabLabel: { ...Typography.bodySm, fontSize: 12.5, fontWeight: '600' },
+  tabUnderline: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    height: 2,
+    borderRadius: 1,
+  },
+  badge: {
+    backgroundColor: Ping.purple,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  list: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: 130,
+    gap: Spacing.sm,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -530,6 +791,7 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   name: { ...Typography.bodyMed },
   sub: { ...Typography.caption, marginTop: 2 },
+  timeLabel: { ...Typography.caption, fontSize: 11, marginTop: 3 },
   actionBtn: {
     width: 36,
     height: 36,
@@ -560,7 +822,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  pendingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  pendingText: { fontSize: 11, fontWeight: '600' },
+  cancelBtn: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  cancelBtnText: { ...Typography.caption, fontSize: 12, fontWeight: '600' },
   empty: {
     flex: 1,
     alignItems: 'center',

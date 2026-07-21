@@ -6,13 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Alert,
   Linking,
   Share,
   TextInput,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
+import ConfirmSheet from './ConfirmSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -153,8 +154,8 @@ function AddContactSheet({
   function save() {
     const n = name.trim();
     const p = phone.replace(/\s/g, '');
-    if (!n) { Alert.alert('Name required'); return; }
-    if (!/^\+?[\d]{7,15}$/.test(p)) { Alert.alert('Enter a valid phone number'); return; }
+    if (!n) { Toast.show({ type: 'error', text1: 'Name required' }); return; }
+    if (!/^\+?[\d]{7,15}$/.test(p)) { Toast.show({ type: 'error', text1: 'Enter a valid phone number' }); return; }
     const contact: TrustedContact = { id: Date.now().toString(), name: n, phone: p };
     onSaved(contact);
     setName(''); setPhone('');
@@ -242,6 +243,10 @@ export default function SafetyHubModal({
   const [showAddContact, setShowAddContact] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [removeContactId, setRemoveContactId] = useState<string | null>(null);
+  const [showCall112Confirm, setShowCall112Confirm] = useState(false);
+  const [showCall100Confirm, setShowCall100Confirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
 
   useEffect(() => {
     if (visible) loadContacts();
@@ -266,36 +271,15 @@ export default function SafetyHubModal({
   }
 
   async function removeContact(id: string) {
-    Alert.alert('Remove contact?', 'They will no longer receive SOS alerts.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => saveContacts(contacts.filter((c) => c.id !== id)),
-      },
-    ]);
+    setRemoveContactId(id);
   }
 
   async function callEmergency() {
-    Alert.alert('Call 112?', 'This will call the national emergency number.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Call now',
-        style: 'destructive',
-        onPress: () => Linking.openURL('tel:112'),
-      },
-    ]);
+    setShowCall112Confirm(true);
   }
 
   async function callPolice() {
-    Alert.alert('Call 100?', 'This will call the police emergency number.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Call now',
-        style: 'destructive',
-        onPress: () => Linking.openURL('tel:100'),
-      },
-    ]);
+    setShowCall100Confirm(true);
   }
 
   async function sendSOS() {
@@ -303,7 +287,7 @@ export default function SafetyHubModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location required', 'Enable location to send your position in the SOS.');
+        Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to send your position in the SOS.' });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -328,13 +312,13 @@ export default function SafetyHubModal({
       if (canOpen) {
         await Linking.openURL(smsUrl);
         if (contacts.length > 1) {
-          Alert.alert('SOS sent', `Message opened for ${first.name}. Also share with other trusted contacts if needed.`);
+          Toast.show({ type: 'info', text1: 'SOS sent', text2: `Message opened for ${first.name}. Also share with other trusted contacts if needed.` });
         }
       } else {
         await Share.share({ message });
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not send SOS.');
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send SOS.' });
     } finally {
       setSharingLocation(false);
     }
@@ -345,7 +329,7 @@ export default function SafetyHubModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location required', 'Enable location to share your position.');
+        Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to share your position.' });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -353,34 +337,25 @@ export default function SafetyHubModal({
       const link = `https://maps.google.com/?q=${latitude},${longitude}`;
       await Share.share({ message: `My current location: ${link}`, url: link });
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not share location.');
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not share location.' });
     } finally {
       setSharingLocation(false);
     }
   }
 
   function confirmDeleteAccount() {
-    Alert.alert(
-      'Delete account?',
-      'This permanently removes your profile, activities and friend connections. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete my account',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingAccount(true);
-            try {
-              await usersApi.deleteMe();
-              await logout();
-            } catch (err: any) {
-              setDeletingAccount(false);
-              Alert.alert('Error', err.message || 'Could not delete account.');
-            }
-          },
-        },
-      ],
-    );
+    setShowDeleteAccountConfirm(true);
+  }
+
+  async function doDeleteAccount() {
+    setDeletingAccount(true);
+    try {
+      await usersApi.deleteMe();
+      await logout();
+    } catch (err: any) {
+      setDeletingAccount(false);
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not delete account.' });
+    }
   }
 
   return (
@@ -548,6 +523,56 @@ export default function SafetyHubModal({
         onClose={() => setShowAddContact(false)}
         onSaved={addContact}
         c={c}
+      />
+
+      <ConfirmSheet
+        visible={removeContactId !== null}
+        onClose={() => setRemoveContactId(null)}
+        title="Remove contact?"
+        subtitle="They will no longer receive SOS alerts."
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => {
+          if (removeContactId) saveContacts(contacts.filter((c) => c.id !== removeContactId));
+          setRemoveContactId(null);
+        }}
+      />
+
+      <ConfirmSheet
+        visible={showCall100Confirm}
+        onClose={() => setShowCall100Confirm(false)}
+        title="Call 100?"
+        subtitle="This will call the police emergency number."
+        confirmLabel="Call now"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => { setShowCall100Confirm(false); Linking.openURL('tel:100'); }}
+        icon="call-outline"
+      />
+
+      <ConfirmSheet
+        visible={showCall112Confirm}
+        onClose={() => setShowCall112Confirm(false)}
+        title="Call 112?"
+        subtitle="This will call the national emergency number."
+        confirmLabel="Call now"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => { setShowCall112Confirm(false); Linking.openURL('tel:112'); }}
+        icon="call-outline"
+      />
+
+      <ConfirmSheet
+        visible={showDeleteAccountConfirm}
+        onClose={() => setShowDeleteAccountConfirm(false)}
+        title="Delete account?"
+        subtitle="This permanently removes your profile, activities and friend connections. This cannot be undone."
+        confirmLabel="Delete my account"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => { setShowDeleteAccountConfirm(false); doDeleteAccount(); }}
+        icon="trash-outline"
       />
     </>
   );

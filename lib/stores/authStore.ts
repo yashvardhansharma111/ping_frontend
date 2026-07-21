@@ -24,6 +24,9 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+// Prevents re-entrant logout calls (e.g. clearPushToken 401 → refresh fail → logout again)
+let _logoutInProgress = false;
+
 const useAuthStore = create<AuthState>((set) => ({
   user: null,
   accessToken: null,
@@ -79,13 +82,27 @@ const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    if (_logoutInProgress) return;
+    _logoutInProgress = true;
+
+    // Wipe in-memory credentials first so any re-entrant API calls see no token
+    // and bail out immediately rather than firing another 401 cycle.
+    set({ user: null, accessToken: null, refreshToken: null, adminToken: null, isAdmin: false, isNewUser: false });
+
+    // Best-effort: tell server to drop the push token (fire-and-forget, won't loop)
+    try {
+      const { clearPushToken } = require('../notifications');
+      await clearPushToken();
+    } catch {}
+
     await Promise.all([
       SecureStore.deleteItemAsync('accessToken'),
       SecureStore.deleteItemAsync('refreshToken'),
       SecureStore.deleteItemAsync('user'),
       SecureStore.deleteItemAsync('adminToken'),
     ]);
-    set({ user: null, accessToken: null, refreshToken: null, adminToken: null, isAdmin: false, isNewUser: false });
+
+    _logoutInProgress = false;
   },
 }));
 

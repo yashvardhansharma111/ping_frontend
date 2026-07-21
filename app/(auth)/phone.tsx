@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,57 +7,33 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts, Pacifico_400Regular } from '@expo-google-fonts/pacifico';
 import { authApi } from '@/lib/api';
-import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import { Ping } from '@/constants/theme';
 
 const INDIA_PHONE_RE = /^[6-9]\d{9}$/;
 
+const BG     = '#EDEDED';
+const WHITE  = '#FFFFFF';
+const TEXT   = '#111111';
+const MUTED  = '#888888';
+const DIM    = '#BBBBBB';
+const PURPLE = Ping.purple;
+
 export default function PhoneScreen() {
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone]     = useState('');
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<TextInput>(null);
-  const router = useRouter();
+  const inputRef              = useRef<TextInput>(null);
+  const router                = useRouter();
+  const insets                = useSafeAreaInsets();
 
-  // Logo entrance + radial glow animations
-  const logoScale = useRef(new Animated.Value(0.4)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const pulse1 = useRef(new Animated.Value(0)).current;
-  const pulse2 = useRef(new Animated.Value(0)).current;
-  const cardSlide = useRef(new Animated.Value(40)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Logo spring entrance
-    Animated.parallel([
-      Animated.spring(logoScale, { toValue: 1, damping: 12, stiffness: 180, useNativeDriver: true }),
-      Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-    ]).start();
-    // Card slides up
-    Animated.parallel([
-      Animated.timing(cardSlide, { toValue: 0, duration: 500, delay: 200, useNativeDriver: true }),
-      Animated.timing(cardOpacity, { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
-    ]).start();
-    // Two staggered pulsing glow rings
-    Animated.loop(
-      Animated.timing(pulse1, { toValue: 1, duration: 2200, useNativeDriver: true })
-    ).start();
-    setTimeout(() => {
-      Animated.loop(
-        Animated.timing(pulse2, { toValue: 1, duration: 2200, useNativeDriver: true })
-      ).start();
-    }, 1100);
-  }, []);
-
-  const p1Scale = pulse1.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.4] });
-  const p1Opacity = pulse1.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.5, 0.2, 0] });
-  const p2Scale = pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2.4] });
-  const p2Opacity = pulse2.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.4, 0.15, 0] });
+  const [fontsLoaded] = useFonts({ Pacifico_400Regular });
 
   const isValid = INDIA_PHONE_RE.test(phone.trim());
 
@@ -66,17 +42,10 @@ export default function PhoneScreen() {
     setLoading(true);
     try {
       const fullPhone = `+91${phone.trim()}`;
-      const res = await authApi.requestOtp(fullPhone) as any;
-      router.push({
-        pathname: '/(auth)/otp',
-        params: {
-          phone: fullPhone,
-          // Pass debug code so testers don't need SMS
-          debugCode: res.code ?? '',
-        },
-      });
+      const res       = await authApi.requestOtp(fullPhone) as any;
+      router.push({ pathname: '/(auth)/otp', params: { phone: fullPhone, debugCode: res.code ?? '' } });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not send OTP. Try again.');
+      Toast.show({ type: 'error', text1: 'Could not send code', text2: err.message || 'Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -85,39 +54,49 @@ export default function PhoneScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Logo with radial glow */}
-      <Animated.View style={[styles.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-        <View style={styles.glowWrap}>
-          <Animated.View style={[styles.glowRing, { transform: [{ scale: p1Scale }], opacity: p1Opacity }]} />
-          <Animated.View style={[styles.glowRing, { transform: [{ scale: p2Scale }], opacity: p2Opacity }]} />
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>P</Text>
-          </View>
-        </View>
-        <Text style={styles.appName}>Ping</Text>
-        <Text style={styles.tagline}>Discover what's happening around you</Text>
-      </Animated.View>
+      {/* grey spacer — shrinks when keyboard appears, keeping text+card at bottom */}
+      <View style={{ flex: 1, minHeight: insets.top + 24 }} />
 
-      {/* Form */}
-      <Animated.View style={[styles.card, { opacity: cardOpacity, transform: [{ translateY: cardSlide }] }]}>
-        <Text style={styles.label}>Mobile number</Text>
+      {/* ── Text block — sits directly above the card ── */}
+      <View style={styles.textBlock}>
+        <Text style={[
+          styles.appName,
+          fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+        ]}>
+          Ping
+        </Text>
+        <Text style={styles.headline}>
+          Drop a ping,{'\n'}find your people.
+        </Text>
+        <Text style={styles.subtitle}>
+          Real plans, real humans — not just profiles you'll never swipe right on.
+        </Text>
+      </View>
+
+      {/* ── Bottom card ── */}
+      <View style={[styles.card, { paddingBottom: insets.bottom + 20 }]}>
+        {/* Drag pill */}
+        <View style={styles.pill} />
+
+        <Text style={styles.cardTitle}>Enter your mobile number</Text>
+        <Text style={styles.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
+
+        {/* Phone input */}
         <TouchableOpacity
-          style={[styles.inputRow, isValid && styles.inputRowActive]}
+          style={styles.inputWrap}
           activeOpacity={1}
           onPress={() => inputRef.current?.focus()}
         >
-          <View style={styles.prefix}>
-            <Ionicons name="globe-outline" size={16} color={Ping.purpleLight} />
-            <Text style={styles.prefixText}>+91</Text>
-          </View>
+          <Text style={styles.flag}>🇮🇳</Text>
+          <Text style={styles.prefix}>+91</Text>
           <View style={styles.divider} />
           <TextInput
             ref={inputRef}
             style={styles.input}
-            placeholder="10-digit mobile number"
-            placeholderTextColor="#5C5A80"
+            placeholder="98765 43210"
+            placeholderTextColor={DIM}
             keyboardType="phone-pad"
             maxLength={10}
             value={phone}
@@ -126,31 +105,30 @@ export default function PhoneScreen() {
             onSubmitEditing={handleSend}
             autoFocus
           />
-          {isValid && (
-            <Ionicons name="checkmark-circle" size={20} color={Ping.green} style={styles.checkIcon} />
-          )}
         </TouchableOpacity>
 
+        {/* CTA */}
         <TouchableOpacity
-          style={[styles.btn, !isValid && styles.btnDisabled]}
+          style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
           onPress={handleSend}
           disabled={!isValid || loading}
-          activeOpacity={0.85}
+          activeOpacity={0.88}
         >
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Text style={styles.btnText}>Send OTP</Text>
-              <Ionicons name="arrow-forward" size={18} color="#FFF" />
-            </>
-          )}
+          {loading
+            ? <ActivityIndicator color="#FFF" />
+            : <Text style={[styles.btnText, (!isValid || loading) && styles.btnTextDisabled]}>Send OTP</Text>
+          }
         </TouchableOpacity>
-      </Animated.View>
 
-      <Text style={styles.fine}>
-        By continuing you agree to our Terms & Privacy Policy
-      </Text>
+        {/* Legal */}
+        <Text style={styles.legal}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.legalLink}>Terms & Conditions</Text>
+          {' '}and{' '}
+          <Text style={styles.legalLink}>Privacy Policy</Text>
+          .
+        </Text>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -158,135 +136,130 @@ export default function PhoneScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#080815',
-    paddingHorizontal: Spacing.lg,
-    justifyContent: 'center',
-    gap: Spacing.xl,
+    backgroundColor: BG,
   },
-  logoWrap: {
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  glowWrap: {
-    width: 100,
-    height: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glowRing: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Ping.purple,
-  },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: Radius.xl,
-    backgroundColor: Ping.purple,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  logoText: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#FFF',
-    letterSpacing: -1,
+
+  // Text block (just above card)
+  textBlock: {
+    paddingHorizontal: 28,
+    paddingBottom: 24,
+    gap: 10,
   },
   appName: {
-    ...Typography.h1,
-    color: '#F1F0FF',
+    fontSize: 52,
+    color: TEXT,
+    // no lineHeight — lets Pacifico descenders (g, y) render without clipping
+  },
+  headline: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: TEXT,
+    lineHeight: 38,
     letterSpacing: -0.5,
+    marginTop: 4,
   },
-  tagline: {
-    ...Typography.bodySm,
-    color: '#9490C0',
-    textAlign: 'center',
+  subtitle: {
+    fontSize: 14,
+    color: MUTED,
+    lineHeight: 21,
+    maxWidth: 300,
   },
+
+  // Bottom card
   card: {
-    backgroundColor: '#11112A',
-    borderRadius: Radius.xl,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(167, 139, 250, 0.15)',
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    gap: 14,
   },
-  label: {
-    ...Typography.caption,
-    color: '#9490C0',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  pill: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D1D1',
+    marginBottom: 6,
   },
-  inputRow: {
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT,
+    letterSpacing: -0.3,
+  },
+  cardSub: {
+    fontSize: 13,
+    color: MUTED,
+    lineHeight: 19,
+    marginTop: -4,
+  },
+
+  // Input
+  inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A38',
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    borderColor: 'rgba(167, 139, 250, 0.15)',
-    overflow: 'hidden',
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    height: 54,
+    paddingHorizontal: 14,
+    gap: 8,
   },
-  inputRowActive: {
-    borderColor: Ping.purple,
+  flag: {
+    fontSize: 18,
   },
   prefix: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.xs,
-  },
-  prefixText: {
-    ...Typography.bodyMed,
-    color: '#F1F0FF',
+    fontSize: 15,
+    fontWeight: '600',
+    color: TEXT,
   },
   divider: {
     width: 1,
-    height: 24,
-    backgroundColor: 'rgba(167, 139, 250, 0.2)',
+    height: 22,
+    backgroundColor: '#E0E0E0',
   },
   input: {
     flex: 1,
-    height: 52,
-    paddingHorizontal: Spacing.md,
-    ...Typography.bodyMed,
-    color: '#F1F0FF',
+    height: '100%',
+    paddingHorizontal: 10,
+    fontSize: 16,
+    color: TEXT,
+    letterSpacing: 1.5,
   },
-  checkIcon: {
-    marginRight: Spacing.md,
-  },
+
+  // Button
   btn: {
-    backgroundColor: Ping.purple,
-    borderRadius: Radius.md,
-    height: 52,
-    flexDirection: 'row',
+    backgroundColor: TEXT,
+    borderRadius: 9999,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
   },
   btnDisabled: {
-    backgroundColor: '#2A2A4A',
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: '#CCCCCC',
   },
   btnText: {
-    ...Typography.bodyMed,
-    color: '#FFF',
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
+    color: WHITE,
+    letterSpacing: 0.2,
   },
-  fine: {
-    ...Typography.caption,
-    color: '#5C5A80',
+  btnTextDisabled: {
+    color: '#888',
+  },
+
+  // Legal
+  legal: {
+    fontSize: 11,
+    color: MUTED,
     textAlign: 'center',
+    lineHeight: 17,
+  },
+  legalLink: {
+    color: TEXT,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

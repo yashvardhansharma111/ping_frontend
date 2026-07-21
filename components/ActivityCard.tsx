@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Share } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { activitiesApi, chatApi, type Activity, type ActivityParticipant } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
@@ -95,6 +97,30 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
   const [joining, setJoining] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
 
+  // Card entrance
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(12)).current;
+  // Join button spring scale
+  const joinScale = useRef(new Animated.Value(1)).current;
+  // Chat button spring scale
+  const chatScale = useRef(new Animated.Value(1)).current;
+  // Share button spring scale
+  const shareAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(cardOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.spring(cardTranslateY, { toValue: 0, damping: 18, stiffness: 200, mass: 0.7, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  function springPress(anim: Animated.Value) {
+    Animated.sequence([
+      Animated.spring(anim, { toValue: 0.88, damping: 20, stiffness: 500, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, damping: 14, stiffness: 220, mass: 0.8, useNativeDriver: true }),
+    ]).start();
+  }
+
   const myId = user?._id ?? '';
   const isJoined = isParticipant(a.participants, myId);
   const myParticipant = getMyParticipant(a.participants, myId);
@@ -106,14 +132,24 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
   const statusCfg = STATUS_CONFIG[timeStatus];
   const isExpired = timeStatus === 'expired';
 
+  function requireVerified(): boolean {
+    if ((user as any)?.verificationStatus !== 'verified') {
+      router.push('/verification' as any);
+      return false;
+    }
+    return true;
+  }
+
   async function handleJoin() {
     if (isJoined || joining || isExpired) return;
+    if (!requireVerified()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setJoining(true);
     try {
       await activitiesApi.join(a._id);
       onJoin?.();
     } catch (err: any) {
-      Alert.alert('Could not join', err.message || 'Try again.');
+      Toast.show({ type: 'error', text1: 'Could not join', text2: err.message || 'Try again.' });
     } finally {
       setJoining(false);
     }
@@ -121,19 +157,42 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
 
   async function handleOpenChat() {
     if (openingChat) return;
+    if (!requireVerified()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setOpeningChat(true);
     try {
       const res = await chatApi.openActivityRoom(a._id);
-      router.push(`/chat/${res.room._id}`);
+      router.push({
+        pathname: '/chat/[roomId]' as any,
+        params: {
+          roomId: res.room._id,
+          type: a.type ?? '',
+          title: a.title ?? '',
+          vibe: a.vibe ?? '',
+          venue: a.placeName ?? '',
+          creator: a.creator?.displayName ?? '',
+        },
+      });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not open chat.');
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not open chat.' });
     } finally {
       setOpeningChat(false);
     }
   }
 
+  async function handleShare() {
+    springPress(shareAnim);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Share.share({
+        message: `Join "${a.title}" on Ping — a live activity near you!`,
+        url: `ping://activity/${a._id}`,
+      });
+    } catch {}
+  }
+
   return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+    <Animated.View style={[styles.card, { backgroundColor: c.card, borderColor: c.border, opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] }]}>
       {/* Joined accent bar */}
       {isJoined && <View style={styles.joinedAccent} />}
 
@@ -184,15 +243,16 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
 
         {/* Join / Joined */}
         {!compact && (
+          <Animated.View style={{ transform: [{ scale: joinScale }] }}>
           <TouchableOpacity
             style={[
               styles.joinBtn,
               isJoined && styles.joinBtnDone,
               isExpired && styles.joinBtnExpired,
             ]}
-            onPress={handleJoin}
+            onPress={() => { springPress(joinScale); handleJoin(); }}
             disabled={isJoined || joining || isExpired}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
             {joining ? (
               <ActivityIndicator size="small" color="#FFF" />
@@ -204,6 +264,7 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
               <Text style={styles.joinText}>Join</Text>
             )}
           </TouchableOpacity>
+          </Animated.View>
         )}
       </View>
 
@@ -224,27 +285,40 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
         </View>
       )}
 
-      {/* Actions for joined users */}
-      {isJoined && !compact && (
+      {/* Actions row — chat (joined only) + share (always) */}
+      {!compact && (
         <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={[styles.chatBtn, { shadowColor: Ping.purple }]}
-            onPress={handleOpenChat}
-            disabled={openingChat}
-            activeOpacity={0.8}
-          >
-            {openingChat ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="chatbubbles" size={14} color="#FFF" />
-                <Text style={styles.chatBtnText}>Open Chat</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {isJoined && (
+            <Animated.View style={[styles.chatBtnWrap, { transform: [{ scale: chatScale }] }]}>
+              <TouchableOpacity
+                style={[styles.chatBtn, { shadowColor: Ping.purple }]}
+                onPress={() => { springPress(chatScale); handleOpenChat(); }}
+                disabled={openingChat}
+                activeOpacity={0.85}
+              >
+                {openingChat ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubbles" size={14} color="#FFF" />
+                    <Text style={styles.chatBtnText}>Open Chat</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+          <Animated.View style={{ transform: [{ scale: shareAnim }] }}>
+            <TouchableOpacity
+              style={[styles.shareBtn, { borderColor: c.border }]}
+              onPress={handleShare}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="share-outline" size={16} color={c.icon} />
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -325,7 +399,21 @@ const styles = StyleSheet.create({
   creator: { ...Typography.caption, marginLeft: 60 },
   urgency: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 60 },
   urgencyText: { ...Typography.caption, fontWeight: '600' },
-  actionsRow: { marginTop: Spacing.xs },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  chatBtnWrap: { flex: 1 },
+  shareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chatBtn: {
     flexDirection: 'row',
     alignItems: 'center',

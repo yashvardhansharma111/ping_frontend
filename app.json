@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.pingnow.app",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#080815",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -23,7 +24,10 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -34,6 +38,13 @@
       "expo-router",
       "@maplibre/maplibre-react-native",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#7C3AED"
+        }
+      ],
       [
         "expo-location",
         {
@@ -52,18 +63,18 @@
             "backgroundColor": "#080815"
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://app.pingnow.in",
+      "apiUrl": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app",
       "eas": {
-        "projectId": "a42800fa-7544-4d59-a1a3-cd004c63424d"
+        "projectId": "43ea22d1-9b9c-4898-a601-891106a43956"
       },
       "router": {}
-    },
-    "owner": "bensharma"
+    }
   }
 }

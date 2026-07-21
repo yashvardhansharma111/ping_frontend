@@ -19,12 +19,13 @@ interface Props {
   selected?: boolean;
   count?: number;
   genderFilter?: 'all' | 'women_only' | 'men_only';
+  isOwn?: boolean;
 }
 
-export default function PingMarker({ type, selected = false, count = 0, genderFilter }: Props) {
+export default function PingMarker({ type, selected = false, count = 0, genderFilter, isOwn = false }: Props) {
   const cfg = TYPE_CFG[type] ?? TYPE_CFG.default;
 
-  const SIZE  = selected ? 62 : 50;
+  const SIZE  = selected ? 62 : isOwn ? 56 : 50;
   const ICON  = selected ? 28 : 22;
   const tipW  = selected ? 16 : 13;
   const tipH  = selected ? 20 : 16;
@@ -92,8 +93,15 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           ]}
         />
 
+        {/* "Mine" badge for own ping */}
+        {isOwn && (
+          <View style={[s.countBadge, { backgroundColor: '#FFF' }]}>
+            <Text style={[s.countText, { color: cfg.color }]}>ME</Text>
+          </View>
+        )}
+
         {/* Count badge */}
-        {count > 1 && (
+        {!isOwn && count > 1 && (
           <View style={[s.countBadge, { backgroundColor: '#FFF' }]}>
             <Text style={[s.countText, { color: cfg.color }]}>
               {count > 9 ? '9+' : count}

@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, RefreshControl,
+  ActivityIndicator, RefreshControl, TextInput, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { adminApi, type AdminReport } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
@@ -21,6 +22,11 @@ const TARGET_ICON: Record<string, string> = {
 
 const TABS = ['all', 'pings', 'ads', 'users', 'resolved'] as const;
 type Tab = typeof TABS[number];
+
+type PendingAction = {
+  title: string;
+  cb: (reason: string) => void;
+};
 
 function ReportRow({ item, onAction }: { item: AdminReport; onAction: (r: AdminReport) => void }) {
   const statusColor = STATUS_COLOR[item.status] ?? '#9490C0';
@@ -50,7 +56,102 @@ function ReportRow({ item, onAction }: { item: AdminReport; onAction: (r: AdminR
   );
 }
 
-function ActionSheet({ report, onClose, onDone }: { report: AdminReport; onClose: () => void; onDone: () => void }) {
+function ReasonModal({
+  action,
+  onClose,
+}: {
+  action: PendingAction | null;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState('');
+
+  function handleConfirm() {
+    if (!reason.trim() || !action) return;
+    action.cb(reason.trim());
+    setReason('');
+    onClose();
+  }
+
+  function handleClose() {
+    setReason('');
+    onClose();
+  }
+
+  return (
+    <Modal
+      visible={!!action}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <View style={rm.overlay}>
+        <View style={rm.sheet}>
+          <Text style={rm.title}>{action?.title ?? ''}</Text>
+          <Text style={rm.sub}>Enter reason</Text>
+          <TextInput
+            style={rm.input}
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Reason…"
+            placeholderTextColor="#5C5A80"
+            multiline
+            maxLength={200}
+            autoFocus
+          />
+          <View style={rm.btns}>
+            <TouchableOpacity style={rm.cancelBtn} onPress={handleClose}>
+              <Text style={rm.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[rm.confirmBtn, !reason.trim() && rm.confirmBtnDisabled]}
+              onPress={handleConfirm}
+              disabled={!reason.trim()}
+            >
+              <Text style={rm.confirmText}>Confirm</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const rm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
+  sheet: { backgroundColor: '#11112A', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
+  title: { ...Typography.h4, color: '#F1F0FF' },
+  sub: { ...Typography.bodySm, color: '#9490C0' },
+  input: {
+    backgroundColor: '#1A1A38', borderRadius: Radius.md, borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.2)', padding: 12, color: '#F1F0FF',
+    ...Typography.body, minHeight: 80, textAlignVertical: 'top',
+  },
+  btns: { flexDirection: 'row', gap: Spacing.sm },
+  cancelBtn: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: Radius.sm,
+  },
+  cancelText: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600' },
+  confirmBtn: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: Radius.sm,
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+  },
+  confirmBtnDisabled: { opacity: 0.4 },
+  confirmText: { ...Typography.bodySm, color: '#EF4444', fontWeight: '700' },
+});
+
+function ActionSheet({
+  report,
+  onClose,
+  onDone,
+  onPromptReason,
+}: {
+  report: AdminReport;
+  onClose: () => void;
+  onDone: () => void;
+  onPromptReason: (title: string, cb: (r: string) => void) => void;
+}) {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const isPending = report.status === 'pending' || report.status === 'escalated';
@@ -59,21 +160,14 @@ function ActionSheet({ report, onClose, onDone }: { report: AdminReport; onClose
     setLoading(true);
     try {
       await fn();
-      Alert.alert('Done', msg);
+      Toast.show({ type: 'success', text1: 'Done', text2: msg });
       onDone();
       onClose();
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message });
     } finally {
       setLoading(false);
     }
-  }
-
-  function promptReason(title: string, cb: (r: string) => void) {
-    Alert.prompt(title, 'Enter reason', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: (r) => r && cb(r) },
-    ], 'plain-text');
   }
 
   return (
@@ -98,7 +192,7 @@ function ActionSheet({ report, onClose, onDone }: { report: AdminReport; onClose
 
               <TouchableOpacity
                 style={as.btn}
-                onPress={() => promptReason('Remove content', (r) => act(() => adminApi.removeReport(report._id, r), 'Content removed'))}
+                onPress={() => onPromptReason('Remove content', (r) => act(() => adminApi.removeReport(report._id, r), 'Content removed'))}
               >
                 <Ionicons name="trash-outline" size={20} color="#F97316" />
                 <Text style={[as.btnText, { color: '#F97316' }]}>Remove content</Text>
@@ -107,7 +201,7 @@ function ActionSheet({ report, onClose, onDone }: { report: AdminReport; onClose
               {report.targetUserId && (
                 <TouchableOpacity
                   style={as.btn}
-                  onPress={() => promptReason('Remove & warn user', (r) => act(() => adminApi.warnReport(report._id, r), 'Content removed + user warned'))}
+                  onPress={() => onPromptReason('Remove & warn user', (r) => act(() => adminApi.warnReport(report._id, r), 'Content removed + user warned'))}
                 >
                   <Ionicons name="warning-outline" size={20} color="#EF4444" />
                   <Text style={[as.btnText, { color: '#EF4444' }]}>Remove + warn user</Text>
@@ -133,6 +227,7 @@ export default function AdminReports() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<AdminReport | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   async function load(t = tab, refresh = false) {
     if (refresh) setRefreshing(true); else setLoading(true);
@@ -141,7 +236,7 @@ export default function AdminReports() {
       setItems(res.items ?? []);
       setTotal(res.total ?? 0);
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -149,6 +244,10 @@ export default function AdminReports() {
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  function handlePromptReason(title: string, cb: (r: string) => void) {
+    setPendingAction({ title, cb });
+  }
 
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
@@ -205,10 +304,16 @@ export default function AdminReports() {
               report={selected}
               onClose={() => setSelected(null)}
               onDone={() => load()}
+              onPromptReason={handlePromptReason}
             />
           </View>
         </View>
       )}
+
+      <ReasonModal
+        action={pendingAction}
+        onClose={() => setPendingAction(null)}
+      />
     </View>
   );
 }

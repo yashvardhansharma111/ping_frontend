@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, RefreshControl,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import { adminApi, type AdminPayment } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
@@ -65,6 +67,7 @@ export default function AdminPayments() {
   const [filter, setFilter] = useState<F>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refundTarget, setRefundTarget] = useState<AdminPayment | null>(null);
 
   async function load(f = filter, refresh = false) {
     if (refresh) setRefreshing(true); else setLoading(true);
@@ -74,7 +77,7 @@ export default function AdminPayments() {
       setTotal(res.total ?? 0);
       setSummary(res.summary ?? { totalMinor: 0, count: 0 });
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -83,27 +86,17 @@ export default function AdminPayments() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  function handleRefund(payment: AdminPayment) {
-    Alert.prompt(
-      'Refund reason', `Refunding ${fmt(payment.amountMinor)}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Refund', style: 'destructive',
-          onPress: async (reason) => {
-            if (!reason?.trim()) return;
-            try {
-              await adminApi.refundPayment(payment._id, reason.trim());
-              Alert.alert('Refunded', 'Payment has been refunded.');
-              load();
-            } catch (err: any) {
-              Alert.alert('Error', err.message);
-            }
-          },
-        },
-      ],
-      'plain-text',
-    );
+  async function confirmRefund() {
+    if (!refundTarget) return;
+    const payment = refundTarget;
+    setRefundTarget(null);
+    try {
+      await adminApi.refundPayment(payment._id, 'Admin refund');
+      Toast.show({ type: 'success', text1: 'Refunded', text2: 'Payment has been refunded.' });
+      load();
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message });
+    }
   }
 
   return (
@@ -147,13 +140,25 @@ export default function AdminPayments() {
         <FlatList
           data={items}
           keyExtractor={p => p._id}
-          renderItem={({ item }) => <PaymentRow item={item} onRefund={handleRefund} />}
+          renderItem={({ item }) => <PaymentRow item={item} onRefund={setRefundTarget} />}
           ItemSeparatorComponent={() => <View style={s.sep} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(filter, true)} tintColor={Ping.purpleLight} />}
           ListEmptyComponent={<Text style={s.empty}>No payments found</Text>}
           contentContainerStyle={{ paddingBottom: 100 }}
         />
       )}
+
+      <ConfirmSheet
+        visible={!!refundTarget}
+        onClose={() => setRefundTarget(null)}
+        title="Refund Payment"
+        subtitle={refundTarget ? `Refunding ${fmt(refundTarget.amountMinor)} — this cannot be undone.` : ''}
+        confirmLabel="Refund"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={confirmRefund}
+        icon="return-down-back-outline"
+      />
     </View>
   );
 }

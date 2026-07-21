@@ -9,89 +9,139 @@ export interface Coords {
   accuracy?: number;
 }
 
-// Bhopal — only used if device has absolutely no last-known location
-const DEFAULT_COORDS: Coords = { latitude: 23.2599, longitude: 77.4126 };
+// ── Module-level cache ────────────────────────────────────────────────────────
+// Survives hook remounts (auth state changes, component re-mounts) within the
+// same JS session. This prevents reverting to the fallback city on every
+// re-render after the user's real position was obtained.
+let _cachedCoords: Coords | null = null;
+let _cachedGranted = false;
+
+// Fallback used only on the very first launch — generic India center, not a
+// specific city that would confuse users about their location.
+const INDIA_CENTER: Coords = { latitude: 20.5937, longitude: 78.9629 };
+
+// Only cache positions with GPS-grade accuracy (< 300 m). Cell/WiFi positions
+// can be several km off and should not be cached or used to unblock the map.
+const CACHE_ACCURACY_THRESHOLD = 300;
 
 export function useLocation() {
-  const [coords, setCoords] = useState<Coords>(DEFAULT_COORDS);
-  const [granted, setGranted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const { user } = useAuthStore();
+  const [coords, setCoords] = useState<Coords>(_cachedCoords ?? INDIA_CENTER);
+  const [granted, setGranted] = useState(_cachedGranted);
+  // If we already have a cached real position, don't show loading state.
+  const [loading, setLoading] = useState(_cachedCoords === null);
+
   const watchRef = useRef<Location.LocationSubscription | null>(null);
+  // Keep a ref to the latest user without making it an effect dependency,
+  // so user login/logout doesn't restart the location effect.
+  const userRef = useRef(useAuthStore.getState().user);
+
+  useEffect(() => {
+    const unsub = useAuthStore.subscribe((s) => { userRef.current = s.user; });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
     (async () => {
-      console.log('[Location] Requesting foreground permission…');
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      console.log(`[Location] Permission status: ${status}`);
+      // ── Step 1: permission ────────────────────────────────────────────────
+      // Check existing status first — no OS prompt if already granted.
+      const { status: existing } = await Location.getForegroundPermissionsAsync();
       if (!mounted) return;
 
-      if (status !== 'granted') {
-        console.warn('[Location] Permission DENIED — using default coords');
-        setGranted(false);
-        setLoading(false);
-        return;
-      }
-      setGranted(true);
-
-      // Use last-known position for an instant first render (no Bhopal flash)
-      try {
-        const last = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
-        if (last && mounted) {
-          const c = { latitude: last.coords.latitude, longitude: last.coords.longitude, accuracy: last.coords.accuracy ?? undefined };
-          console.log(`[Location] Last known  lat=${c.latitude.toFixed(5)} lng=${c.longitude.toFixed(5)} acc=${c.accuracy?.toFixed(0)}m`);
-          setCoords(c);
-          setLoading(false); // unblock map with last-known
+      if (existing === 'granted') {
+        _cachedGranted = true;
+        setGranted(true);
+      } else {
+        console.log('[Location] Requesting foreground permission…');
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!mounted) return;
+        if (status !== 'granted') {
+          console.warn('[Location] Permission denied — location unavailable');
+          setLoading(false);
+          return;
         }
-      } catch {
-        // ignore — will resolve with fresh fix below
+        _cachedGranted = true;
+        setGranted(true);
       }
 
-      // Always follow up with a fresh GPS fix
-      console.log('[Location] Getting fresh position…');
+      // ── Step 2: use cache for instant render if available ─────────────────
+      if (_cachedCoords) {
+        setCoords(_cachedCoords);
+        setLoading(false);
+        // Still get a fresh fix below, but the map is already at the right place.
+      }
+
+      // ── Step 3: fresh GPS fix ─────────────────────────────────────────────
+      // Skip getLastKnownPositionAsync — it returns cell/WiFi locations that
+      // can be 50–150 km off. Go straight to getCurrentPositionAsync which
+      // uses GPS and is accurate to ~20 m on modern Android devices.
+      console.log('[Location] Getting fresh GPS fix…');
       try {
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
         if (!mounted) return;
-        const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy ?? undefined };
-        console.log(`[Location] Fresh fix  lat=${c.latitude.toFixed(5)} lng=${c.longitude.toFixed(5)} acc=${c.accuracy?.toFixed(0)}m`);
+
+        const c: Coords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? undefined,
+        };
+        console.log(
+          `[Location] GPS fix  lat=${c.latitude.toFixed(5)} lng=${c.longitude.toFixed(5)}` +
+          ` acc=${(c.accuracy ?? 0).toFixed(0)}m`,
+        );
+
+        // Cache only GPS-accurate positions
+        if (!c.accuracy || c.accuracy < CACHE_ACCURACY_THRESHOLD) {
+          _cachedCoords = c;
+        }
+
         setCoords(c);
         setLoading(false);
 
-        if (user) {
-          usersApi.updateLocation(c.latitude, c.longitude)
-            .then(() => console.log('[Location] Backend location updated'))
-            .catch(() => {});
+        if (userRef.current) {
+          usersApi.updateLocation(c.latitude, c.longitude).catch(() => {});
         }
       } catch (err: any) {
-        console.warn('[Location] Fresh fix failed:', err?.message);
-        // setLoading(false) already called above via last-known, or set it now as fallback
+        console.warn('[Location] GPS fix failed:', err?.message);
         if (mounted) setLoading(false);
       }
 
-      // Watch for updates (low-power, ~50m threshold)
-      watchRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, distanceInterval: 50 },
-        (loc) => {
-          if (!mounted) return;
-          console.log(`[Location] Watch update  lat=${loc.coords.latitude.toFixed(5)} lng=${loc.coords.longitude.toFixed(5)}`);
-          setCoords({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            accuracy: loc.coords.accuracy ?? undefined,
-          });
-        },
-      );
+      // ── Step 4: watch for movement ────────────────────────────────────────
+      if (!mounted) return;
+      try {
+        watchRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 80, // update every 80 m of movement
+            timeInterval: 30_000,  // or every 30 s, whichever comes first
+          },
+          (loc) => {
+            if (!mounted) return;
+            const c: Coords = {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              accuracy: loc.coords.accuracy ?? undefined,
+            };
+            if (!c.accuracy || c.accuracy < CACHE_ACCURACY_THRESHOLD) {
+              _cachedCoords = c;
+            }
+            setCoords(c);
+          },
+        );
+      } catch {
+        // Watch failed — silent, fresh fix above is already set
+      }
     })();
 
     return () => {
       mounted = false;
       watchRef.current?.remove();
+      watchRef.current = null;
     };
-  }, []);
+  }, []); // empty deps — never re-run; cache handles remount correctness
 
   return { coords, granted, loading };
 }

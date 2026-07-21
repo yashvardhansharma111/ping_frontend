@@ -3,20 +3,25 @@
  * Shows: header info, participants, creator, all action buttons.
  * Used inside the map screen's selected-activity sheet.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
+  Modal,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { activitiesApi, chatApi, friendsApi, reportsApi, type Activity, type ActivityParticipant } from '@/lib/api';
+import { scheduleStartingNotification, cancelStartingNotification, scheduleSafetyReminder, cancelSafetyReminder } from '@/lib/notifications';
 import useAuthStore from '@/lib/stores/authStore';
+import SuccessToast from './SuccessToast';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -33,15 +38,30 @@ import PingFullCelebration from './PingFullCelebration';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TYPE_OPENERS: Record<string, string> = {
-  sport:   "Ready to get active! Who's in and what's the plan?",
-  food:    "Food time! What are we eating today?",
-  music:   "Music vibes incoming! What are we listening to?",
-  study:   "Study session starting! What are you working on?",
-  outdoor: "Adventure time! Ready to explore?",
-  gaming:  "Game on! What are we playing?",
-  meetup:  "Hey everyone! Super excited to meet you all!",
-  default: "Hey! Excited to connect with everyone in this ping!",
+  sport:   "Alright, let's get sweaty. Who's showing up and what's the plan? 💪",
+  food:    "Food has arrived (well, almost). What are we eating? 🍴",
+  music:   "The vibe is loading... What are we blasting tonight? 🎧",
+  study:   "Study mode: activated. What are we pretending to understand today? 📚",
+  outdoor: "Touch grass time! Where are we heading? 🌿",
+  gaming:  "Controllers ready. Excuses loading... What are we playing? 🎮",
+  meetup:  "Look at us, actual humans meeting in real life. Wild. 👋",
+  default: "Hey everyone! Your creator has entered the chat. No pressure. 😄",
 };
+
+const JOIN_TAUNTS = [
+  'showed up — respect. 🫡',
+  'has entered the chat AND the real world. Bold move. 😂',
+  'just slid into the ping 🎉',
+  'is here! Plot twist: they actually came through 🙌',
+  'joined! Someone alert the press. 📰',
+  'arrived. Fashionably, obviously. ✨',
+  "is in the building (probably). Let's go! 🚀",
+  'dropped their location and their dignity. Welcome! 😅',
+];
+
+function getJoinTaunt(name: string) {
+  return `${name} ${JOIN_TAUNTS[Math.floor(Math.random() * JOIN_TAUNTS.length)]}`;
+}
 
 const TYPE_META: Record<string, { icon: IoniconName; color: string }> = {
   sport:   { icon: 'barbell-outline',        color: '#22C55E' },
@@ -112,9 +132,10 @@ interface Props {
   activity: Activity;
   onRefresh: () => void;
   onDismiss: () => void;
+  onScrolledDown?: () => void;
 }
 
-export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss }: Props) {
+export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss, onScrolledDown }: Props) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const router = useRouter();
@@ -131,15 +152,27 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
   const isExpired = timeStatus === 'expired';
 
   const [joining, setJoining] = useState(false);
+  const [joinToast, setJoinToast] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [leavingQuietly, setLeavingQuietly] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  const chatInflightRef = useRef(false);
   const [onMyWayLoading, setOnMyWayLoading] = useState(false);
   const [arrivedLoading, setArrivedLoading] = useState(false);
   const [mutualCount, setMutualCount] = useState<number | null>(null);
-  const [chatMsgCount, setChatMsgCount] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<{ names: string[]; count: number } | null>(null);
+  const [connectSent, setConnectSent] = useState<Record<string, boolean>>({});
+
+  // Destructive confirm states
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  // Report sheet state
+  const [showReport, setShowReport] = useState(false);
+
+  // Profile menu state
+  const [profileMenu, setProfileMenu] = useState<{ userId: string; name: string; sent: boolean } | null>(null);
 
   // Fetch mutual friends count for the Safety Card (only when not creator)
   useEffect(() => {
@@ -150,14 +183,14 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       .catch(() => setMutualCount(0));
   }, [a._id]);
 
-  // Fetch chat message count for the live chat teaser (non-members)
-  useEffect(() => {
-    if (isJoined || isCreator) return;
-    chatApi.openActivityRoom(a._id)
-      .then((r) => chatApi.listMessages(r.room._id))
-      .then((r) => setChatMsgCount(r.messages.length))
-      .catch(() => setChatMsgCount(0));
-  }, [a._id, isJoined, isCreator]);
+  function chatUrl(roomId: string) {
+    const p = new URLSearchParams({ type: a.type });
+    if (a.title) p.set('title', a.title);
+    if ((a as any).vibe) p.set('vibe', (a as any).vibe);
+    if ((a as any).placeName) p.set('venue', (a as any).placeName);
+    if (a.creator?.displayName) p.set('creator', a.creator.displayName);
+    return `/chat/${roomId}?${p.toString()}`;
+  }
 
   async function handleJoin() {
     if (joining || isExpired) return;
@@ -168,45 +201,46 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
     try {
       await activitiesApi.join(a._id);
       onRefresh();
+      // Schedule "starts in 15 min" local notification if ping is upcoming
+      if (a.startsAt) {
+        scheduleStartingNotification(a._id, a.title, new Date(a.startsAt));
+        scheduleSafetyReminder(a._id, a.title, new Date(a.startsAt));
+      }
       const res = await chatApi.openActivityRoom(a._id);
-      chatApi.sendMessage(res.room._id, `${myName} joined the ping!`).catch(() => {});
+      chatApi.sendMessage(res.room._id, getJoinTaunt(myName)).catch(() => {});
       if (willBeFull) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         const existingNames = (a.participants ?? []).map((p: any) => p.displayName ?? p.username ?? '').filter(Boolean);
         setCelebration({ names: [...existingNames, myName], count: a.maxParticipants! });
       } else {
-        router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`);
+        setJoinToast(true);
+        setTimeout(() => router.push(chatUrl(res.room._id)), 800);
       }
     } catch (e: any) {
-      Alert.alert('Could not join', e.message);
+      Toast.show({ type: 'error', text1: 'Could not join', text2: e.message });
       setJoining(false);
     }
   }
 
-  async function handleLeave() {
+  async function doLeave() {
+    setLeaving(true);
+    try {
+      const name = user?.displayName ?? user?.username ?? 'Someone';
+      await chatApi.openActivityRoom(a._id)
+        .then((r) => chatApi.sendMessage(r.room._id, `${name} left the ping.`).catch(() => {}))
+        .catch(() => {});
+      await activitiesApi.leave(a._id);
+      onRefresh();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
+    } finally {
+      setLeaving(false);
+    }
+  }
+
+  function handleLeave() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert('Leave ping?', 'You can rejoin later if it\'s still open.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: async () => {
-          setLeaving(true);
-          try {
-            const name = user?.displayName ?? user?.username ?? 'Someone';
-            await chatApi.openActivityRoom(a._id)
-              .then((r) => chatApi.sendMessage(r.room._id, `${name} left the ping.`).catch(() => {}))
-              .catch(() => {});
-            await activitiesApi.leave(a._id);
-            onRefresh();
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          } finally {
-            setLeaving(false);
-          }
-        },
-      },
-    ]);
+    setConfirmLeave(true);
   }
 
   async function handleLeaveQuietly() {
@@ -216,61 +250,59 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       onRefresh();
       onDismiss();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
     } finally {
       setLeavingQuietly(false);
     }
   }
 
   function handleReport() {
-    const targetId = a._id;
-    Alert.alert('Report this ping', 'What\'s the issue?', [
-      { text: 'Inappropriate content', onPress: () => reportsApi.create('ping', targetId, 'inappropriate').catch(() => {}) },
-      { text: 'Felt unsafe', onPress: () => reportsApi.create('ping', targetId, 'unsafe').catch(() => {}) },
-      { text: 'Spam', onPress: () => reportsApi.create('ping', targetId, 'spam').catch(() => {}) },
-      { text: 'Fake activity', onPress: () => reportsApi.create('ping', targetId, 'fake').catch(() => {}) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setShowReport(true);
   }
 
-  async function handleCancel() {
-    Alert.alert('Cancel ping?', 'This will end the ping for everyone.', [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Cancel ping',
-        style: 'destructive',
-        onPress: async () => {
-          setCancelling(true);
-          try {
-            await activitiesApi.cancel(a._id);
-            onDismiss();
-            onRefresh();
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          } finally {
-            setCancelling(false);
-          }
-        },
-      },
-    ]);
+  function handleCancel() {
+    setConfirmCancel(true);
+  }
+
+  async function doCancel() {
+    setCancelling(true);
+    try {
+      await activitiesApi.cancel(a._id);
+      cancelStartingNotification(a._id);
+      cancelSafetyReminder(a._id);
+      onDismiss();
+      onRefresh();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
+    } finally {
+      setCancelling(false);
+    }
   }
 
   async function handleOpenChat() {
+    if (chatInflightRef.current) return;
+    chatInflightRef.current = true;
     setChatLoading(true);
     try {
       const res = await chatApi.openActivityRoom(a._id);
+      const roomId = res?.room?._id;
+      if (!roomId) throw new Error('Chat room unavailable — please try again.');
       if (isCreator) {
-        const msgRes = await chatApi.listMessages(res.room._id);
-        if (msgRes.messages.length === 0) {
-          const opener = TYPE_OPENERS[a.type] ?? TYPE_OPENERS.default;
-          chatApi.sendMessage(res.room._id, opener).catch(() => {});
-        }
+        chatApi.listMessages(roomId)
+          .then((msgRes) => {
+            if (msgRes.messages.length === 0) {
+              const opener = TYPE_OPENERS[a.type] ?? TYPE_OPENERS.default;
+              chatApi.sendMessage(roomId, opener).catch(() => {});
+            }
+          })
+          .catch(() => {});
       }
-      router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`);
+      router.push(chatUrl(roomId));
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Toast.show({ type: 'error', text1: 'Could not open chat', text2: e.message || 'Please try again.' });
     } finally {
       setChatLoading(false);
+      chatInflightRef.current = false;
     }
   }
 
@@ -283,7 +315,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       );
       onRefresh();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
     } finally {
       setOnMyWayLoading(false);
     }
@@ -298,7 +330,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       );
       onRefresh();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message });
     } finally {
       setArrivedLoading(false);
     }
@@ -306,12 +338,24 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
 
   const creatorId = a.creator?._id ?? a.creatorId;
 
+  const scrollExpandedRef = useRef(false);
+
   return (
     <>
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.root}
       keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={32}
+      onScroll={(e) => {
+        const y = e.nativeEvent.contentOffset.y;
+        if (y > 40 && !scrollExpandedRef.current) {
+          scrollExpandedRef.current = true;
+          onScrolledDown?.();
+        } else if (y <= 0) {
+          scrollExpandedRef.current = false;
+        }
+      }}
       key={a._id}
     >
       {/* Gradient header strip */}
@@ -327,6 +371,32 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
             <Text style={[styles.statusText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
           </View>
         </View>
+        <TouchableOpacity
+          style={[styles.shareIconBtn, { backgroundColor: `${typeCfg.color}22` }]}
+          onPress={() => {
+            const HOOKS: Record<string, string> = {
+              food: "We're eating. Come hungry or don't come at all.",
+              sport: 'Moving our bodies like functioning humans. Join.',
+              music: 'The aux is open. Bring your actual taste.',
+              study: "Group delusion that we'll be productive. You in?",
+              outdoor: "Outside. On purpose. It'll be worth it.",
+              gaming: 'We play, we argue, we do it again. Classic.',
+              meetup: 'Real people. IRL. In this economy. Wild.',
+            };
+            const emoji = ({ sport: '🏃', food: '🍜', music: '🎧', study: '📖', outdoor: '🌿', gaming: '🎮', meetup: '👋' } as Record<string,string>)[a.type] ?? '📍';
+            const hook  = HOOKS[a.type];
+            const place = (a as any).placeName as string | undefined;
+            const time  = new Date(a.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            const date  = new Date(a.startsAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+            const body  = [a.description?.trim() || null, place ? `📍 ${place}` : null, `🕐 ${date}, ${time}`].filter(Boolean).join('\n');
+            const msg   = [`${emoji} ${a.title}`, '', hook ?? body, ...(hook ? ['', body] : []), '', 'Get on Ping and join → https://pingnow.in'].join('\n');
+            Share.share({ message: msg });
+          }}
+          hitSlop={8}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="share-outline" size={18} color={typeCfg.color} />
+        </TouchableOpacity>
       </View>
 
       {/* Meta row (time / place / distance) */}
@@ -380,7 +450,13 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
       {a.creator?.displayName && (
         <TouchableOpacity
           style={[styles.creatorRow, { backgroundColor: c.surface, borderColor: c.border }]}
-          onPress={() => creatorId && router.push(`/user/${creatorId}`)}
+          onPress={() => {
+            if (!creatorId) return;
+            if (isCreator) { router.push(`/user/${creatorId}`); return; }
+            const name = a.creator!.displayName!;
+            const alreadySent = connectSent[creatorId] ?? false;
+            setProfileMenu({ userId: creatorId, name, sent: alreadySent });
+          }}
           activeOpacity={0.75}
         >
           <View style={[styles.creatorAvatar, { backgroundColor: `${Ping.purple}44` }]}>
@@ -444,13 +520,21 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.participantsRow}>
             {a.participants.slice(0, 12).map((p, i) => {
-              const uid = typeof p.userId === 'string' ? p.userId : (p.userId as any)?.toString();
+              const pUser = p.userId as any;
+              const uid = typeof pUser === 'string' ? pUser : (pUser?._id ?? pUser?.id)?.toString();
+              const isSelf = uid === myId;
+              const alreadySent = uid ? connectSent[uid] : false;
               return (
                 <ParticipantAvatar
                   key={uid ?? i}
                   index={i}
                   participant={p as any}
-                  onPress={() => { if (uid) router.push(`/user/${uid}`); }}
+                  onPress={() => {
+                    if (!uid) return;
+                    if (isSelf) { router.push(`/user/${uid}`); return; }
+                    const name = (p as any).displayName ?? (p as any).username ?? 'this person';
+                    setProfileMenu({ userId: uid, name, sent: alreadySent });
+                  }}
                 />
               );
             })}
@@ -463,24 +547,25 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
         </View>
       )}
 
-      {/* Chat teaser for non-members */}
-      {!isJoined && !isCreator && chatMsgCount !== null && chatMsgCount > 0 && (
-        <View style={styles.chatTeaser}>
-          <View style={styles.chatTeaserLeft}>
-            <View style={styles.chatTeaserIconWrap}>
-              <Ionicons name="chatbubbles" size={16} color="#7C3AED" />
-            </View>
-            <View>
-              <Text style={styles.chatTeaserTitle}>Group chat is live</Text>
-              <Text style={styles.chatTeaserSub}>
-                {chatMsgCount} {chatMsgCount === 1 ? 'message' : 'messages'} · Join to read
-              </Text>
-            </View>
+      {/* Pre-meetup safety banner — shown when joined and starting within 30 min */}
+      {isJoined && !isCreator && a.startsAt && (() => {
+        const msUntil = new Date(a.startsAt).getTime() - Date.now();
+        return (timeStatus === 'live' || (msUntil > 0 && msUntil <= 30 * 60 * 1000));
+      })() && (
+        <TouchableOpacity
+          style={styles.safetyBanner}
+          onPress={() => router.push('/safety' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.safetyBannerIcon}>
+            <Ionicons name="shield-checkmark" size={18} color="#22C55E" />
           </View>
-          <View style={styles.chatTeaserLock}>
-            <Ionicons name="lock-closed" size={12} color="#9490C0" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.safetyBannerTitle}>Safety reminder</Text>
+            <Text style={styles.safetyBannerSub}>Share your location with a trusted contact before you meet.</Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={14} color="#22C55E" />
+        </TouchableOpacity>
       )}
 
       {/* ── Action buttons ── */}
@@ -535,8 +620,8 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
                     <ActivityIndicator size="small" color={Ping.purpleLight} />
                   ) : (
                     <>
-                      <Text style={styles.btnSecondaryEmoji}>🚶</Text>
-                      <Text style={[styles.btnSecondaryText, { color: c.text }]}>On My Way</Text>
+                      <Ionicons name="walk-outline" size={14} color={Ping.purpleLight} />
+                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -553,8 +638,8 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
                     <ActivityIndicator size="small" color={Ping.purpleLight} />
                   ) : (
                     <>
-                      <Text style={styles.btnSecondaryEmoji}>📍</Text>
-                      <Text style={[styles.btnSecondaryText, { color: c.text }]}>I'm Here</Text>
+                      <Ionicons name="pin-outline" size={14} color="#22C55E" />
+                      <Text style={[styles.btnSecondaryText, { color: '#22C55E' }]}>I'm Here</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -637,8 +722,8 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
                   disabled={onMyWayLoading}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.btnSecondaryEmoji}>🚶</Text>
-                  <Text style={[styles.btnSecondaryText, { color: c.text }]}>On My Way</Text>
+                  <Ionicons name="walk-outline" size={14} color={Ping.purpleLight} />
+                  <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
                 </TouchableOpacity>
               )}
 
@@ -674,11 +759,149 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss 
         onDone={() => {
           setCelebration(null);
           chatApi.openActivityRoom(a._id)
-            .then((res) => router.push(`/chat/${res.room._id}?type=${encodeURIComponent(a.type)}`))
+            .then((res) => router.push(chatUrl(res.room._id)))
             .catch(() => {});
         }}
       />
     )}
+
+    <SuccessToast
+      visible={joinToast}
+      message="You joined the ping!"
+      subMessage="Opening chat..."
+      icon="flash"
+      color={Ping.purple}
+      onDone={() => setJoinToast(false)}
+    />
+
+    {/* Leave ping confirm */}
+    <ConfirmSheet
+      visible={confirmLeave}
+      onClose={() => setConfirmLeave(false)}
+      title="Leave ping?"
+      subtitle="You can rejoin later if it's still open."
+      confirmLabel="Leave"
+      cancelLabel="Stay"
+      danger
+      onConfirm={doLeave}
+    />
+
+    {/* Cancel ping confirm */}
+    <ConfirmSheet
+      visible={confirmCancel}
+      onClose={() => setConfirmCancel(false)}
+      title="Cancel ping?"
+      subtitle="This will end the ping for everyone."
+      confirmLabel="Cancel ping"
+      cancelLabel="Keep it"
+      danger
+      onConfirm={doCancel}
+    />
+
+    {/* Report sheet */}
+    <Modal
+      visible={showReport}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowReport(false)}
+      statusBarTranslucent
+    >
+      <TouchableOpacity
+        style={rpt.backdrop}
+        activeOpacity={1}
+        onPress={() => setShowReport(false)}
+      />
+      <View style={rpt.sheet}>
+        <View style={rpt.handle} />
+        <View style={rpt.iconWrap}>
+          <Ionicons name="flag" size={22} color="#EF4444" />
+        </View>
+        <Text style={rpt.title}>Report this ping</Text>
+        <Text style={rpt.subtitle}>What's the issue?</Text>
+        {([
+          { label: 'Inappropriate content', reason: 'inappropriate' },
+          { label: 'Felt unsafe',           reason: 'unsafe' },
+          { label: 'Spam',                  reason: 'spam' },
+          { label: 'Fake activity',         reason: 'fake' },
+        ] as const).map(({ label, reason }) => (
+          <TouchableOpacity
+            key={reason}
+            style={rpt.option}
+            activeOpacity={0.75}
+            onPress={() => {
+              setShowReport(false);
+              reportsApi.create('ping', a._id, reason).catch(() => {});
+              Toast.show({ type: 'success', text1: 'Report submitted', text2: 'Thanks for keeping Ping safe.' });
+            }}
+          >
+            <Text style={rpt.optionText}>{label}</Text>
+            <Ionicons name="chevron-forward" size={14} color="rgba(241,240,255,0.3)" />
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={rpt.cancelBtn} onPress={() => setShowReport(false)} activeOpacity={0.8}>
+          <Text style={rpt.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+
+    {/* Profile menu (creator / participant tap) */}
+    <Modal
+      visible={!!profileMenu}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setProfileMenu(null)}
+      statusBarTranslucent
+    >
+      <TouchableOpacity
+        style={rpt.backdrop}
+        activeOpacity={1}
+        onPress={() => setProfileMenu(null)}
+      />
+      {profileMenu && (
+        <View style={rpt.sheet}>
+          <View style={rpt.handle} />
+          <View style={[rpt.iconWrap, { backgroundColor: 'rgba(124,58,237,0.15)' }]}>
+            <Ionicons name="person" size={22} color={Ping.purple} />
+          </View>
+          <Text style={rpt.title}>{profileMenu.name}</Text>
+          <TouchableOpacity
+            style={rpt.option}
+            activeOpacity={0.75}
+            onPress={() => {
+              setProfileMenu(null);
+              router.push(`/user/${profileMenu.userId}`);
+            }}
+          >
+            <Text style={rpt.optionText}>View Profile</Text>
+            <Ionicons name="chevron-forward" size={14} color="rgba(241,240,255,0.3)" />
+          </TouchableOpacity>
+          {profileMenu.sent ? (
+            <View style={[rpt.option, { opacity: 0.5 }]}>
+              <Text style={rpt.optionText}>Request Sent</Text>
+              <Ionicons name="checkmark" size={14} color="#22C55E" />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={rpt.option}
+              activeOpacity={0.75}
+              onPress={() => {
+                const uid = profileMenu.userId;
+                setProfileMenu(null);
+                friendsApi.send(uid)
+                  .then(() => setConnectSent((prev) => ({ ...prev, [uid]: true })))
+                  .catch((e: any) => Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send request' }));
+              }}
+            >
+              <Text style={rpt.optionText}>Send Friend Request</Text>
+              <Ionicons name="person-add-outline" size={14} color="rgba(241,240,255,0.3)" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={rpt.cancelBtn} onPress={() => setProfileMenu(null)} activeOpacity={0.8}>
+            <Text style={rpt.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Modal>
     </>
   );
 }
@@ -702,6 +925,14 @@ const styles = StyleSheet.create({
     width: 4,
     borderTopLeftRadius: Radius.lg,
     borderBottomLeftRadius: Radius.lg,
+  },
+  shareIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   headerIconWrap: {
     width: 46,
@@ -777,6 +1008,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(148,144,192,0.1)',
   },
   safetyBtnText: { ...Typography.caption, color: '#9490C0', fontSize: 11, fontWeight: '600' },
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.3)',
+    backgroundColor: 'rgba(34,197,94,0.07)',
+  },
+  safetyBannerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  safetyBannerTitle: { ...Typography.bodyMed, color: '#22C55E', fontSize: 13, fontWeight: '700' },
+  safetyBannerSub: { ...Typography.caption, color: '#22C55E', opacity: 0.8, marginTop: 1 },
   section: { gap: 8 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionLabel: { ...Typography.caption, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -813,7 +1064,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(167,139,250,0.06)',
   },
   btnDanger: { backgroundColor: 'rgba(239,68,68,0.06)' },
-  btnSecondaryEmoji: { fontSize: 14 },
   btnSecondaryText: { ...Typography.bodySm, fontWeight: '600' },
   chatTeaser: {
     flexDirection: 'row',
@@ -843,5 +1093,90 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(148,144,192,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+});
+
+// ── Report / Profile menu sheet styles ───────────────────────────────────────
+
+const rpt = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#11112A',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderColor: 'rgba(167,139,250,0.15)',
+    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 36,
+    alignItems: 'center',
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(167,139,250,0.3)',
+    marginBottom: Spacing.lg,
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  title: {
+    color: '#F1F0FF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: 'rgba(241,240,255,0.45)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(167,139,250,0.1)',
+  },
+  optionText: {
+    color: '#F1F0FF',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  cancelBtn: {
+    marginTop: Spacing.md,
+    width: '100%',
+    height: 48,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.15)',
+  },
+  cancelText: {
+    color: 'rgba(241,240,255,0.6)',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

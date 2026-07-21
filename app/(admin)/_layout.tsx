@@ -55,6 +55,20 @@ export default function AdminLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="flag-outline" size={22} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="events"
+        options={{
+          title: 'Events',
+          tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="verifications"
+        options={{
+          title: 'Verify',
+          tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark-outline" size={22} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

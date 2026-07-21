@@ -7,12 +7,14 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   ScrollView,
   Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -105,7 +107,7 @@ function MessageBubble({ msg, myId, animate }: { msg: ChatMessage; myId?: string
       <View style={styles.systemRow}>
         <View style={[styles.systemLine, { backgroundColor: c.border }]} />
         <View style={[styles.systemPill, { backgroundColor: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.22)' }]}>
-          <Text style={[styles.systemText, { color: '#9490C0' }]}>{msg.body}</Text>
+          <Text style={[styles.systemText, { color: c.textSecondary }]}>{msg.body}</Text>
         </View>
         <View style={[styles.systemLine, { backgroundColor: c.border }]} />
       </View>
@@ -133,7 +135,7 @@ function MessageBubble({ msg, myId, animate }: { msg: ChatMessage; myId?: string
           <View style={[styles.senderAvatar, { backgroundColor: `${bg}33`, borderColor: `${bg}66` }]}>
             <Text style={[styles.senderAvatarText, { color: bg }]}>{initials}</Text>
           </View>
-          <Text style={[styles.senderName, { color: Ping.purpleLight }]}>{senderName}</Text>
+          <Text style={[styles.senderName, { color: c.tint }]}>{senderName}</Text>
         </View>
       )}
       <View
@@ -217,19 +219,45 @@ function getQuickActions(type?: string): QuickAction[] {
   return [...extras, ...BASE_QUICK];
 }
 
+const VIBE_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  cozy: 'cafe-outline', fun: 'happy-outline', exciting: 'flash-outline',
+  chill: 'leaf-outline', networking: 'business-outline', fitness: 'barbell-outline',
+};
+
+const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  sport: 'barbell-outline', food: 'restaurant-outline', music: 'musical-notes-outline',
+  study: 'book-outline', outdoor: 'walk-outline', gaming: 'game-controller-outline',
+  meetup: 'people-outline',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  sport: '#22C55E', food: '#F97316', music: '#8B5CF6', study: '#3B82F6',
+  outdoor: '#10B981', gaming: '#EC4899', meetup: '#7C3AED',
+};
+
 export default function ChatRoomScreen() {
-  const { roomId, type: pingType } = useLocalSearchParams<{ roomId: string; type?: string }>();
+  const { roomId, type: pingType, title, vibe, venue, creator } =
+    useLocalSearchParams<{ roomId: string; type?: string; title?: string; vibe?: string; venue?: string; creator?: string }>();
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
   const flatRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCountRef = useRef(0);
 
+  // Screen entrance animations
+  const screenAnim  = useRef(new Animated.Value(0)).current;
+  const headerAnim  = useRef(new Animated.Value(-16)).current;
+  const inputAnim   = useRef(new Animated.Value(20)).current;
+  const sendScale   = useRef(new Animated.Value(1)).current;
+  const cardAnim    = useRef(new Animated.Value(0)).current;
+
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const newMsgIdsRef = useRef<Set<string>>(new Set());
@@ -258,18 +286,40 @@ export default function ChatRoomScreen() {
   }
 
   async function loadRoom() {
-    try {
-      const res = await chatApi.getRoom(roomId);
-      setRoom(res.room);
-    } catch {
-      // ignore
-    }
+    // Allow to throw so the initial Promise.all catch can surface it
+    const res = await chatApi.getRoom(roomId);
+    setRoom(res.room);
+  }
+
+  function runEntrance() {
+    Animated.parallel([
+      Animated.spring(screenAnim, { toValue: 1, damping: 20, stiffness: 200, mass: 0.9, useNativeDriver: true }),
+      Animated.spring(headerAnim, { toValue: 0, damping: 18, stiffness: 220, delay: 60,  useNativeDriver: true }),
+      Animated.spring(inputAnim,  { toValue: 0, damping: 18, stiffness: 220, delay: 100, useNativeDriver: true }),
+    ]).start();
   }
 
   useEffect(() => {
-    Promise.all([loadRoom(), loadMessages()]).finally(() => setLoading(false));
+    runEntrance();
+    setError(null);
+    Promise.all([loadRoom(), loadMessages()])
+      .then(() => {
+        Animated.spring(cardAnim, { toValue: 1, damping: 18, stiffness: 200, delay: 160, useNativeDriver: true }).start();
+      })
+      .catch((e: any) => {
+        setError(e.message || 'Could not load chat');
+      })
+      .finally(() => setLoading(false));
     pollRef.current = setInterval(loadMessages, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+
+    // Scroll to bottom when keyboard opens so the latest message stays visible
+    const kbSub = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      kbSub.remove();
+    };
   }, [roomId]);
 
   async function send() {
@@ -290,6 +340,7 @@ export default function ChatRoomScreen() {
 
   async function sendQuick(msg: string) {
     if (sending) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSending(true);
     try {
       await chatApi.sendMessage(roomId, msg);
@@ -301,33 +352,109 @@ export default function ChatRoomScreen() {
     }
   }
 
-  const title = getRoomTitle(room, user?._id);
+  function pressSend() {
+    if (!text.trim() || sending) return;
+    Animated.sequence([
+      Animated.spring(sendScale, { toValue: 0.82, damping: 20, stiffness: 500, useNativeDriver: true }),
+      Animated.spring(sendScale, { toValue: 1,    damping: 14, stiffness: 220, mass: 0.8, useNativeDriver: true }),
+    ]).start();
+    send();
+  }
+
+  const roomTitle = getRoomTitle(room, user?._id);
   const subtitle = getRoomSubtitle(room);
   const listItems = buildListItems(messages);
   const quickActions = getQuickActions(pingType);
+  const isActivityRoom = room?.kind === 'activity';
+  const typeColor = (pingType && TYPE_COLORS[pingType]) ? TYPE_COLORS[pingType] : Ping.purple;
+  const typeIcon: React.ComponentProps<typeof Ionicons>['name'] = (pingType && TYPE_ICONS[pingType]) ? TYPE_ICONS[pingType] : 'flash';
+
+  // Activity info card — animated entrance after messages load
+  const ActivityInfoCard = isActivityRoom && (title || vibe || venue || creator) ? (
+    <Animated.View
+      style={{
+        opacity: cardAnim,
+        transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }],
+      }}
+    >
+      <View style={[styles.activityCard, { backgroundColor: `${typeColor}12`, borderColor: `${typeColor}30` }]}>
+        <View style={[styles.activityCardAccent, { backgroundColor: typeColor }]} />
+        <View style={{ flex: 1, gap: 6 }}>
+          {title ? (
+            <View style={styles.activityCardRow}>
+              <View style={[styles.activityCardIconWrap, { backgroundColor: `${typeColor}22` }]}>
+                <Ionicons name={typeIcon} size={14} color={typeColor} />
+              </View>
+              <Text style={[styles.activityCardTitle, { color: c.text }]} numberOfLines={1}>{title}</Text>
+            </View>
+          ) : null}
+          <View style={styles.activityCardMeta}>
+            {vibe ? (
+              <View style={[styles.activityMetaChip, { backgroundColor: `${typeColor}18` }]}>
+                <Ionicons name={VIBE_ICON[vibe] ?? 'sparkles-outline'} size={11} color={typeColor} />
+                <Text style={[styles.activityMetaText, { color: typeColor }]}>{vibe.charAt(0).toUpperCase() + vibe.slice(1)}</Text>
+              </View>
+            ) : null}
+            {venue ? (
+              <View style={[styles.activityMetaChip, { backgroundColor: `${c.textSecondary}22` }]}>
+                <Ionicons name="location-outline" size={11} color={c.textSecondary} />
+                <Text style={[styles.activityMetaText, { color: c.textSecondary }]} numberOfLines={1}>{venue}</Text>
+              </View>
+            ) : null}
+            {creator ? (
+              <View style={[styles.activityMetaChip, { backgroundColor: `${c.textSecondary}22` }]}>
+                <Ionicons name="person-outline" size={11} color={c.textSecondary} />
+                <Text style={[styles.activityMetaText, { color: c.textSecondary }]}>{creator}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  ) : null;
 
   return (
+    <Animated.View
+      style={[
+        { flex: 1 },
+        {
+          opacity: screenAnim,
+          transform: [
+            { translateY: screenAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) },
+            { scale:      screenAnim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
+          ],
+        },
+      ]}
+    >
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: c.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: c.border, backgroundColor: c.background }]}>
+      {/* Header — slides down on enter */}
+      <Animated.View
+        style={[
+          styles.header,
+          { borderBottomColor: c.border, backgroundColor: c.background, paddingTop: insets.top + 12 },
+          { transform: [{ translateY: headerAnim }] },
+        ]}
+      >
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={22} color={c.text} />
         </TouchableOpacity>
 
         <View style={styles.headerMid}>
-          <View style={[styles.headerAvatar, { backgroundColor: `${Ping.purple}33` }]}>
+          <View style={[styles.headerAvatar, { backgroundColor: `${typeColor}33` }]}>
             <Ionicons
-              name={room?.kind === 'dm' ? 'person' : 'flash'}
+              name={room?.kind === 'dm' ? 'person' : typeIcon}
               size={14}
-              color={Ping.purpleLight}
+              color={typeColor}
             />
           </View>
-          <View>
-            <Text style={[styles.headerTitle, { color: c.text }]} numberOfLines={1}>{title}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.headerTitle, { color: c.text }]} numberOfLines={1}>
+              {room?.kind === 'dm' ? roomTitle : (title || roomTitle)}
+            </Text>
             {subtitle ? (
               <Text style={[styles.headerSub, { color: c.textSecondary }]}>{subtitle}</Text>
             ) : null}
@@ -335,12 +462,45 @@ export default function ChatRoomScreen() {
         </View>
 
         <View style={{ width: 36 }} />
-      </View>
+      </Animated.View>
 
       {/* Messages */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={Ping.purpleLight} size="large" />
+          <View style={[styles.loadingCard, { backgroundColor: c.card }]}>
+            <View style={[styles.loadingIconWrap, { backgroundColor: `${typeColor}22` }]}>
+              <Ionicons name={typeIcon} size={28} color={typeColor} />
+            </View>
+            <ActivityIndicator color={typeColor} size="small" style={{ marginTop: 4 }} />
+            {title ? (
+              <Text style={[styles.loadingTitle, { color: c.text }]} numberOfLines={1}>{title}</Text>
+            ) : null}
+            <Text style={[styles.loadingText, { color: c.textSecondary }]}>Loading chat…</Text>
+          </View>
+        </View>
+      ) : error ? (
+        <View style={styles.center}>
+          <View style={[styles.loadingCard, { backgroundColor: c.card }]}>
+            <Ionicons name="alert-circle-outline" size={36} color="#EF4444" />
+            <Text style={[styles.loadingTitle, { color: c.text }]}>Could not load chat</Text>
+            <Text style={[styles.loadingText, { color: c.textSecondary }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: Ping.purple }]}
+              onPress={() => {
+                setError(null);
+                setLoading(true);
+                Promise.all([loadRoom(), loadMessages()])
+                  .then(() => {
+                    Animated.spring(cardAnim, { toValue: 1, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+                  })
+                  .catch((e: any) => setError(e.message || 'Could not load chat'))
+                  .finally(() => setLoading(false));
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <FlatList
@@ -349,6 +509,9 @@ export default function ChatRoomScreen() {
           keyExtractor={(item) => item.kind === 'msg' ? item.msg._id : item.id}
           contentContainerStyle={[styles.msgList, messages.length === 0 && { flex: 1 }]}
           onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={ActivityInfoCard}
           renderItem={({ item }) =>
             item.kind === 'sep' ? (
               <DateSeparator label={item.label} />
@@ -362,8 +525,8 @@ export default function ChatRoomScreen() {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}22` }]}>
-                <Ionicons name="chatbubbles" size={36} color={Ping.purpleLight} />
+              <View style={[styles.emptyIconWrap, { backgroundColor: `${typeColor}22` }]}>
+                <Ionicons name="chatbubbles" size={36} color={typeColor} />
               </View>
               <Text style={[styles.emptyText, { color: c.textSecondary }]}>
                 No messages yet — say hi!
@@ -373,52 +536,56 @@ export default function ChatRoomScreen() {
         />
       )}
 
-      {/* Quick actions */}
-      <View style={[styles.quickBar, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
-          {quickActions.map((qa) => (
-            <TouchableOpacity
-              key={qa.label}
-              style={[styles.quickPill, { borderColor: `${Ping.purple}55`, backgroundColor: `${Ping.purple}18` }]}
-              onPress={() => sendQuick(qa.msg)}
-              disabled={sending}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name={qa.icon} size={13} color={Ping.purpleLight} />
-              <Text style={[styles.quickText, { color: Ping.purpleLight }]}>{qa.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Quick actions + input bar — slides up on enter */}
+      <Animated.View style={{ transform: [{ translateY: inputAnim }] }}>
+        <View style={[styles.quickBar, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
+            {quickActions.map((qa) => (
+              <TouchableOpacity
+                key={qa.label}
+                style={[styles.quickPill, { borderColor: `${Ping.purple}55`, backgroundColor: `${Ping.purple}18` }]}
+                onPress={() => sendQuick(qa.msg)}
+                disabled={sending}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name={qa.icon} size={13} color={c.tint} />
+                <Text style={[styles.quickText, { color: c.tint }]}>{qa.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-      {/* Input bar */}
-      <View style={[styles.inputBar, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-        <TextInput
-          style={[styles.input, { color: c.text, backgroundColor: c.card, borderColor: c.border }]}
-          placeholder="Message..."
-          placeholderTextColor={c.textSecondary}
-          value={text}
-          onChangeText={setText}
-          multiline
-          maxLength={4000}
-          returnKeyType="send"
-          blurOnSubmit={false}
-          onSubmitEditing={send}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
-          onPress={send}
-          disabled={!text.trim() || sending}
-          activeOpacity={0.85}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#FFF" />
-          ) : (
-            <Ionicons name="send" size={16} color="#FFF" />
-          )}
-        </TouchableOpacity>
-      </View>
+        <View style={[styles.inputBar, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom || Spacing.sm }]}>
+          <TextInput
+            style={[styles.input, { color: c.text, backgroundColor: c.card, borderColor: c.border }]}
+            placeholder="Message..."
+            placeholderTextColor={c.textSecondary}
+            value={text}
+            onChangeText={setText}
+            multiline
+            maxLength={4000}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={pressSend}
+          />
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            <TouchableOpacity
+              style={[styles.sendBtn, (!text.trim() || sending) && [styles.sendBtnDisabled, { backgroundColor: c.card }]]}
+              onPress={pressSend}
+              disabled={!text.trim() || sending}
+              activeOpacity={0.85}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Ionicons name="send" size={16} color="#FFF" />
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Animated.View>
     </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
@@ -429,7 +596,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -454,7 +620,7 @@ const styles = StyleSheet.create({
   msgList: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.lg,
   },
   bubbleWrap: { marginBottom: 8, maxWidth: '80%' },
   mine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
@@ -579,4 +745,75 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: { ...Typography.bodySm, textAlign: 'center' },
+  loadingCard: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.xl,
+    borderRadius: Radius.xl,
+    minWidth: 200,
+  },
+  loadingIconWrap: {
+    width: 56, height: 56, borderRadius: 28,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  loadingTitle: { ...Typography.bodyMed, fontWeight: '700', textAlign: 'center' },
+  loadingText: { ...Typography.bodySm, textAlign: 'center' },
+  retryBtn: {
+    marginTop: 6,
+    paddingHorizontal: 24, paddingVertical: 10,
+    borderRadius: Radius.full,
+  },
+  retryBtnText: { ...Typography.bodySm, color: '#FFF', fontWeight: '700' },
+  activityCard: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.xs,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.xs,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  activityCardAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+  },
+  activityCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  activityCardIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityCardTitle: {
+    ...Typography.bodyMed,
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  activityCardMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  activityMetaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(148,144,192,0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  activityMetaText: { ...Typography.caption, color: '#9490C0', fontSize: 11 },
 });

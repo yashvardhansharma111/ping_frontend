@@ -99,13 +99,14 @@ async function request<T>(
 
 const get = <T>(path: string, auth = true) => request<T>('GET', path, undefined, auth);
 const post = <T>(path: string, body?: unknown, auth = true) => request<T>('POST', path, body, auth);
+const put = <T>(path: string, body?: unknown, auth = true) => request<T>('PUT', path, body, auth);
 const patch = <T>(path: string, body?: unknown, auth = true) => request<T>('PATCH', path, body, auth);
 const del = <T>(path: string, auth = true) => request<T>('DELETE', path, undefined, auth);
 
 // ── Image upload (multipart — bypasses request() which is JSON-only) ──────────
 
 export const uploadApi = {
-  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'misc' = 'misc'): Promise<string> => {
+  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'photos' | 'misc' = 'misc'): Promise<string> => {
     const token = await getAccessToken();
     if (!token) throw new Error('Not authenticated');
 
@@ -148,6 +149,8 @@ async function adminRequest<T>(method: string, path: string, body?: unknown): Pr
 
 const aGet = <T>(path: string) => adminRequest<T>('GET', path);
 const aPost = <T>(path: string, body?: unknown) => adminRequest<T>('POST', path, body);
+const aPut = <T>(path: string, body?: unknown) => adminRequest<T>('PUT', path, body);
+const aDel = <T>(path: string) => adminRequest<T>('DELETE', path);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -174,17 +177,31 @@ export const authApi = {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email'> & { dob: string; gender: string; institute: string; hobbies: string[] }>) =>
+  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email' | 'dob' | 'gender' | 'city' | 'institute' | 'hobbies' | 'vibePreferences' | 'favoriteActivities' | 'socialPreference' | 'instagramHandle' | 'photos' | 'occupation' | 'sleepType' | 'spontaneity' | 'foodPersonality' | 'timeRespect' | 'distanceTolerance' | 'availabilityPattern' | 'intentSync' | 'pingPitch' | 'funTruth'>>) =>
     patch<{ ok: boolean; user: User }>('/users/me', data),
   updatePrivacy: (data: Partial<{ ghostMode: boolean; locationSharing: boolean }>) =>
     patch<{ ok: boolean; privacy: User['privacy'] }>('/users/me/privacy', data),
   updateLocation: (lat: number, lng: number) =>
     patch('/users/me/location', { lat, lng }),
+  updatePushToken: (token: string | null) =>
+    put<{ ok: boolean }>('/users/me/push-token', { token }),
   deleteMe: () => del<{ ok: boolean }>('/users/me'),
   search: (q: string) =>
     get<{ ok: boolean; users: User[] }>(`/users/search?q=${encodeURIComponent(q)}`),
   getProfile: (id: string) =>
     get<{ ok: boolean; user: UserProfile }>(`/users/${id}`),
+  nearby: (lat: number, lng: number, radius?: number) =>
+    get<{ ok: boolean; users: User[] }>(`/users/nearby?lat=${lat}&lng=${lng}${radius ? `&radius=${radius}` : ''}`),
+  savedProfiles: () =>
+    get<{ ok: boolean; users: User[] }>('/users/me/saved'),
+  saveProfile: (userId: string) =>
+    post<{ ok: boolean }>(`/users/me/saved/${userId}`),
+  unsaveProfile: (userId: string) =>
+    del<{ ok: boolean }>(`/users/me/saved/${userId}`),
+  getVerificationStatus: () =>
+    get<{ ok: boolean; verificationStatus: string; verifiedAt?: string | null; verificationRejectionReason?: string | null }>('/users/me/verification'),
+  submitVerification: (selfieUrl: string) =>
+    post<{ ok: boolean; verificationStatus: string }>('/users/me/verification', { selfieUrl }),
 };
 
 // ── Activities ────────────────────────────────────────────────────────────────
@@ -200,21 +217,25 @@ export interface CreateActivityPayload {
   maxParticipants?: number;
   startsAt?: string;
   description?: string;
+  placeName?: string;
+  notes?: string;
+  vibe?: string;
 }
 
 export const activitiesApi = {
   create: (data: CreateActivityPayload) =>
     post<{ ok: boolean; activity: Activity }>('/activities', data),
-  nearby: async (lat: number, lng: number) => {
-    const r = await get<{ ok: boolean; activities: any[] }>(`/activities/nearby?lat=${lat}&lng=${lng}`);
+  nearby: async (lat: number, lng: number, radius?: number) => {
+    const q = `/activities/nearby?lat=${lat}&lng=${lng}${radius ? `&radius=${radius}` : ''}`;
+    const r = await get<{ ok: boolean; activities: any[] }>(q);
     return { ...r, activities: r.activities.map(normalizeActivity) };
   },
   joined: async () => {
     const r = await get<{ ok: boolean; activities: any[] }>('/activities/joined');
     return { ...r, activities: r.activities.map(normalizeActivity) };
   },
-  mine: async () => {
-    const r = await get<{ ok: boolean; activities: any[] }>('/activities/mine');
+  mine: async (status: 'live' | 'expired' | 'all' = 'live') => {
+    const r = await get<{ ok: boolean; activities: any[] }>(`/activities/mine?status=${status}`);
     return { ...r, activities: r.activities.map(normalizeActivity) };
   },
   get: async (id: string) => {
@@ -227,13 +248,37 @@ export const activitiesApi = {
   cancel: (id: string) => del<{ ok: boolean }>(`/activities/${id}`),
   onMyWay: (id: string) => post<{ ok: boolean }>(`/activities/${id}/on-my-way`),
   arrived: (id: string) => post<{ ok: boolean }>(`/activities/${id}/arrived`),
+  past: async () => {
+    const r = await get<{ ok: boolean; activities: any[] }>('/activities/past');
+    return { ...r, activities: r.activities.map(normalizeActivity) };
+  },
+  pendingRatings: () => get<{ ok: boolean; pending: PendingRating[] }>('/activities/pending-ratings'),
+  rate: (activityId: string, userId: string, score: number) =>
+    post<{ ok: boolean }>(`/activities/${activityId}/rate`, { userId, score }),
+  byUser: async (userId: string) => {
+    const r = await get<{ ok: boolean; activities: any[] }>(`/activities/user/${userId}`);
+    return { ...r, activities: r.activities.map(normalizeActivity) };
+  },
 };
+
+export interface PendingRatingUser {
+  _id: string;
+  displayName?: string;
+  username?: string;
+  avatarUrl?: string;
+}
+
+export interface PendingRating {
+  activity: { _id: string; title: string; type: string; expiresAt: string };
+  unrated: PendingRatingUser[];
+}
 
 // ── Friends ───────────────────────────────────────────────────────────────────
 
 export const friendsApi = {
   list: () => get<{ ok: boolean; friends: Friendship[] }>('/friends'),
-  requests: () => get<{ ok: boolean; requests: Friendship[] }>('/friends/requests'),
+  requests: (direction: 'received' | 'sent' | 'rejected' = 'received') =>
+    get<{ ok: boolean; requests: Friendship[] }>(`/friends/requests?direction=${direction}`),
   send: (userId: string) => post<{ ok: boolean }>('/friends/request', { userId }),
   accept: (userId: string) => post(`/friends/${userId}/accept`),
   reject: (userId: string) => post(`/friends/${userId}/reject`),
@@ -261,9 +306,35 @@ export interface User {
   email?: string;
   dob?: string;
   gender?: 'male' | 'female' | 'other';
+  city?: string;
+  institute?: string;
+  hobbies?: string[];
+  vibePreferences?: string[];
+  favoriteActivities?: string[];
+  socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
+  instagramHandle?: string;
+  photos?: string[];
+  occupation?: 'job' | 'student' | 'founder' | 'business' | 'freelancer' | 'exploring' | null;
+  sleepType?: 'night_owl' | 'early_bird' | null;
+  spontaneity?: 'planner' | 'spontaneous' | null;
+  foodPersonality?: 'street_food' | 'balanced' | 'cafe_aesthetic' | null;
+  timeRespect?: 'always_early' | 'on_time' | 'fashionably_late' | null;
+  distanceTolerance?: 'nearby' | 'up_to_5km' | 'travel_for_good_plans' | null;
+  availabilityPattern?: 'weekends_only' | 'evenings_mostly' | 'random_anytime' | null;
+  intentSync?: 'just_hanging' | 'activity_partner' | 'trying_new_places' | 'networking' | null;
+  pingPitch?: string | null;
+  funTruth?: string | null;
+  averageRating?: number | null;
+  ratingCount?: number;
+  profileCompletion?: number;
+  trustRate?: number;
   status: string;
   strikeCount: number;
   phoneVerifiedAt?: string | null;
+  createdAt?: string;
+  verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  verifiedAt?: string | null;
+  verificationRejectionReason?: string | null;
   privacy?: {
     ghostMode: boolean;
     locationSharing: boolean;
@@ -284,6 +355,8 @@ export interface Activity {
   type: string;
   description?: string;
   placeName?: string;
+  notes?: string;
+  vibe?: string;
   location: { type: 'Point'; coordinates: [number, number] }; // [lng, lat]
   startsAt: string;
   expiresAt: string;
@@ -311,11 +384,38 @@ export interface UserProfile {
   username?: string;
   avatarUrl?: string;
   bio?: string;
+  gender?: string;
+  dob?: string;
+  city?: string;
+  institute?: string;
+  hobbies?: string[];
+  vibePreferences?: string[];
+  favoriteActivities?: string[];
+  socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
+  instagramHandle?: string;
+  photos?: string[];
+  occupation?: 'job' | 'student' | 'founder' | 'business' | 'freelancer' | 'exploring' | null;
+  sleepType?: 'night_owl' | 'early_bird' | null;
+  spontaneity?: 'planner' | 'spontaneous' | null;
+  foodPersonality?: 'street_food' | 'balanced' | 'cafe_aesthetic' | null;
+  timeRespect?: 'always_early' | 'on_time' | 'fashionably_late' | null;
+  distanceTolerance?: 'nearby' | 'up_to_5km' | 'travel_for_good_plans' | null;
+  availabilityPattern?: 'weekends_only' | 'evenings_mostly' | 'random_anytime' | null;
+  intentSync?: 'just_hanging' | 'activity_partner' | 'trying_new_places' | 'networking' | null;
+  pingPitch?: string | null;
+  funTruth?: string | null;
+  averageRating?: number | null;
+  ratingCount?: number;
+  profileCompletion?: number;
   trustRate?: number;
   createdAt?: string;
   phoneVerifiedAt?: string | null;
   status: string;
+  completedPingsCount?: number;
+  isSaved?: boolean;
   friendshipStatus: 'self' | 'none' | 'accepted' | 'pending_sent' | 'pending_received' | 'blocked';
+  verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  verifiedAt?: string | null;
 }
 
 export interface Friendship {
@@ -400,6 +500,10 @@ export interface Ad {
   businessName: string;
   category: AdCategory;
   tagline?: string;
+  coverImageUrl?: string | null;
+  address?: string | null;
+  website?: string | null;
+  tags?: string[];
   contactPhone?: string | null;
   location: { type: 'Point'; coordinates: [number, number] };
   radiusMeters: number;
@@ -426,6 +530,10 @@ export interface CreateAdPayload {
   businessName: string;
   category: AdCategory;
   tagline?: string;
+  coverImageUrl?: string;
+  address?: string;
+  website?: string;
+  tags?: string[];
   lat: number;
   lng: number;
   contactPhone?: string;
@@ -441,6 +549,8 @@ export const adsApi = {
     post<{ ok: boolean; ad: Ad }>(`/ads/${adId}/verify-payment`, body),
   mine: (status?: 'live' | 'completed' | 'all') =>
     get<{ ok: boolean; ads: Ad[] }>(`/ads/mine${status ? `?status=${status}` : ''}`),
+  mockActivate: (adId: string) =>
+    post<{ ok: boolean; ad: Ad }>(`/ads/${adId}/mock-activate`),
   get: (adId: string) =>
     get<{ ok: boolean; ad: Ad }>(`/ads/${adId}`),
   analytics: (adId: string) =>
@@ -489,6 +599,75 @@ export interface AdminReport {
   targetUserId?: { displayName?: string; username?: string; status: string };
 }
 
+// ── Highlights ────────────────────────────────────────────────────────────────
+
+export interface Highlight {
+  _id: string;
+  userId: string;
+  title: string;
+  emoji: string;
+  images: string[];
+  activityId?: string | null;
+  privacy: 'public' | 'connections' | 'private';
+  category?: string | null;
+  location?: string | null;
+  vibe?: string | null;
+  pingDate?: string | null;
+  createdAt: string;
+}
+
+export const highlightsApi = {
+  list: (userId: string) =>
+    get<{ ok: boolean; highlights: Highlight[] }>(`/highlights/user/${userId}`).then((r) => r.highlights),
+  suggest: () =>
+    get<{ ok: boolean; suggestion: { _id: string; title: string; type: string; placeName?: string; expiresAt: string; vibe?: string } | null }>('/highlights/suggest').then((r) => r.suggestion),
+  create: (data: {
+    title: string;
+    emoji: string;
+    images: string[];
+    activityId?: string;
+    privacy: string;
+    category?: string;
+    location?: string;
+    vibe?: string;
+    pingDate?: string;
+  }) => post<{ ok: boolean; highlight: Highlight }>('/highlights', data).then((r) => r.highlight),
+  update: (id: string, data: Partial<{ title: string; emoji: string; images: string[]; privacy: string; category: string; location: string }>) =>
+    put<{ ok: boolean; highlight: Highlight }>(`/highlights/${id}`, data).then((r) => r.highlight),
+  remove: (id: string) => del<{ ok: boolean }>(`/highlights/${id}`),
+};
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+export interface PingEvent {
+  _id: string;
+  title: string;
+  description?: string;
+  imageUrl?: string | null;
+  venueName?: string | null;
+  venueAddress?: string | null;
+  category: 'offer' | 'event';
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  tags: string[];
+  createdAt: string;
+}
+
+export const eventsApi = {
+  list: (params?: { lat?: number; lng?: number; radius?: number; category?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.lat !== undefined) q.set('lat', String(params.lat));
+    if (params?.lng !== undefined) q.set('lng', String(params.lng));
+    if (params?.radius !== undefined) q.set('radius', String(params.radius));
+    if (params?.category) q.set('category', params.category);
+    return get<{ ok: boolean; events: PingEvent[] }>(`/events?${q.toString()}`).then((r) => r.events);
+  },
+  getById: (id: string) => get<{ ok: boolean; event: PingEvent }>(`/events/${id}`).then((r) => r.event),
+};
+
+// ── Admin API ─────────────────────────────────────────────────────────────────
+
 export const adminApi = {
   overview: () => aGet<{ ok: boolean } & AdminOverview>('/overview'),
   users: (q?: string, filter?: string, page = 1) =>
@@ -505,4 +684,27 @@ export const adminApi = {
   dismissReport: (id: string) => aPost<{ ok: boolean }>(`/reports/${id}/dismiss`),
   removeReport: (id: string, reason: string) => aPost<{ ok: boolean }>(`/reports/${id}/remove`, { reason }),
   warnReport: (id: string, reason: string) => aPost<{ ok: boolean }>(`/reports/${id}/remove-and-warn`, { reason }),
+
+  // Events
+  events: (page = 1) =>
+    aGet<{ ok: boolean; events: PingEvent[]; total: number; page: number }>(`/events?page=${page}`),
+  createEvent: (body: {
+    title: string; description?: string; imageUrl?: string | null;
+    venueName?: string | null; venueAddress?: string | null;
+    category: 'offer' | 'event'; startDate: string; endDate: string;
+    isActive?: boolean; tags?: string[];
+  }) => aPost<{ ok: boolean; event: PingEvent }>('/events', body).then((r) => r.event),
+  updateEvent: (id: string, body: Partial<{
+    title: string; description: string; imageUrl: string | null;
+    venueName: string | null; venueAddress: string | null;
+    category: 'offer' | 'event'; startDate: string; endDate: string;
+    isActive: boolean; tags: string[];
+  }>) => aPut<{ ok: boolean; event: PingEvent }>(`/events/${id}`, body).then((r) => r.event),
+  deleteEvent: (id: string) => aDel<{ ok: boolean }>(`/events/${id}`),
+
+  // Verification
+  pendingVerifications: (page = 1) =>
+    aGet<{ ok: boolean; users: Array<{ _id: string; displayName?: string; username?: string; avatarUrl?: string; verificationSelfieUrl?: string; phone: string; createdAt: string }>; total: number; page: number }>(`/users/verifications?page=${page}`),
+  approveVerification: (id: string) => aPost<{ ok: boolean }>(`/users/${id}/verify/approve`),
+  rejectVerification: (id: string, reason: string) => aPost<{ ok: boolean }>(`/users/${id}/verify/reject`, { reason }),
 };

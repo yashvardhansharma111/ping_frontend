@@ -5,10 +5,10 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { chatApi, type ChatRoom } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
@@ -50,7 +50,8 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const name = getRoomName(room, myId);
-  const meta = KIND_META[room.kind] ?? KIND_META.activity;
+  const baseMeta = KIND_META[room.kind] ?? KIND_META.activity;
+  const meta = { ...baseMeta, tint: room.kind === 'activity' ? c.tint : baseMeta.tint };
 
   return (
     <TouchableOpacity
@@ -78,6 +79,7 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
 export default function ChatListScreen() {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
@@ -111,7 +113,7 @@ export default function ChatListScreen() {
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: c.background }]}>
+      <View style={[styles.header, { backgroundColor: c.background, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={22} color={c.text} />
         </TouchableOpacity>
@@ -147,7 +149,7 @@ export default function ChatListScreen() {
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
           <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}22` }]}>
-            <Ionicons name="chatbubbles" size={40} color={Ping.purpleLight} />
+            <Ionicons name="chatbubbles" size={40} color={c.tint} />
           </View>
           <Text style={[styles.emptyTitle, { color: c.text }]}>No chats yet</Text>
           <Text style={[styles.emptySub, { color: c.textSecondary }]}>
@@ -158,7 +160,7 @@ export default function ChatListScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(r) => r._id}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           renderItem={({ item }) => (
             <RoomRow
               room={item}
@@ -179,7 +181,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
     paddingBottom: Spacing.md,
   },
   backBtn: { width: 36, alignItems: 'flex-start' },

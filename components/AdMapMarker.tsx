@@ -17,7 +17,7 @@ function placeholderColor(name: string): string {
 }
 
 export default function AdMapMarker({ ad, selected }: Props) {
-  const firstImage = ad.products[0]?.imageUrl ?? null;
+  const firstImage = ad.coverImageUrl || ad.products[0]?.imageUrl || null;
   const letter = ad.businessName?.[0]?.toUpperCase() ?? '?';
   const bgColor = placeholderColor(ad.businessName);
   const isPro = ad.tier === 'pro_99';

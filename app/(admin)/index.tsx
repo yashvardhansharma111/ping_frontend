@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, RefreshControl, Dimensions,
+  ActivityIndicator, RefreshControl, Dimensions,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -192,6 +194,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showLogout, setShowLogout] = useState(false);
 
   async function load(isRefresh = false) {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -200,7 +203,7 @@ export default function AdminDashboard() {
       setData(res);
     } catch (err: any) {
       if (err.message !== 'Not authenticated') {
-        Alert.alert('Error', err.message);
+        Toast.show({ type: 'error', text1: 'Error', text2: err.message });
       }
     } finally {
       setLoading(false);
@@ -210,16 +213,9 @@ export default function AdminDashboard() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  async function handleLogout() {
-    Alert.alert('Log out?', '', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out', style: 'destructive', onPress: async () => {
-          try { if (refreshToken) await authApi.logout(refreshToken); } catch {}
-          await logout();
-        },
-      },
-    ]);
+  async function doLogout() {
+    try { if (refreshToken) await authApi.logout(refreshToken); } catch {}
+    await logout();
   }
 
   const daily = data?.daily ?? [];
@@ -238,7 +234,7 @@ export default function AdminDashboard() {
             <Text style={s.headerSub}>Ping Dashboard</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} hitSlop={8}>
+        <TouchableOpacity onPress={() => setShowLogout(true)} hitSlop={8}>
           <Ionicons name="log-out-outline" size={22} color="#5C5A80" />
         </TouchableOpacity>
       </View>
@@ -336,6 +332,17 @@ export default function AdminDashboard() {
           </Section>
         </ScrollView>
       )}
+
+      <ConfirmSheet
+        visible={showLogout}
+        onClose={() => setShowLogout(false)}
+        title="Log out?"
+        confirmLabel="Log out"
+        cancelLabel="Cancel"
+        danger
+        icon="log-out-outline"
+        onConfirm={doLogout}
+      />
     </View>
   );
 }
