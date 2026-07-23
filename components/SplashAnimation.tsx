@@ -4,8 +4,8 @@ import { View, Text, StyleSheet, Animated, Dimensions, Image } from 'react-nativ
 const { height: H } = Dimensions.get('window');
 
 const PURPLE = '#7C3AED';
-const TEXT   = '#1C1040';
-const MUTED  = '#9B8FC0';
+const TEXT   = '#F1F0FF';
+const MUTED  = '#9490C0';
 
 // Ripple ring timed from splash sequence start
 function Ripple({ delay, maxScale }: { delay: number; maxScale: number }) {
@@ -179,7 +179,7 @@ export default function SplashAnimation({ onDone }: Props) {
 const s = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#080815',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 9999,
@@ -193,7 +193,7 @@ const s = StyleSheet.create({
     width: 56,
     height: 10,
     borderRadius: 5,
-    backgroundColor: 'rgba(124,58,237,0.13)',
+    backgroundColor: 'rgba(167,139,250,0.25)',
   },
   textBlock: {
     alignItems: 'center',
@@ -223,7 +223,7 @@ const s = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(124,58,237,0.16)',
+    backgroundColor: 'rgba(167,139,250,0.28)',
   },
   dotActive: {
     width: 22,

@@ -5,6 +5,13 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import * as SecureStore from 'expo-secure-store';
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 
 import Toast from 'react-native-toast-message';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -15,6 +22,7 @@ import { toastConfig } from '@/components/ToastConfig';
 import RatePingModal from '@/components/RatePingModal';
 import { activitiesApi, type PendingRating } from '@/lib/api';
 import { setupNotifications, addResponseListener, type NotificationPayload } from '@/lib/notifications';
+import { Colors, Ping } from '@/constants/theme';
 
 function AuthGuard() {
   const { user, isAdmin, isLoading } = useAuthStore();
@@ -103,6 +111,13 @@ export default function RootLayout() {
   const ratingChecked = useRef(false);
   const notifSetupDone = useRef(false);
 
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+  });
+
   useEffect(() => {
     loadFromStorage();
     useThemeStore.getState().loadPreference();
@@ -129,11 +144,27 @@ export default function RootLayout() {
       .catch(() => {});
   }, [isLoading, user]);
 
-  const navTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+  const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const navTheme = {
+    ...(colorScheme === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(colorScheme === 'dark' ? DarkTheme.colors : DefaultTheme.colors),
+      primary: c.primary,
+      background: c.background,
+      card: c.surface,
+      text: c.text,
+      border: c.border,
+      notification: Ping.purpleLight,
+    },
+  };
+
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: '#0F0F12' }} />;
+  }
 
   return (
     <ThemeProvider value={navTheme}>
-      <StatusBar style="light" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
 
       {/* Stack renders (and AuthGuard fires) beneath the splash */}
       {!isLoading && (
@@ -145,7 +176,6 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(admin)" />
             <Stack.Screen name="verification" />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: '', animation: 'slide_from_bottom' }} />
           </Stack>
         </>
       )}

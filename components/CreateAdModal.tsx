@@ -15,7 +15,6 @@ import {
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-// import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import { adsApi, uploadApi, type AdTier, type AdCategory, type AdProduct /*, WEB_BASE */ } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';

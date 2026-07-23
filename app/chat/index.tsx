@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -35,9 +36,7 @@ function getRoomName(room: ChatRoom, myId?: string) {
     const other = room.participantIds.find((p) => p._id !== myId);
     return other?.displayName || other?.username || 'User';
   }
-  if (room.kind === 'activity') return 'Activity Chat';
-  if (room.kind === 'squad') return 'Squad Chat';
-  return 'Chat';
+  return room.name || (room.kind === 'activity' ? 'Activity Chat' : 'Squad Chat');
 }
 
 const KIND_META: Record<string, { icon: IoniconName; bg: string; tint: string }> = {
@@ -59,9 +58,13 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.avatar, { backgroundColor: meta.bg }]}>
-        <Ionicons name={meta.icon} size={20} color={meta.tint} />
-      </View>
+      {room.avatarUrl ? (
+        <Image source={{ uri: room.avatarUrl }} style={styles.avatarImg} />
+      ) : (
+        <View style={[styles.avatar, { backgroundColor: meta.bg }]}>
+          <Ionicons name={meta.icon} size={20} color={meta.tint} />
+        </View>
+      )}
 
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
@@ -216,6 +219,11 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImg: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   rowMain: { flex: 1 },
   rowTop: {

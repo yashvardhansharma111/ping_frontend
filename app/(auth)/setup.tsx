@@ -20,14 +20,14 @@ import { usersApi, uploadApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing } from '@/constants/theme';
 
-// Light premium palette
+// Light premium palette — Ping design system
 const BG     = '#FFFFFF';
-const TEXT   = '#1C1040';
-const MUTED  = '#7B6DAA';
-const DIM    = '#B8AECE';
+const TEXT   = '#111111';
+const MUTED  = '#6F6866';
+const DIM    = '#A6A6B0';
 const PURPLE = Ping.purple;
-const SURF   = '#F7F5FF';
-const BORDER = 'rgba(124,58,237,0.14)';
+const SURF   = Ping.soft;
+const BORDER = 'rgba(143,99,244,0.18)';
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -87,8 +87,8 @@ function StepDots({ step }: { step: number }) {
 }
 const pd = StyleSheet.create({
   row:       { flexDirection: 'row', gap: 7, alignItems: 'center' },
-  dot:       { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(124,58,237,0.14)' },
-  dotDone:   { backgroundColor: 'rgba(124,58,237,0.4)' },
+  dot:       { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(143,99,244,0.18)' },
+  dotDone:   { backgroundColor: 'rgba(143,99,244,0.45)' },
   dotActive: { width: 24, borderRadius: 4, backgroundColor: PURPLE },
 });
 
@@ -475,13 +475,13 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(124,58,237,0.06)',
+    borderBottomColor: 'rgba(143,99,244,0.08)',
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F0FB',
+    backgroundColor: Ping.soft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -611,13 +611,13 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(34,197,94,0.08)',
+    backgroundColor: 'rgba(143,99,244,0.1)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     alignSelf: 'flex-start',
   },
-  privacyNoteText: { fontSize: 12, color: Ping.green, fontWeight: '600' },
+  privacyNoteText: { fontSize: 12, color: Ping.purpleDim, fontWeight: '600' },
   photoRow: { flexDirection: 'row', gap: 14 },
   photoSlot: {
     width: 130,
@@ -660,7 +660,7 @@ const s = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(124,58,237,0.1)',
+    backgroundColor: 'rgba(143,99,244,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -675,7 +675,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: PURPLE,
+    shadowColor: Ping.purpleDim,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.26,
     shadowRadius: 14,
@@ -683,7 +683,7 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   btnDisabled: {
-    backgroundColor: 'rgba(124,58,237,0.18)',
+    backgroundColor: 'rgba(143,99,244,0.22)',
     shadowOpacity: 0,
     elevation: 0,
   },

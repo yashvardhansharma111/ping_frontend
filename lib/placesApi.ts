@@ -167,6 +167,98 @@ const TYPE_QUERIES: Record<string, { tag: string; value: string; emoji: string }
   ],
 };
 
+// ── Map POIs (cafés / restaurants with coordinates) ──────────────────────────
+
+export type MapPoiKind = 'cafe' | 'restaurant' | 'fast_food';
+
+export interface MapPoi {
+  id: string;
+  name: string;
+  kind: MapPoiKind;
+  lat: number;
+  lng: number;
+  emoji: string;
+}
+
+const POI_KIND: Record<string, { kind: MapPoiKind; emoji: string }> = {
+  cafe:       { kind: 'cafe',       emoji: '☕' },
+  coffee_shop:{ kind: 'cafe',       emoji: '☕' },
+  restaurant: { kind: 'restaurant', emoji: '🍽️' },
+  food_court: { kind: 'restaurant', emoji: '🍽️' },
+  fast_food:  { kind: 'fast_food',  emoji: '🍔' },
+};
+
+/** Nearby cafés & restaurants for map markers (hospitals already show in basemap). */
+export async function fetchMapPois(
+  lat: number,
+  lng: number,
+  radiusMeters = 1800,
+): Promise<MapPoi[]> {
+  const overpassQuery = `[out:json][timeout:12];
+(
+  node["amenity"="cafe"](around:${radiusMeters},${lat},${lng});
+  node["amenity"="coffee_shop"](around:${radiusMeters},${lat},${lng});
+  node["amenity"="restaurant"](around:${radiusMeters},${lat},${lng});
+  node["amenity"="fast_food"](around:${radiusMeters},${lat},${lng});
+  node["amenity"="food_court"](around:${radiusMeters},${lat},${lng});
+  way["amenity"="cafe"](around:${radiusMeters},${lat},${lng});
+  way["amenity"="restaurant"](around:${radiusMeters},${lat},${lng});
+  way["amenity"="fast_food"](around:${radiusMeters},${lat},${lng});
+);
+out center 70;`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 13000);
+
+  try {
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(overpassQuery)}`,
+      signal: controller.signal,
+    });
+    if (!resp.ok) return [];
+    const json = await resp.json();
+
+    const seen = new Set<string>();
+    const results: MapPoi[] = [];
+
+    for (const el of json.elements ?? []) {
+      const name: string | undefined = el.tags?.name;
+      if (!name) continue;
+
+      const tagVal: string = el.tags?.amenity ?? '';
+      const mapping = POI_KIND[tagVal];
+      if (!mapping) continue;
+
+      const elLat = el.lat ?? el.center?.lat;
+      const elLng = el.lon ?? el.center?.lon;
+      if (typeof elLat !== 'number' || typeof elLng !== 'number') continue;
+
+      const key = `${name.toLowerCase()}|${elLat.toFixed(4)}|${elLng.toFixed(4)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        id: String(el.id ?? key),
+        name,
+        kind: mapping.kind,
+        lat: elLat,
+        lng: elLng,
+        emoji: mapping.emoji,
+      });
+
+      if (results.length >= 50) break;
+    }
+
+    return results;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchNearbyPlaces(
   lat: number,
   lng: number,

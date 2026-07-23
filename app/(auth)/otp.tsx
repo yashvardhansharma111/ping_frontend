@@ -20,17 +20,18 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
-import { Ping, Spacing } from '@/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ping, Spacing, Gradients } from '@/constants/theme';
 
 const OTP_LENGTH      = 6;
 const RESEND_COOLDOWN = 30;
 
-// Light premium palette
+// Light premium palette — Ping design system
 const BG     = '#FFFFFF';
-const TEXT   = '#1C1040';
-const MUTED  = '#7B6DAA';
-const DIM    = '#B8AECE';
-const BORDER = 'rgba(124,58,237,0.14)';
+const TEXT   = '#111111';
+const MUTED  = '#6F6866';
+const DIM    = '#A6A6B0';
+const BORDER = 'rgba(143,99,244,0.18)';
 const PURPLE = Ping.purple;
 
 export default function OtpScreen() {
@@ -184,7 +185,8 @@ export default function OtpScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Look at your phone{'\n'}for once.</Text>
           <Text style={styles.subtitle}>
-            A 6-digit code is sitting in your messages. Waiting for you.{' '}
+            A 6-digit code is sitting in your messages.{'\n'}
+            Waiting for you.{' '}
             <Text style={styles.phoneHighlight}>{maskedPhone}</Text>
           </Text>
           {debugCode ? (
@@ -220,14 +222,21 @@ export default function OtpScreen() {
 
         {/* Verify button */}
         <TouchableOpacity
-          style={[styles.btn, filled < OTP_LENGTH && styles.btnDisabled]}
           onPress={() => { Keyboard.dismiss(); verifyOtp(); }}
           disabled={filled < OTP_LENGTH || loading}
           activeOpacity={0.88}
+          style={{ borderRadius: 9999, overflow: 'hidden', opacity: filled < OTP_LENGTH ? 0.45 : 1 }}
         >
-          {loading
-            ? <ActivityIndicator color="#FFF" />
-            : <Text style={styles.btnText}>Yep, that's it</Text>}
+          <LinearGradient
+            colors={[...Gradients.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.btn}
+          >
+            {loading
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.btnText}>Yep, that's it</Text>}
+          </LinearGradient>
         </TouchableOpacity>
 
         {/* Resend */}
@@ -301,7 +310,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F0FB',
+    backgroundColor: Ping.soft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -354,7 +363,7 @@ const styles = StyleSheet.create({
   box: {
     flex: 1,
     borderRadius: 14,
-    backgroundColor: '#F7F5FF',
+    backgroundColor: Ping.soft,
     borderWidth: 1.5,
     borderColor: BORDER,
     fontSize: 24,
@@ -362,28 +371,16 @@ const styles = StyleSheet.create({
     color: TEXT,
   },
   boxFilled: {
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    backgroundColor: 'rgba(187,146,255,0.16)',
     borderColor: PURPLE,
-    color: PURPLE,
+    color: Ping.purpleDim,
   },
 
   // Button
   btn: {
-    backgroundColor: PURPLE,
-    borderRadius: 9999,
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: PURPLE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.26,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  btnDisabled: {
-    backgroundColor: 'rgba(124,58,237,0.18)',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   btnText: {
     fontSize: 16,

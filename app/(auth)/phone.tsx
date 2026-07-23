@@ -12,19 +12,19 @@ import {
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useFonts, Pacifico_400Regular } from '@expo-google-fonts/pacifico';
+import { LinearGradient } from 'expo-linear-gradient';
 import { authApi } from '@/lib/api';
-import { Ping } from '@/constants/theme';
+import { Ping, Gradients } from '@/constants/theme';
 
 const INDIA_PHONE_RE = /^[6-9]\d{9}$/;
 
-const BG     = '#EDEDED';
+const BG     = Ping.soft;       // #F3ECFF
 const WHITE  = '#FFFFFF';
 const TEXT   = '#111111';
-const MUTED  = '#888888';
-const DIM    = '#BBBBBB';
-const PURPLE = Ping.purple;
+const MUTED  = '#6F6866';
+const DIM    = '#A6A6B0';
+const BORDER = '#E6E1DA';
 
 export default function PhoneScreen() {
   const [phone, setPhone]     = useState('');
@@ -56,10 +56,8 @@ export default function PhoneScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* grey spacer — shrinks when keyboard appears, keeping text+card at bottom */}
       <View style={{ flex: 1, minHeight: insets.top + 24 }} />
 
-      {/* ── Text block — sits directly above the card ── */}
       <View style={styles.textBlock}>
         <Text style={[
           styles.appName,
@@ -75,17 +73,14 @@ export default function PhoneScreen() {
         </Text>
       </View>
 
-      {/* ── Bottom card ── */}
       <View style={[styles.card, { paddingBottom: insets.bottom + 20 }]}>
-        {/* Drag pill */}
         <View style={styles.pill} />
 
         <Text style={styles.cardTitle}>Enter your mobile number</Text>
         <Text style={styles.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
 
-        {/* Phone input */}
         <TouchableOpacity
-          style={styles.inputWrap}
+          style={[styles.inputWrap, isValid && styles.inputWrapFocus]}
           activeOpacity={1}
           onPress={() => inputRef.current?.focus()}
         >
@@ -107,20 +102,25 @@ export default function PhoneScreen() {
           />
         </TouchableOpacity>
 
-        {/* CTA */}
         <TouchableOpacity
-          style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
           onPress={handleSend}
           disabled={!isValid || loading}
           activeOpacity={0.88}
+          style={{ borderRadius: 9999, overflow: 'hidden', opacity: (!isValid || loading) ? 0.55 : 1 }}
         >
-          {loading
-            ? <ActivityIndicator color="#FFF" />
-            : <Text style={[styles.btnText, (!isValid || loading) && styles.btnTextDisabled]}>Send OTP</Text>
-          }
+          <LinearGradient
+            colors={[...Gradients.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.btn}
+          >
+            {loading
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.btnText}>Send OTP</Text>
+            }
+          </LinearGradient>
         </TouchableOpacity>
 
-        {/* Legal */}
         <Text style={styles.legal}>
           By continuing, you agree to our{' '}
           <Text style={styles.legalLink}>Terms & Conditions</Text>
@@ -138,8 +138,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BG,
   },
-
-  // Text block (just above card)
   textBlock: {
     paddingHorizontal: 28,
     paddingBottom: 24,
@@ -147,8 +145,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 52,
-    color: TEXT,
-    // no lineHeight — lets Pacifico descenders (g, y) render without clipping
+    color: Ping.purpleDim,
   },
   headline: {
     fontSize: 30,
@@ -164,22 +161,27 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     maxWidth: 300,
   },
-
-  // Bottom card
   card: {
     backgroundColor: WHITE,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     paddingHorizontal: 28,
     paddingTop: 16,
     gap: 14,
+    borderTopWidth: 1,
+    borderColor: Ping.lavender,
+    shadowColor: Ping.purpleDim,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 12,
   },
   pill: {
     alignSelf: 'center',
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#D1D1D1',
+    backgroundColor: Ping.lavender,
     marginBottom: 6,
   },
   cardTitle: {
@@ -194,22 +196,22 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: -4,
   },
-
-  // Input
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: WHITE,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: Ping.soft,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: BORDER,
     height: 54,
     paddingHorizontal: 14,
     gap: 8,
   },
-  flag: {
-    fontSize: 18,
+  inputWrapFocus: {
+    borderColor: Ping.purpleLight,
+    backgroundColor: '#FFF',
   },
+  flag: { fontSize: 18 },
   prefix: {
     fontSize: 15,
     fontWeight: '600',
@@ -218,7 +220,7 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 22,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: BORDER,
   },
   input: {
     flex: 1,
@@ -228,17 +230,10 @@ const styles = StyleSheet.create({
     color: TEXT,
     letterSpacing: 1.5,
   },
-
-  // Button
   btn: {
-    backgroundColor: TEXT,
-    borderRadius: 9999,
     height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  btnDisabled: {
-    backgroundColor: '#CCCCCC',
   },
   btnText: {
     fontSize: 16,
@@ -246,11 +241,6 @@ const styles = StyleSheet.create({
     color: WHITE,
     letterSpacing: 0.2,
   },
-  btnTextDisabled: {
-    color: '#888',
-  },
-
-  // Legal
   legal: {
     fontSize: 11,
     color: MUTED,
@@ -258,7 +248,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   legalLink: {
-    color: TEXT,
+    color: Ping.purpleDim,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },

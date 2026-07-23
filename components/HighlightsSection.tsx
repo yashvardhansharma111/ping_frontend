@@ -242,13 +242,12 @@ function makeHsStyles(isDark: boolean) {
   const tint  = isDark ? Ping.purpleLight : Ping.purple;
   return StyleSheet.create({
     root: { gap: Spacing.sm },
-    sectionLabel: { ...Typography.caption, color: muted, textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: Spacing.lg },
+    sectionLabel: { ...Typography.caption, color: muted, textTransform: 'uppercase', letterSpacing: 0.6 },
     loadingRow: { height: 100, justifyContent: 'center', alignItems: 'center' },
     suggestBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Spacing.sm,
-      marginHorizontal: Spacing.lg,
       padding: 10,
       backgroundColor: 'rgba(124,58,237,0.08)',
       borderRadius: Radius.md,
@@ -261,7 +260,7 @@ function makeHsStyles(isDark: boolean) {
       alignItems: 'center', justifyContent: 'center',
     },
     suggestText: { ...Typography.caption, color: tint, flex: 1 },
-    row: { paddingHorizontal: Spacing.lg, gap: 14, paddingVertical: 4 },
+    row: { gap: 14, paddingVertical: 4 },
     circleWrap: { alignItems: 'center', gap: 6, width: CIRCLE_SIZE + 8 },
     circleOuter: {
       width: CIRCLE_SIZE + CIRCLE_BORDER * 2,

@@ -35,6 +35,8 @@ import ActivityDetailSheet from '@/components/ActivityDetailSheet';
 import CreatePingModal from '@/components/CreatePingModal';
 import SuccessToast from '@/components/SuccessToast';
 import PingDropAnimation from '@/components/PingDropAnimation';
+import PlacePoiMarker from '@/components/PlacePoiMarker';
+import { fetchMapPois, type MapPoi } from '@/lib/placesApi';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const POPUP_W = 290;   // max width of popup card
@@ -43,30 +45,31 @@ const PIN_VISUAL_H = 75; // approx height of pin marker (50 head + 16 tip + 5 sh
 // ── Type config (matches PingMarker) ─────────────────────────────────────────
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 const TYPE_CFG: Record<string, { icon: MCIName; color: string; label: string }> = {
-  sport:   { icon: 'dumbbell',           color: '#EF4444', label: 'Sport' },
-  food:    { icon: 'food-fork-drink',    color: '#F97316', label: 'Food' },
-  music:   { icon: 'music',             color: '#8B5CF6', label: 'Music' },
-  study:   { icon: 'book-open-variant', color: '#3B82F6', label: 'Study' },
-  outdoor: { icon: 'walk',              color: '#10B981', label: 'Outdoor' },
-  gaming:  { icon: 'gamepad-variant',   color: '#EC4899', label: 'Gaming' },
-  meetup:  { icon: 'account-group',     color: '#7C3AED', label: 'Meetup' },
-  default: { icon: 'map-marker',        color: '#6B7280', label: 'Ping' },
+  sport:   { icon: 'dumbbell',           color: '#6545D9', label: 'Sport' },
+  food:    { icon: 'food-fork-drink',    color: '#8F63F4', label: 'Food' },
+  music:   { icon: 'music',             color: '#BB92FF', label: 'Music' },
+  study:   { icon: 'book-open-variant', color: '#7B5CFF', label: 'Study' },
+  outdoor: { icon: 'walk',              color: '#9B7AFF', label: 'Outdoor' },
+  gaming:  { icon: 'gamepad-variant',   color: '#C8A8FF', label: 'Gaming' },
+  meetup:  { icon: 'account-group',     color: '#6545D9', label: 'Meetup' },
+  default: { icon: 'map-marker',        color: '#8F63F4', label: 'Ping' },
 };
 
 // ── Filter chips ──────────────────────────────────────────────────────────────
 const FILTER_TYPES: { key: string; label: string; icon: MCIName; color: string }[] = [
-  { key: '',        label: 'All',     icon: 'view-grid',          color: '#A78BFA' },
-  { key: 'sport',   label: 'Sport',   icon: 'dumbbell',           color: '#EF4444' },
-  { key: 'food',    label: 'Food',    icon: 'food-fork-drink',    color: '#F97316' },
-  { key: 'music',   label: 'Music',   icon: 'music-note',         color: '#8B5CF6' },
-  { key: 'study',   label: 'Study',   icon: 'book-open-variant',  color: '#3B82F6' },
-  { key: 'outdoor', label: 'Outdoor', icon: 'hiking',             color: '#10B981' },
-  { key: 'gaming',  label: 'Gaming',  icon: 'gamepad-variant',    color: '#EC4899' },
-  { key: 'meetup',  label: 'Meetup',  icon: 'account-group',      color: '#7C3AED' },
+  { key: '',        label: 'All',     icon: 'view-grid',          color: '#BB92FF' },
+  { key: 'sport',   label: 'Sport',   icon: 'dumbbell',           color: '#6545D9' },
+  { key: 'food',    label: 'Food',    icon: 'food-fork-drink',    color: '#8F63F4' },
+  { key: 'music',   label: 'Music',   icon: 'music-note',         color: '#BB92FF' },
+  { key: 'study',   label: 'Study',   icon: 'book-open-variant',  color: '#7B5CFF' },
+  { key: 'outdoor', label: 'Outdoor', icon: 'hiking',             color: '#9B7AFF' },
+  { key: 'gaming',  label: 'Gaming',  icon: 'gamepad-variant',    color: '#C8A8FF' },
+  { key: 'meetup',  label: 'Meetup',  icon: 'account-group',      color: '#6545D9' },
 ];
 
 // ── Advanced filter options ───────────────────────────────────────────────────
 const DISTANCE_OPTIONS: { label: string; value: number }[] = [
+  { label: 'Any',   value: 0 },
   { label: '500 m', value: 500 },
   { label: '1 km',  value: 1000 },
   { label: '2 km',  value: 2000 },
@@ -74,12 +77,12 @@ const DISTANCE_OPTIONS: { label: string; value: number }[] = [
 ];
 
 const VIBE_FILTER: { key: string; icon: MCIName; label: string; color: string }[] = [
-  { key: 'cozy',       icon: 'coffee-outline',  label: 'Cozy',    color: '#D97706' },
-  { key: 'fun',        icon: 'party-popper',    label: 'Fun',     color: '#7C3AED' },
-  { key: 'exciting',   icon: 'lightning-bolt',  label: 'Exciting',color: '#F59E0B' },
-  { key: 'chill',      icon: 'leaf',            label: 'Chill',   color: '#10B981' },
-  { key: 'networking', icon: 'handshake',       label: 'Network', color: '#3B82F6' },
-  { key: 'fitness',    icon: 'arm-flex',        label: 'Fitness', color: '#22C55E' },
+  { key: 'cozy',       icon: 'coffee-outline',  label: 'Cozy',    color: '#C8A8FF' },
+  { key: 'fun',        icon: 'party-popper',    label: 'Fun',     color: '#8F63F4' },
+  { key: 'exciting',   icon: 'lightning-bolt',  label: 'Exciting',color: '#7B5CFF' },
+  { key: 'chill',      icon: 'leaf',            label: 'Chill',   color: '#BB92FF' },
+  { key: 'networking', icon: 'handshake',       label: 'Network', color: '#6545D9' },
+  { key: 'fitness',    icon: 'arm-flex',        label: 'Fitness', color: '#9B7AFF' },
 ];
 
 const TIME_OPTIONS: { key: string; label: string }[] = [
@@ -132,6 +135,7 @@ function PopupCard({
 
   const creatorName = activity.creator?.displayName ?? 'Someone';
   const creatorAvatar = activity.creator?.avatarUrl;
+  const bannerUri = activity.imageUrl || creatorAvatar || null;
 
   return (
     <View style={pc.wrap}>
@@ -139,8 +143,8 @@ function PopupCard({
 
         {/* ── Banner ── */}
         <View style={pc.banner}>
-          {creatorAvatar ? (
-            <Image source={{ uri: creatorAvatar }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          {bannerUri ? (
+            <Image source={{ uri: bannerUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
             // Gradient-style fallback: type color tinted background + decorative icon
             <>
@@ -178,6 +182,12 @@ function PopupCard({
             <Text style={[pc.timeBadgeText, isLive && pc.timeBadgeTextLive]}>{timeLabel}</Text>
           </View>
 
+          {/* Type pill — bottom left */}
+          <View style={[pc.typePill, { backgroundColor: `${cfg.color}EE` }]}>
+            <MaterialCommunityIcons name={cfg.icon} size={11} color="#FFF" />
+            <Text style={pc.typePillText}>{cfg.label}</Text>
+          </View>
+
           {/* Spots count — bottom right over scrim */}
           <View style={pc.spotsBadge}>
             <Ionicons name="people" size={10} color="rgba(255,255,255,0.9)" />
@@ -200,13 +210,8 @@ function PopupCard({
             </View>
           )}
 
-          {/* Stats row — type • duration • going */}
+          {/* Stats row */}
           <View style={pc.statsRow}>
-            <View style={pc.statItem}>
-              <MaterialCommunityIcons name={cfg.icon} size={11} color={cfg.color} />
-              <Text style={[pc.statText, { color: cfg.color }]}>{cfg.label}</Text>
-            </View>
-            <View style={pc.statSep} />
             <View style={pc.statItem}>
               <Ionicons name="time-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
               <Text style={pc.statText}>{durationLabel}</Text>
@@ -216,6 +221,14 @@ function PopupCard({
               <Ionicons name="people-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
               <Text style={pc.statText}>{joined} going</Text>
             </View>
+            {activity.vibe ? (
+              <>
+                <View style={pc.statSep} />
+                <View style={pc.statItem}>
+                  <Text style={[pc.statText, { color: cfg.color, textTransform: 'capitalize' }]}>{activity.vibe}</Text>
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
 
@@ -234,9 +247,10 @@ function PopupCard({
             <Text style={pc.creatorName} numberOfLines={1}>{creatorName}</Text>
           </View>
 
-          {/* White pill with dark text — mirrors "Invest Now" from the design */}
-          <TouchableOpacity style={pc.joinBtn} onPress={onOpen} activeOpacity={0.85}>
-            <Text style={pc.joinBtnText}>Join ping</Text>
+          {/* White pill CTA */}
+          <TouchableOpacity style={[pc.joinBtn, { backgroundColor: cfg.color }]} onPress={onOpen} activeOpacity={0.85}>
+            <Text style={[pc.joinBtnText, { color: '#FFF' }]}>View ping</Text>
+            <Ionicons name="chevron-forward" size={14} color="#FFF" />
           </TouchableOpacity>
         </View>
 
@@ -332,6 +346,22 @@ function makePcStyles(isDark: boolean) {
       letterSpacing: 0.2,
     },
     timeBadgeTextLive: { color: '#FCA5A5' },
+    typePill: {
+      position: 'absolute',
+      bottom: 10,
+      left: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    typePillText: {
+      color: '#FFF',
+      fontSize: 10.5,
+      fontWeight: '700',
+    },
     spotsBadge: {
       position: 'absolute',
       bottom: 10,
@@ -432,17 +462,20 @@ function makePcStyles(isDark: boolean) {
       color: isDark ? '#9CA3AF' : '#6B6080',
       flex: 1,
     },
-    // White pill with dark text — "Invest Now" treatment
+    // Colored CTA pill
     joinBtn: {
       backgroundColor: isDark ? '#FFFFFF' : '#1A1730',
       borderRadius: 20,
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
       paddingVertical: 9,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
     },
     joinBtnText: {
-      color: isDark ? '#1A1730' : '#FFFFFF',
-      fontSize: 12,
+      fontSize: 12.5,
       fontWeight: '800',
+      color: isDark ? '#1A1730' : '#FFFFFF',
       letterSpacing: 0.1,
     },
 
@@ -554,7 +587,7 @@ function UserResultCard({ user, onPress }: { user: User; onPress: () => void }) 
         <View style={so.userNameRow}>
           <Text style={so.userName} numberOfLines={1}>{user.displayName ?? 'User'}</Text>
           {user.trustRate !== undefined && user.trustRate >= 80 && (
-            <Ionicons name="shield-checkmark" size={13} color="#A78BFA" />
+            <Ionicons name="shield-checkmark" size={13} color="#BB92FF" />
           )}
         </View>
         {user.username ? <Text style={so.userHandle}>@{user.username}</Text> : null}
@@ -745,18 +778,18 @@ function makeSoStyles(isDark: boolean) {
       flexDirection: 'row', alignItems: 'center',
       paddingHorizontal: Spacing.md, paddingBottom: 12, gap: 10,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? 'rgba(167,139,250,0.15)' : 'rgba(124,58,237,0.1)',
+      borderBottomColor: isDark ? 'rgba(187,146,255,0.15)' : 'rgba(143,99,244,0.1)',
     },
     backBtn: {
       width: 36, height: 36, borderRadius: 18,
       alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(167,139,250,0.12)',
+      backgroundColor: 'rgba(187,146,255,0.12)',
     },
     inputWrap: {
       flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
       backgroundColor: isDark ? '#13132A' : '#F8F5FF',
       borderRadius: Radius.full,
-      borderWidth: 1, borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.1)',
+      borderWidth: 1, borderColor: isDark ? 'rgba(187,146,255,0.2)' : 'rgba(143,99,244,0.1)',
       paddingHorizontal: 14, height: 44,
     },
     input: { flex: 1, color: isDark ? '#F1F0FF' : '#1A1730', fontSize: 15, fontWeight: '500' },
@@ -768,8 +801,8 @@ function makeSoStyles(isDark: boolean) {
       flexDirection: 'row', alignItems: 'center', gap: 6,
       paddingHorizontal: 16, paddingVertical: 8,
       borderRadius: Radius.full,
-      backgroundColor: 'rgba(167,139,250,0.08)',
-      borderWidth: 1, borderColor: 'rgba(167,139,250,0.12)',
+      backgroundColor: 'rgba(187,146,255,0.08)',
+      borderWidth: 1, borderColor: 'rgba(187,146,255,0.12)',
     },
     tabActive: {
       backgroundColor: `${Ping.purple}22`,
@@ -781,7 +814,7 @@ function makeSoStyles(isDark: boolean) {
       flexDirection: 'row', alignItems: 'center', gap: 12,
       paddingHorizontal: Spacing.lg, paddingVertical: 12,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? 'rgba(167,139,250,0.08)' : 'rgba(124,58,237,0.06)',
+      borderBottomColor: isDark ? 'rgba(187,146,255,0.08)' : 'rgba(143,99,244,0.06)',
     },
     userAvatarWrap: { position: 'relative' },
     userAvatar: { width: 48, height: 48, borderRadius: 24 },
@@ -802,8 +835,8 @@ function makeSoStyles(isDark: boolean) {
     connectBtn: {
       width: 34, height: 34, borderRadius: 17,
       alignItems: 'center', justifyContent: 'center',
-      backgroundColor: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(124,58,237,0.08)',
-      borderWidth: 1, borderColor: isDark ? 'rgba(167,139,250,0.3)' : 'rgba(124,58,237,0.2)',
+      backgroundColor: isDark ? 'rgba(187,146,255,0.12)' : 'rgba(143,99,244,0.08)',
+      borderWidth: 1, borderColor: isDark ? 'rgba(187,146,255,0.3)' : 'rgba(143,99,244,0.2)',
     },
     connectBtnSent: {
       backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)',
@@ -865,7 +898,14 @@ export default function MapScreen() {
   const [distanceFilter, setDistanceFilter] = useState<number>(0);
   const [timeFilter, setTimeFilter] = useState<string>('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  // Draft values while the sheet is open — applied on "Show results"
+  const [draftDistance, setDraftDistance] = useState(0);
+  const [draftVibe, setDraftVibe] = useState('');
+  const [draftTime, setDraftTime] = useState('');
+  const distanceFilterRef = useRef(0);
   const [myActivePing, setMyActivePing] = useState<Activity | null>(null);
+  const [mapPois, setMapPois] = useState<MapPoi[]>([]);
+  const [selectedPoi, setSelectedPoi] = useState<MapPoi | null>(null);
   const { user } = useAuthStore();
   const colorScheme = useColorScheme() ?? 'dark';
   const isDark = colorScheme === 'dark';
@@ -927,14 +967,13 @@ export default function MapScreen() {
   async function loadNearby(silent = false) {
     const lat = coords.latitude;
     const lng = coords.longitude;
-    console.log(`[Map] loadNearby  lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}  silent=${silent}`);
+    const radius = distanceFilterRef.current || undefined;
+    console.log(`[Map] loadNearby  lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}  radius=${radius ?? 'default'}  silent=${silent}`);
     try {
       if (!silent) setRefreshing(true);
       const [res] = await Promise.all([
-        activitiesApi.nearby(lat, lng, distanceFilter || undefined),
-        // adsApi.feed(lat, lng).catch(() => ({ ads: [] as Ad[] })),
+        activitiesApi.nearby(lat, lng, radius),
       ]);
-      // setAds(adsRes.ads ?? []);
       const fresh = res.activities ?? [];
 
       console.log(`[Map] API OK — ${fresh.length} activities`);
@@ -979,6 +1018,36 @@ export default function MapScreen() {
     } finally {
       if (!silent) setRefreshing(false);
     }
+  }
+
+  function openFilterPanel() {
+    setDraftDistance(distanceFilter);
+    setDraftVibe(vibeFilter);
+    setDraftTime(timeFilter);
+    setShowFilterPanel(true);
+  }
+
+  function applyFilters() {
+    const distanceChanged = draftDistance !== distanceFilter;
+    distanceFilterRef.current = draftDistance;
+    setDistanceFilter(draftDistance);
+    setVibeFilter(draftVibe);
+    setTimeFilter(draftTime);
+    setShowFilterPanel(false);
+    if (distanceChanged) loadNearby(true);
+  }
+
+  function clearAllFilters() {
+    distanceFilterRef.current = 0;
+    setDistanceFilter(0);
+    setVibeFilter('');
+    setTimeFilter('');
+    setTypeFilter('');
+    setDraftDistance(0);
+    setDraftVibe('');
+    setDraftTime('');
+    setShowFilterPanel(false);
+    loadNearby(true);
   }
 
   // Resolve pin screen coords and animate popup in/out
@@ -1028,6 +1097,10 @@ export default function MapScreen() {
     }
     loadNearby();
     loadMyActivePing();
+    // Load nearby cafés / restaurants so food spots show (not only hospitals from basemap)
+    fetchMapPois(coords.latitude, coords.longitude)
+      .then((pois) => setMapPois(pois))
+      .catch(() => setMapPois([]));
     // Load nearby events for the banner (non-blocking, best-effort)
     eventsApi.list({ lat: coords.latitude, lng: coords.longitude, radius: 5000 })
       .then((data) => setNearbyEvents(data.slice(0, 8)))
@@ -1042,16 +1115,26 @@ export default function MapScreen() {
   const filteredActivities = activities.filter((a) => {
     if (typeFilter && a.type !== typeFilter) return false;
     if (vibeFilter && a.vibe !== vibeFilter) return false;
-    if (timeFilter === 'now') return new Date(a.startsAt) <= new Date();
-    if (timeFilter === 'today') {
-      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0);
-      return new Date(a.expiresAt) < tomorrow;
+    const now = new Date();
+    if (timeFilter === 'now') {
+      return new Date(a.startsAt) <= now && new Date(a.expiresAt) > now;
     }
-    if (timeFilter === 'later') return new Date(a.startsAt) > new Date();
+    if (timeFilter === 'today') {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const end = new Date(); end.setHours(23, 59, 59, 999);
+      const startsAt = new Date(a.startsAt);
+      return startsAt >= start && startsAt <= end;
+    }
+    if (timeFilter === 'later') {
+      return new Date(a.startsAt) > now;
+    }
     return true;
   });
 
   const activeFilterCount = (vibeFilter ? 1 : 0) + (distanceFilter ? 1 : 0) + (timeFilter ? 1 : 0);
+  const distanceLabel = DISTANCE_OPTIONS.find((d) => d.value === distanceFilter)?.label;
+  const vibeLabel = VIBE_FILTER.find((v) => v.key === vibeFilter)?.label;
+  const timeLabel = TIME_OPTIONS.find((t) => t.key === timeFilter)?.label;
 
   // Animate sheet in when a new activity is selected
   useEffect(() => {
@@ -1074,6 +1157,8 @@ export default function MapScreen() {
   function clearSelection() {
     setSelected(null);
     setSheetActivity(null);
+    setSelectedPoi(null);
+    setShowFilterPanel(false);
     prevSheetIdRef.current = null;
     // setSelectedAd(null);
   }
@@ -1092,6 +1177,9 @@ export default function MapScreen() {
     sheetExpandedRef.current = true;
     Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
   }
+
+  // Lock map while popup card or detail sheet is open
+  const mapLocked = !!(selected || sheetActivity);
 
   const sheetPanResponder = useRef(
     PanResponder.create({
@@ -1128,7 +1216,11 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         mapStyle={STYLE_URL}
-        onPress={() => { if (suppressMapTapRef.current) return; console.log('[Map] background tapped → clearSelection'); clearSelection(); }}
+        onPress={() => {
+          if (mapLocked || suppressMapTapRef.current) return;
+          console.log('[Map] background tapped → clearSelection');
+          clearSelection();
+        }}
         onDidFinishLoadingMap={() => {
           mapReadyRef.current = true;
           if (granted && !locLoading) {
@@ -1142,6 +1234,8 @@ export default function MapScreen() {
             });
           }
         }}
+        dragPan={!mapLocked}
+        touchZoom={!mapLocked}
         touchRotate={false}
         touchPitch={false}
         compass={false}
@@ -1228,6 +1322,28 @@ export default function MapScreen() {
           );
         })}
 
+        {/* Café / restaurant POIs — highlighted so food spots aren't buried under hospital-only basemap icons */}
+        {mapPois.map((poi) => (
+          <Marker
+            key={`poi-${poi.id}`}
+            lngLat={[poi.lng, poi.lat]}
+            anchor="bottom"
+            onPress={() => {
+              suppressMapTapRef.current = true;
+              setTimeout(() => { suppressMapTapRef.current = false; }, 200);
+              setSelected(null);
+              setSheetActivity(null);
+              setSelectedPoi((prev) => prev?.id === poi.id ? null : poi);
+            }}
+          >
+            <PlacePoiMarker
+              emoji={poi.emoji}
+              kind={poi.kind}
+              selected={selectedPoi?.id === poi.id}
+            />
+          </Marker>
+        ))}
+
         {/* Micro Ad markers — disabled */}
         {/* {ads.map((ad) => {
           const aLat = ad.location?.coordinates?.[1];
@@ -1253,6 +1369,11 @@ export default function MapScreen() {
         })} */}
       </MapLibreMap>
 
+      {/* Catch-all touch shield — map stays visible but not interactive under cards */}
+      {mapLocked ? (
+        <View style={styles.mapTouchShield} pointerEvents="auto" />
+      ) : null}
+
       {/* ── Popup card — hidden when detail sheet is open so it never overlaps ── */}
       {selected && popupPos && !sheetActivity && (
         <Animated.View
@@ -1272,10 +1393,16 @@ export default function MapScreen() {
         >
           <PopupCard
             activity={selected}
-            onOpen={() => {
+            onOpen={async () => {
+              const id = selected._id;
               setSheetActivity(selected);
-              // Clear selected so the popup disappears and the map stays interactive
               setSelected(null);
+              try {
+                const r = await activitiesApi.get(id);
+                setSheetActivity(r.activity);
+              } catch {
+                // keep the lightweight activity we already have
+              }
             }}
             onClose={clearSelection}
           />
@@ -1330,47 +1457,87 @@ export default function MapScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
+          <TouchableOpacity
+            style={[styles.filterChip, (activeFilterCount > 0 || showFilterPanel) && styles.filterChipActiveExtra]}
+            onPress={openFilterPanel}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="options-outline" size={14} color={activeFilterCount > 0 ? Ping.purple : (isDark ? '#9CA3AF' : '#6B6080')} />
+            <Text style={[styles.filterChipText, activeFilterCount > 0 && { color: isDark ? Ping.purpleLight : Ping.purple }]}>
+              Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+            </Text>
+          </TouchableOpacity>
+
           {FILTER_TYPES.map(({ key, label, icon, color }) => {
             const active = typeFilter === key;
             return (
               <TouchableOpacity
-                key={key}
+                key={key || 'all'}
                 style={[
                   styles.filterChip,
-                  active && { backgroundColor: `${color}22`, borderColor: color },
+                  active && {
+                    backgroundColor: isDark ? `${color}28` : `${color}18`,
+                    borderColor: color,
+                  },
                 ]}
                 onPress={() => setTypeFilter(key)}
                 activeOpacity={0.8}
               >
                 <MaterialCommunityIcons
                   name={icon}
-                  size={14}
-                  color={active ? color : '#6B7280'}
+                  size={13}
+                  color={active ? color : (isDark ? '#A8A4C0' : '#5C5670')}
                 />
-                <Text style={[styles.filterChipText, active && { color }]}>
+                <Text style={[styles.filterChipText, active && { color, fontWeight: '700' }]}>
                   {label}
                 </Text>
               </TouchableOpacity>
             );
           })}
-
-          {/* More filters button */}
-          <TouchableOpacity
-            style={[styles.filterChip, (activeFilterCount > 0 || showFilterPanel) && styles.filterChipActiveExtra]}
-            onPress={() => setShowFilterPanel(v => !v)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="options-outline" size={14} color={activeFilterCount > 0 ? Ping.purpleLight : '#6B7280'} />
-            <Text style={[styles.filterChipText, activeFilterCount > 0 && { color: Ping.purpleLight }]}>
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </Text>
-          </TouchableOpacity>
         </ScrollView>
+
+        {activeFilterCount > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.activeFilterScroll}
+          >
+            {distanceFilter ? (
+              <TouchableOpacity
+                style={styles.activePill}
+                onPress={() => {
+                  distanceFilterRef.current = 0;
+                  setDistanceFilter(0);
+                  loadNearby(true);
+                }}
+              >
+                <Ionicons name="navigate-outline" size={12} color={Ping.purple} />
+                <Text style={styles.activePillText}>{distanceLabel}</Text>
+                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
+              </TouchableOpacity>
+            ) : null}
+            {vibeFilter ? (
+              <TouchableOpacity style={styles.activePill} onPress={() => setVibeFilter('')}>
+                <Text style={styles.activePillText}>{vibeLabel}</Text>
+                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
+              </TouchableOpacity>
+            ) : null}
+            {timeFilter ? (
+              <TouchableOpacity style={styles.activePill} onPress={() => setTimeFilter('')}>
+                <Text style={styles.activePillText}>{timeLabel}</Text>
+                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.activePillClear} onPress={clearAllFilters}>
+              <Text style={styles.activePillClearText}>Clear</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : null}
       </View>
 
       {/* Events banner — horizontal pill strip below filter chips */}
       {nearbyEvents.length > 0 && (
-        <View style={[styles.eventsBannerRow, { top: Platform.OS === 'ios' ? 138 : 120 }]} pointerEvents="box-none">
+        <View style={[styles.eventsBannerRow, { top: Platform.OS === 'ios' ? (activeFilterCount > 0 ? 178 : 138) : (activeFilterCount > 0 ? 160 : 120) }]} pointerEvents="box-none">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1385,7 +1552,7 @@ export default function MapScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.eventsPillEmoji}>
-                  {ev.category === 'event' ? '🎟️' : '🏷️'}
+                  {ev.category === 'event' ? '🎟️' : '☕'}
                 </Text>
                 <Text style={styles.eventsPillText} numberOfLines={1}>
                   {ev.title}
@@ -1396,73 +1563,111 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Advanced filter panel */}
+      {/* Advanced filter panel — floating card */}
       {showFilterPanel && (
-        <View style={[styles.filterPanel, { bottom: insets.bottom + 155 }]}>
-          <View style={styles.filterPanelHeader}>
-            <Text style={styles.filterPanelTitle}>Filters</Text>
-            <TouchableOpacity onPress={() => { setDistanceFilter(0); setVibeFilter(''); setTimeFilter(''); }} hitSlop={10}>
-              <Text style={styles.filterPanelClear}>Clear all</Text>
+        <>
+          <TouchableOpacity
+            style={styles.filterBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowFilterPanel(false)}
+          />
+          <View style={[styles.filterPanel, { bottom: insets.bottom + 155 }]}>
+            <View style={styles.filterPanelHeader}>
+              <Text style={styles.filterPanelTitle}>Filters</Text>
+              <View style={styles.filterPanelHeaderActions}>
+                <TouchableOpacity onPress={clearAllFilters} hitSlop={10}>
+                  <Text style={styles.filterPanelClear}>Reset</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.filterCloseBtn}
+                  onPress={() => setShowFilterPanel(false)}
+                  hitSlop={10}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="close" size={16} color={isDark ? '#EBD8FF' : '#6B6080'} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={styles.filterPanelLabel}>Distance</Text>
+            <View style={styles.filterPanelRow}>
+              {DISTANCE_OPTIONS.map((d) => {
+                const active = draftDistance === d.value;
+                return (
+                  <TouchableOpacity
+                    key={d.value}
+                    style={[styles.fpChip, active && styles.fpChipActive]}
+                    onPress={() => setDraftDistance(d.value)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.fpChipText, active && styles.fpChipTextActive]}>{d.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterPanelLabel}>Vibe</Text>
+            <View style={styles.filterPanelRow}>
+              {VIBE_FILTER.map((v) => {
+                const active = draftVibe === v.key;
+                return (
+                  <TouchableOpacity
+                    key={v.key}
+                    style={[styles.fpChip, active && { backgroundColor: `${v.color}22`, borderColor: v.color }]}
+                    onPress={() => setDraftVibe(active ? '' : v.key)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name={v.icon} size={13} color={active ? v.color : (isDark ? '#6B6B9A' : '#8B8499')} />
+                    <Text style={[styles.fpChipText, active && { color: v.color, fontWeight: '700' }]}>{v.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterPanelLabel}>When</Text>
+            <View style={styles.filterPanelRow}>
+              {TIME_OPTIONS.map((t) => {
+                const active = draftTime === t.key;
+                return (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[styles.fpChip, active && styles.fpChipActive]}
+                    onPress={() => setDraftTime(active ? '' : t.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.fpChipText, active && styles.fpChipTextActive]}>{t.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.filterDoneBtn}
+              onPress={applyFilters}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.filterDoneBtnText}>Show results</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Distance */}
-          <Text style={styles.filterPanelLabel}>Distance</Text>
-          <View style={styles.filterPanelRow}>
-            {DISTANCE_OPTIONS.map((d) => {
-              const active = distanceFilter === d.value;
-              return (
-                <TouchableOpacity
-                  key={d.value}
-                  style={[styles.fpChip, active && styles.fpChipActive]}
-                  onPress={() => { setDistanceFilter(active ? 0 : d.value); loadNearby(true); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.fpChipText, active && styles.fpChipTextActive]}>{d.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Vibe */}
-          <Text style={styles.filterPanelLabel}>Vibe</Text>
-          <View style={styles.filterPanelRow}>
-            {VIBE_FILTER.map((v) => {
-              const active = vibeFilter === v.key;
-              return (
-                <TouchableOpacity
-                  key={v.key}
-                  style={[styles.fpChip, active && { backgroundColor: `${v.color}28`, borderColor: v.color }]}
-                  onPress={() => setVibeFilter(active ? '' : v.key)}
-                  activeOpacity={0.8}
-                >
-                  <MaterialCommunityIcons name={v.icon} size={13} color={active ? v.color : '#6B6B9A'} />
-                  <Text style={[styles.fpChipText, active && { color: v.color, fontWeight: '700' }]}>{v.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Time */}
-          <Text style={styles.filterPanelLabel}>Time</Text>
-          <View style={styles.filterPanelRow}>
-            {TIME_OPTIONS.map((t) => {
-              const active = timeFilter === t.key;
-              return (
-                <TouchableOpacity
-                  key={t.key}
-                  style={[styles.fpChip, active && styles.fpChipActive]}
-                  onPress={() => setTimeFilter(active ? '' : t.key)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.fpChipText, active && styles.fpChipTextActive]}>{t.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+        </>
       )}
 
+
+      {/* Selected café / restaurant label */}
+      {selectedPoi && !sheetActivity && (
+        <View style={[styles.poiChip, { bottom: insets.bottom + 150 }]}>
+          <Text style={styles.poiChipEmoji}>{selectedPoi.emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.poiChipName} numberOfLines={1}>{selectedPoi.name}</Text>
+            <Text style={styles.poiChipKind}>
+              {selectedPoi.kind === 'cafe' ? 'Café' : selectedPoi.kind === 'fast_food' ? 'Fast food' : 'Restaurant'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setSelectedPoi(null)} hitSlop={10}>
+            <Ionicons name="close" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Attribution */}
       <Text style={styles.attribution} pointerEvents="none">
@@ -1531,6 +1736,7 @@ export default function MapScreen() {
             onRefresh={() => loadNearby()}
             onDismiss={dismissSheet}
             onScrolledDown={expandSheet}
+            onActivityUpdate={(act) => setSheetActivity(act)}
           />
         </Animated.View>
       )}
@@ -1554,6 +1760,7 @@ export default function MapScreen() {
             router.push('/verification' as any);
             return;
           }
+          setShowFilterPanel(false);
           setShowCreate(true);
         }}
         activeOpacity={0.85}
@@ -1609,7 +1816,7 @@ export default function MapScreen() {
           {/* Last load */}
           {lastLoad && (
             <View style={styles.debugRow}>
-              <View style={[styles.debugDot, { backgroundColor: '#A78BFA' }]} />
+              <View style={[styles.debugDot, { backgroundColor: '#BB92FF' }]} />
               <Text style={styles.debugLabel}>LAST</Text>
               <Text style={styles.debugVal}>
                 {lastLoad.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -1636,7 +1843,7 @@ export default function MapScreen() {
           style={[styles.debugToggle, { bottom: insets.bottom + 88 }]}
           onPress={() => setShowDebug(true)}
         >
-          <Ionicons name="bug-outline" size={14} color="#A78BFA" />
+          <Ionicons name="bug-outline" size={14} color="#BB92FF" />
         </TouchableOpacity>
       )}
 
@@ -1679,7 +1886,7 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 10,
       borderRadius: Radius.full,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(124,58,237,0.18)',
+      borderColor: isDark ? 'rgba(187,146,255,0.28)' : 'rgba(143,99,244,0.18)',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 7,
@@ -1710,7 +1917,7 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 10,
       borderRadius: Radius.full,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(124,58,237,0.18)',
+      borderColor: isDark ? 'rgba(187,146,255,0.28)' : 'rgba(143,99,244,0.18)',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -1744,7 +1951,7 @@ function makeStyles(isDark: boolean) {
       borderRadius: 21,
       backgroundColor: isDark ? 'rgba(8,8,21,0.88)' : 'rgba(255,255,255,0.95)',
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(124,58,237,0.18)',
+      borderColor: isDark ? 'rgba(187,146,255,0.28)' : 'rgba(143,99,244,0.18)',
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: '#000',
@@ -1769,23 +1976,24 @@ function makeStyles(isDark: boolean) {
     filterChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      gap: 6,
+      paddingHorizontal: 13,
+      paddingVertical: 8,
       borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(8,8,21,0.82)' : 'rgba(255,255,255,0.92)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+      backgroundColor: isDark ? 'rgba(12,12,24,0.88)' : 'rgba(255,255,255,0.94)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.18,
-      shadowRadius: 3,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.28 : 0.08,
+      shadowRadius: 6,
       elevation: 3,
     },
     filterChipText: {
       fontSize: 12,
       fontWeight: '600',
-      color: isDark ? '#9CA3AF' : '#6B6080',
+      color: isDark ? '#A8A4C0' : '#5C5670',
+      letterSpacing: 0.1,
     },
 
     // ── Events banner ─────────────────────────────────────────────────────────
@@ -1808,7 +2016,7 @@ function makeStyles(isDark: boolean) {
       borderRadius: 20,
       backgroundColor: isDark ? 'rgba(12,12,28,0.88)' : 'rgba(255,255,255,0.95)',
       borderWidth: 1,
-      borderColor: 'rgba(167,139,250,0.3)',
+      borderColor: 'rgba(187,146,255,0.3)',
       maxWidth: 180,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
@@ -1841,6 +2049,8 @@ function makeStyles(isDark: boolean) {
       bottom: 0,
       left: 0,
       right: 0,
+      zIndex: 60,
+      elevation: 24,
       paddingHorizontal: Spacing.md,
       paddingTop: 6,
       backgroundColor: '#FFFFFF',
@@ -1852,7 +2062,6 @@ function makeStyles(isDark: boolean) {
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: 0.15,
       shadowRadius: 16,
-      elevation: 20,
       overflow: 'hidden',
     },
     sheetHandleArea: {
@@ -1875,7 +2084,7 @@ function makeStyles(isDark: boolean) {
       borderRadius: 23,
       backgroundColor: isDark ? 'rgba(15,15,36,0.95)' : 'rgba(255,255,255,0.95)',
       borderWidth: 1,
-      borderColor: 'rgba(167,139,250,0.3)',
+      borderColor: 'rgba(187,146,255,0.3)',
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: '#000',
@@ -1883,6 +2092,38 @@ function makeStyles(isDark: boolean) {
       shadowOpacity: 0.4,
       shadowRadius: 10,
       elevation: 8,
+    },
+    poiChip: {
+      position: 'absolute',
+      left: Spacing.lg,
+      right: Spacing.lg,
+      zIndex: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(15,15,36,0.96)' : 'rgba(255,255,255,0.96)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(251,146,60,0.35)' : 'rgba(234,88,12,0.25)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    poiChipEmoji: { fontSize: 22 },
+    poiChipName: {
+      color: isDark ? '#F1F0FF' : '#1C1040',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    poiChipKind: {
+      color: isDark ? '#9490C0' : '#7B6DAA',
+      fontSize: 11,
+      marginTop: 1,
+      fontWeight: '500',
     },
     fab: {
       position: 'absolute',
@@ -1965,9 +2206,9 @@ function makeStyles(isDark: boolean) {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: 'rgba(124,58,237,0.35)',
+      backgroundColor: 'rgba(143,99,244,0.35)',
       borderWidth: 1,
-      borderColor: 'rgba(167,139,250,0.5)',
+      borderColor: 'rgba(187,146,255,0.5)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1988,25 +2229,70 @@ function makeStyles(isDark: boolean) {
 
     // ── Filter panel ──────────────────────────────────────────────────────────
     filterChipActiveExtra: {
-      backgroundColor: 'rgba(124,58,237,0.18)',
-      borderColor: 'rgba(167,139,250,0.5)',
+      backgroundColor: isDark ? 'rgba(143,99,244,0.22)' : 'rgba(143,99,244,0.12)',
+      borderColor: isDark ? 'rgba(187,146,255,0.5)' : 'rgba(143,99,244,0.4)',
+    },
+    activeFilterScroll: {
+      paddingHorizontal: Spacing.md,
+      paddingTop: 8,
+      gap: 6,
+    },
+    activePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingLeft: 10,
+      paddingRight: 8,
+      paddingVertical: 6,
+      borderRadius: Radius.full,
+      backgroundColor: isDark ? 'rgba(18,18,32,0.92)' : 'rgba(255,255,255,0.95)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(187,146,255,0.35)' : 'rgba(143,99,244,0.22)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0.25 : 0.06,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    activePillText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#D4C8FF' : '#6545D9',
+    },
+    activePillClear: {
+      paddingHorizontal: 11,
+      paddingVertical: 6,
+      borderRadius: Radius.full,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+    },
+    activePillClearText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#A8A4C0' : '#6B6080',
+    },
+    filterBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.28)',
+      zIndex: 11,
     },
     filterPanel: {
       position: 'absolute',
       left: 14,
       right: 14,
-      backgroundColor: isDark ? 'rgba(8,8,20,0.97)' : '#FFFFFF',
+      backgroundColor: isDark ? 'rgba(12,12,24,0.97)' : '#FFFFFF',
       borderRadius: 20,
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.18)' : 'rgba(124,58,237,0.12)',
-      padding: 14,
-      gap: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(187,146,255,0.2)' : 'rgba(143,99,244,0.12)',
+      padding: 16,
+      gap: 11,
       zIndex: 12,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: isDark ? 0.5 : 0.1,
-      shadowRadius: 20,
-      elevation: 20,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: isDark ? 0.45 : 0.12,
+      shadowRadius: 22,
+      elevation: 18,
     },
     filterPanelHeader: {
       flexDirection: 'row',
@@ -2014,44 +2300,56 @@ function makeStyles(isDark: boolean) {
       justifyContent: 'space-between',
       marginBottom: 2,
     },
+    filterPanelHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    filterCloseBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     filterPanelTitle: {
-      fontSize: 13,
-      fontWeight: '800',
+      fontSize: 15,
+      fontWeight: '700',
       color: isDark ? '#F1F0FF' : '#1A1730',
-      letterSpacing: 0.5,
+      letterSpacing: -0.2,
     },
     filterPanelClear: {
       fontSize: 12,
-      color: '#9490C0',
+      color: isDark ? '#BB92FF' : Ping.purple,
       fontWeight: '600',
     },
     filterPanelLabel: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: '700',
-      color: isDark ? '#6B6890' : '#6B6080',
-      textTransform: 'uppercase',
-      letterSpacing: 0.7,
+      color: isDark ? '#8B8699' : '#6B6080',
+      letterSpacing: 0.2,
       marginBottom: -2,
     },
     filterPanelRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 7,
+      gap: 8,
     },
     fpChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 5,
       paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.18)' : 'rgba(124,58,237,0.1)',
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F4F8',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(187,146,255,0.14)' : 'rgba(0,0,0,0.06)',
     },
     fpChipActive: {
-      backgroundColor: 'rgba(124,58,237,0.22)',
-      borderColor: Ping.purpleLight,
+      backgroundColor: isDark ? 'rgba(143,99,244,0.22)' : 'rgba(143,99,244,0.1)',
+      borderColor: isDark ? Ping.purpleLight : Ping.purple,
     },
     fpChipText: {
       fontSize: 12,
@@ -2059,7 +2357,20 @@ function makeStyles(isDark: boolean) {
       color: isDark ? '#9490C0' : '#6B6080',
     },
     fpChipTextActive: {
-      color: Ping.purpleLight,
+      color: isDark ? Ping.purpleLight : Ping.purple,
+      fontWeight: '700',
+    },
+    filterDoneBtn: {
+      marginTop: 4,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: Ping.purple,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    filterDoneBtnText: {
+      color: '#FFF',
+      fontSize: 14,
       fontWeight: '700',
     },
 
@@ -2100,7 +2411,7 @@ function makeStyles(isDark: boolean) {
       left: 10,
       backgroundColor: 'rgba(4,4,12,0.93)',
       borderWidth: 1,
-      borderColor: 'rgba(124,58,237,0.4)',
+      borderColor: 'rgba(143,99,244,0.4)',
       borderRadius: 10,
       padding: 10,
       gap: 5,
@@ -2121,7 +2432,7 @@ function makeStyles(isDark: boolean) {
     debugLabel: {
       fontSize: 9,
       fontWeight: '800',
-      color: '#A78BFA',
+      color: '#BB92FF',
       letterSpacing: 0.6,
       width: 32,
     },
@@ -2133,7 +2444,7 @@ function makeStyles(isDark: boolean) {
     },
     debugClose: {
       fontSize: 9,
-      color: 'rgba(167,139,250,0.5)',
+      color: 'rgba(187,146,255,0.5)',
       textAlign: 'right',
       marginTop: 2,
     },
@@ -2145,7 +2456,7 @@ function makeStyles(isDark: boolean) {
       borderRadius: 14,
       backgroundColor: 'rgba(4,4,12,0.85)',
       borderWidth: 1,
-      borderColor: 'rgba(124,58,237,0.35)',
+      borderColor: 'rgba(143,99,244,0.35)',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 99,
@@ -2175,6 +2486,11 @@ function makeStyles(isDark: boolean) {
     },
 
     // ── Popup card overlay ────────────────────────────────────────────────────
+    mapTouchShield: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 40,
+      backgroundColor: 'transparent',
+    },
     popupOverlay: {
       position: 'absolute',
       zIndex: 50,
@@ -2189,7 +2505,7 @@ function makeStyles(isDark: boolean) {
       backgroundColor: isDark ? 'rgba(8,8,20,0.84)' : 'rgba(255,255,255,0.98)',
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.13)' : 'rgba(124,58,237,0.1)',
+      borderColor: isDark ? 'rgba(187,146,255,0.13)' : 'rgba(143,99,244,0.1)',
       paddingTop: 14,
       paddingBottom: 14,
       gap: 12,
@@ -2222,10 +2538,10 @@ function makeStyles(isDark: boolean) {
       justifyContent: 'center',
       gap: 6,
       alignSelf: 'center',
-      backgroundColor: 'rgba(124,58,237,0.25)',
+      backgroundColor: 'rgba(143,99,244,0.25)',
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: 'rgba(167,139,250,0.35)',
+      borderColor: 'rgba(187,146,255,0.35)',
       paddingHorizontal: 20,
       paddingVertical: 8,
       marginHorizontal: 14,
@@ -2233,7 +2549,7 @@ function makeStyles(isDark: boolean) {
     suggestionAddText: {
       fontSize: 13,
       fontWeight: '700',
-      color: isDark ? '#D4C7FF' : '#7C3AED',
+      color: isDark ? '#D4C7FF' : '#6545D9',
     },
   });
 }

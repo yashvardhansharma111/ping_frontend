@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   Share,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,33 +79,44 @@ function ParticipantAvatar({
   participant,
   index,
   onPress,
+  isSelf = false,
 }: {
-  participant: ActivityParticipant & { displayName?: string; username?: string };
+  participant: ActivityParticipant;
   index: number;
   onPress: () => void;
+  isSelf?: boolean;
 }) {
   const name = participant.displayName ?? participant.username ?? null;
   const letter = name ? name[0].toUpperCase() : `${index + 1}`;
   const hasArrived = !!participant.arrivedAt;
   const onWay = !!participant.onMyWayAt && !hasArrived;
-  // Cycle through accent colours so avatars don't all look identical
   const colors = ['#7C3AED', '#F97316', '#22C55E', '#3B82F6', '#EC4899', '#10B981'];
   const bg = colors[index % colors.length];
+  const avatarUrl = participant.avatarUrl;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={av.wrap}>
-      <View style={[av.circle, { backgroundColor: `${bg}44`, borderColor: `${bg}66`, borderWidth: 1.5 }]}>
-        <Text style={[av.letter, { color: bg }]}>{letter}</Text>
+      <View style={av.circleWrap}>
+        <View style={[av.circle, { backgroundColor: `${bg}44`, borderColor: `${bg}66`, borderWidth: 1.5 }]}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={av.avatarImg} />
+          ) : (
+            <Text style={[av.letter, { color: bg }]}>{letter}</Text>
+          )}
+        </View>
         {onWay && <View style={[av.badge, { backgroundColor: Ping.orange }]} />}
         {hasArrived && <View style={[av.badge, { backgroundColor: Ping.green }]} />}
       </View>
-      <Text style={av.name} numberOfLines={1}>{name ?? 'User'}</Text>
+      <Text style={av.name} numberOfLines={1}>
+        {isSelf ? 'You' : (name ?? 'User')}
+      </Text>
     </TouchableOpacity>
   );
 }
 
 const av = StyleSheet.create({
   wrap: { alignItems: 'center', width: 52 },
+  circleWrap: { width: 40, height: 40, marginBottom: 4 },
   circle: {
     width: 40,
     height: 40,
@@ -112,8 +124,9 @@ const av = StyleSheet.create({
     backgroundColor: `${Ping.purple}44`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    overflow: 'hidden',
   },
+  avatarImg: { width: 40, height: 40, borderRadius: 20 },
   letter: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   badge: {
     position: 'absolute',
@@ -133,13 +146,17 @@ interface Props {
   onRefresh: () => void;
   onDismiss: () => void;
   onScrolledDown?: () => void;
+  onActivityUpdate?: (activity: Activity) => void;
 }
 
-export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss, onScrolledDown }: Props) {
+export default function ActivityDetailSheet({ activity: initial, onRefresh, onDismiss, onScrolledDown, onActivityUpdate }: Props) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const router = useRouter();
   const { user } = useAuthStore();
+
+  const [a, setA] = useState(initial);
+  useEffect(() => { setA(initial); }, [initial]);
 
   const myId = user?._id ?? '';
   const isCreator = a.creatorId === myId || a.creator?._id === myId;
@@ -183,6 +200,19 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
       .catch(() => setMutualCount(0));
   }, [a._id]);
 
+  // Always load full activity (populated participants + image) when sheet opens
+  useEffect(() => {
+    let cancelled = false;
+    activitiesApi.get(initial._id)
+      .then((r) => {
+        if (cancelled || !r.activity) return;
+        setA(r.activity);
+        onActivityUpdate?.(r.activity);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [initial._id]);
+
   function chatUrl(roomId: string) {
     const p = new URLSearchParams({ type: a.type });
     if (a.title) p.set('title', a.title);
@@ -201,6 +231,16 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
     try {
       await activitiesApi.join(a._id);
       onRefresh();
+      // Hydrate local sheet so "Joined" UI shows even if parent list is slow
+      try {
+        const fresh = await activitiesApi.get(a._id);
+        if (fresh.activity) {
+          setA(fresh.activity);
+          onActivityUpdate?.(fresh.activity);
+        }
+      } catch {
+        // non-fatal — parent refresh will catch up
+      }
       // Schedule "starts in 15 min" local notification if ping is upcoming
       if (a.startsAt) {
         scheduleStartingNotification(a._id, a.title, new Date(a.startsAt));
@@ -218,6 +258,7 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
       }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'Could not join', text2: e.message });
+    } finally {
       setJoining(false);
     }
   }
@@ -358,6 +399,11 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
       }}
       key={a._id}
     >
+      {/* Cover image */}
+      {a.imageUrl ? (
+        <Image source={{ uri: a.imageUrl }} style={styles.coverImage} resizeMode="cover" />
+      ) : null}
+
       {/* Gradient header strip */}
       <View style={[styles.gradientHeader, { backgroundColor: `${typeCfg.color}18` }]}>
         <View style={[styles.gradientHeaderAccent, { backgroundColor: typeCfg.color }]} />
@@ -507,45 +553,75 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
       )}
 
       {/* Participants */}
-      {count > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>
-              {count} going{a.maxParticipants ? ` · ${a.maxParticipants - count} spots left` : ''}
-            </Text>
-            <View style={styles.tapHint}>
-              <Ionicons name="person-add-outline" size={11} color={Ping.purpleLight} />
-              <Text style={[styles.tapHintText, { color: Ping.purpleLight }]}>tap to connect</Text>
+      {count > 0 && (() => {
+        const others = a.participants.filter((p) => {
+          const uid = typeof p.userId === 'string' ? p.userId : String((p.userId as any)?._id ?? p.userId ?? '');
+          return uid && uid !== myId;
+        });
+        const soloOwner = isCreator && others.length === 0;
+
+        return (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>
+                {soloOwner
+                  ? 'Just you so far'
+                  : `${count} going${a.maxParticipants ? ` · ${Math.max(0, a.maxParticipants - count)} spots left` : ''}`}
+              </Text>
+              {!soloOwner && others.length > 0 && (
+                <View style={styles.tapHint}>
+                  <Ionicons name="person-add-outline" size={11} color={Ping.purpleLight} />
+                  <Text style={[styles.tapHintText, { color: Ping.purpleLight }]}>tap to connect</Text>
+                </View>
+              )}
             </View>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.participantsRow}>
-            {a.participants.slice(0, 12).map((p, i) => {
-              const pUser = p.userId as any;
-              const uid = typeof pUser === 'string' ? pUser : (pUser?._id ?? pUser?.id)?.toString();
-              const isSelf = uid === myId;
-              const alreadySent = uid ? connectSent[uid] : false;
-              return (
-                <ParticipantAvatar
-                  key={uid ?? i}
-                  index={i}
-                  participant={p as any}
-                  onPress={() => {
-                    if (!uid) return;
-                    if (isSelf) { router.push(`/user/${uid}`); return; }
-                    const name = (p as any).displayName ?? (p as any).username ?? 'this person';
-                    setProfileMenu({ userId: uid, name, sent: alreadySent });
-                  }}
-                />
-              );
-            })}
-            {count > 12 && (
-              <View style={[av.circle, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, marginTop: 4 }]}>
-                <Text style={[av.letter, { color: c.textSecondary, fontSize: 12 }]}>+{count - 12}</Text>
+
+            {soloOwner ? (
+              <View style={[styles.soloBox, { backgroundColor: `${typeCfg.color}12`, borderColor: `${typeCfg.color}28` }]}>
+                <Ionicons name="people-outline" size={18} color={typeCfg.color} />
+                <Text style={[styles.soloText, { color: c.textSecondary }]}>
+                  Waiting for others to join. Share this ping to fill it up.
+                </Text>
               </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.participantsRow}>
+                {a.participants.slice(0, 12).map((p, i) => {
+                  const uid = typeof p.userId === 'string'
+                    ? p.userId
+                    : String((p.userId as any)?._id ?? (p.userId as any)?.id ?? '');
+                  const isSelf = !!uid && uid === myId;
+                  const alreadySent = uid ? connectSent[uid] : false;
+                  const name = p.displayName ?? p.username ?? 'this person';
+                  return (
+                    <ParticipantAvatar
+                      key={uid || i}
+                      index={i}
+                      participant={p}
+                      isSelf={isSelf}
+                      onPress={() => {
+                        if (!uid) {
+                          Toast.show({ type: 'error', text1: 'Unavailable', text2: 'Could not open this profile.' });
+                          return;
+                        }
+                        if (isSelf) {
+                          router.push(`/user/${uid}`);
+                          return;
+                        }
+                        setProfileMenu({ userId: uid, name, sent: alreadySent });
+                      }}
+                    />
+                  );
+                })}
+                {count > 12 && (
+                  <View style={[av.circle, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, marginTop: 4 }]}>
+                    <Text style={[av.letter, { color: c.textSecondary, fontSize: 12 }]}>+{count - 12}</Text>
+                  </View>
+                )}
+              </ScrollView>
             )}
-          </ScrollView>
-        </View>
-      )}
+          </View>
+        );
+      })()}
 
       {/* Pre-meetup safety banner — shown when joined and starting within 30 min */}
       {isJoined && !isCreator && a.startsAt && (() => {
@@ -888,7 +964,10 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
                 const uid = profileMenu.userId;
                 setProfileMenu(null);
                 friendsApi.send(uid)
-                  .then(() => setConnectSent((prev) => ({ ...prev, [uid]: true })))
+                  .then(() => {
+                    setConnectSent((prev) => ({ ...prev, [uid]: true }));
+                    Toast.show({ type: 'success', text1: 'Request sent', text2: `Friend request sent to ${profileMenu.name}` });
+                  })
                   .catch((e: any) => Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send request' }));
               }}
             >
@@ -908,6 +987,12 @@ export default function ActivityDetailSheet({ activity: a, onRefresh, onDismiss,
 
 const styles = StyleSheet.create({
   root: { paddingBottom: Spacing.lg, gap: Spacing.md },
+  coverImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.sm,
+  },
   gradientHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1034,6 +1119,16 @@ const styles = StyleSheet.create({
   tapHint: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   tapHintText: { fontSize: 10, fontWeight: '600' },
   participantsRow: { gap: Spacing.sm, paddingVertical: 4 },
+  soloBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  soloText: { ...Typography.bodySm, flex: 1, lineHeight: 18 },
   actionsGrid: { gap: Spacing.sm },
   btnPrimary: {
     flexDirection: 'row',

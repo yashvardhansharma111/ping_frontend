@@ -106,7 +106,7 @@ const del = <T>(path: string, auth = true) => request<T>('DELETE', path, undefin
 // ── Image upload (multipart — bypasses request() which is JSON-only) ──────────
 
 export const uploadApi = {
-  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'photos' | 'misc' = 'misc'): Promise<string> => {
+  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'photos' | 'pings' | 'misc' = 'misc'): Promise<string> => {
     const token = await getAccessToken();
     if (!token) throw new Error('Not authenticated');
 
@@ -177,7 +177,7 @@ export const authApi = {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email' | 'dob' | 'gender' | 'city' | 'institute' | 'hobbies' | 'vibePreferences' | 'favoriteActivities' | 'socialPreference' | 'instagramHandle' | 'photos' | 'occupation' | 'sleepType' | 'spontaneity' | 'foodPersonality' | 'timeRespect' | 'distanceTolerance' | 'availabilityPattern' | 'intentSync' | 'pingPitch' | 'funTruth'>>) =>
+  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email' | 'dob' | 'gender' | 'city' | 'institute' | 'hobbies' | 'vibePreferences' | 'favoriteActivities' | 'socialPreference' | 'instagramHandle' | 'linkedinHandle' | 'spotifyHandle' | 'photos' | 'occupation' | 'sleepType' | 'spontaneity' | 'foodPersonality' | 'timeRespect' | 'distanceTolerance' | 'availabilityPattern' | 'intentSync' | 'pingPitch' | 'funTruth'>>) =>
     patch<{ ok: boolean; user: User }>('/users/me', data),
   updatePrivacy: (data: Partial<{ ghostMode: boolean; locationSharing: boolean }>) =>
     patch<{ ok: boolean; privacy: User['privacy'] }>('/users/me/privacy', data),
@@ -220,6 +220,7 @@ export interface CreateActivityPayload {
   placeName?: string;
   notes?: string;
   vibe?: string;
+  imageUrl?: string;
 }
 
 export const activitiesApi = {
@@ -228,7 +229,10 @@ export const activitiesApi = {
   nearby: async (lat: number, lng: number, radius?: number) => {
     const q = `/activities/nearby?lat=${lat}&lng=${lng}${radius ? `&radius=${radius}` : ''}`;
     const r = await get<{ ok: boolean; activities: any[] }>(q);
-    return { ...r, activities: r.activities.map(normalizeActivity) };
+    const activities = r.activities
+      .map(normalizeActivity)
+      .sort((a, b) => (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY));
+    return { ...r, activities };
   },
   joined: async () => {
     const r = await get<{ ok: boolean; activities: any[] }>('/activities/joined');
@@ -313,6 +317,8 @@ export interface User {
   favoriteActivities?: string[];
   socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
   instagramHandle?: string;
+  linkedinHandle?: string;
+  spotifyHandle?: string;
   photos?: string[];
   occupation?: 'job' | 'student' | 'founder' | 'business' | 'freelancer' | 'exploring' | null;
   sleepType?: 'night_owl' | 'early_bird' | null;
@@ -347,6 +353,9 @@ export interface ActivityParticipant {
   joinedAt: string;
   onMyWayAt?: string | null;
   arrivedAt?: string | null;
+  displayName?: string;
+  username?: string;
+  avatarUrl?: string | null;
 }
 
 export interface Activity {
@@ -354,6 +363,7 @@ export interface Activity {
   title: string;
   type: string;
   description?: string;
+  imageUrl?: string | null;
   placeName?: string;
   notes?: string;
   vibe?: string;
@@ -370,12 +380,34 @@ export interface Activity {
   distance?: number;
 }
 
-// Mongoose populate puts the user object into creatorId; normalize it to creator
+// Mongoose populate puts user objects into creatorId / participants.userId — flatten for the UI
 function normalizeActivity(a: any): Activity {
+  const out: any = { ...a };
+
   if (a.creatorId && typeof a.creatorId === 'object') {
-    return { ...a, creator: a.creatorId, creatorId: a.creatorId._id };
+    out.creator = a.creatorId;
+    out.creatorId = String(a.creatorId._id ?? a.creatorId.id);
   }
-  return a as Activity;
+
+  if (Array.isArray(a.participants)) {
+    out.participants = a.participants.map((p: any) => {
+      if (p?.userId && typeof p.userId === 'object') {
+        return {
+          ...p,
+          userId: String(p.userId._id ?? p.userId.id),
+          displayName: p.userId.displayName,
+          username: p.userId.username,
+          avatarUrl: p.userId.avatarUrl ?? null,
+        };
+      }
+      return {
+        ...p,
+        userId: p?.userId != null ? String(p.userId) : p?.userId,
+      };
+    });
+  }
+
+  return out as Activity;
 }
 
 export interface UserProfile {
@@ -393,6 +425,8 @@ export interface UserProfile {
   favoriteActivities?: string[];
   socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
   instagramHandle?: string;
+  linkedinHandle?: string;
+  spotifyHandle?: string;
   photos?: string[];
   occupation?: 'job' | 'student' | 'founder' | 'business' | 'freelancer' | 'exploring' | null;
   sleepType?: 'night_owl' | 'early_bird' | null;
@@ -441,6 +475,10 @@ export interface ChatRoom {
   participantIds: ChatParticipant[];
   activityId?: string;
   squadId?: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+  ownerId?: string | null;
+  isOwner?: boolean;
   lastMessageAt?: string;
   lastMessagePreview?: string;
   createdAt: string;
@@ -468,6 +506,12 @@ export const chatApi = {
     post<{ ok: boolean; room: ChatRoom }>(`/chat/rooms/activity/${activityId}`),
   openDm: (userId: string) =>
     post<{ ok: boolean; room: ChatRoom }>('/chat/rooms/dm', { userId }),
+  updateRoom: (roomId: string, data: { name?: string; avatarUrl?: string | null }) =>
+    patch<{ ok: boolean; room: ChatRoom }>(`/chat/rooms/${roomId}`, data),
+  addMembers: (roomId: string, userIds: string[]) =>
+    post<{ ok: boolean; room: ChatRoom; added: number }>(`/chat/rooms/${roomId}/members`, { userIds }),
+  removeMember: (roomId: string, userId: string) =>
+    del<{ ok: boolean; room: ChatRoom | null; left?: boolean }>(`/chat/rooms/${roomId}/members/${userId}`),
   listMessages: (roomId: string, before?: string) =>
     get<{ ok: boolean; messages: ChatMessage[] }>(
       `/chat/rooms/${roomId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,

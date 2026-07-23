@@ -5,10 +5,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
-import { Map as MapLibreMap, Camera, type CameraRef, type RegionPayload } from '@maplibre/maplibre-react-native';
+import {
+  Map as MapLibreMap,
+  Camera,
+  type CameraRef,
+  type MapRef,
+} from '@maplibre/maplibre-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Ping, Typography, Spacing, Radius } from '@/constants/theme';
@@ -23,29 +27,50 @@ interface Props {
   onClose: () => void;
 }
 
+function parseCenter(event: any): { lat: number; lng: number } | null {
+  // MapLibre v11: NativeSyntheticEvent<ViewStateChangeEvent>
+  const ne = event?.nativeEvent ?? event;
+  const center = ne?.center;
+  if (Array.isArray(center) && center.length >= 2) {
+    const lng = Number(center[0]);
+    const lat = Number(center[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  // Legacy GeoJSON shape (older maplibre)
+  const coords = event?.geometry?.coordinates ?? ne?.geometry?.coordinates;
+  if (Array.isArray(coords) && coords.length >= 2) {
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  return null;
+}
+
 export default function LocationPickerModal({ visible, initialLat, initialLng, onConfirm, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [center, setCenter] = useState({ lat: initialLat, lng: initialLng });
   const [moving, setMoving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const mapRef = useRef<MapRef>(null);
   const pickerCameraRef = useRef<CameraRef>(null);
-  const autoFlyingRef   = useRef(false);
+  const centerRef = useRef({ lat: initialLat, lng: initialLng });
 
   // Fly to initial coords every time the picker opens
   useEffect(() => {
     if (!visible) return;
-    setCenter({ lat: initialLat, lng: initialLng });
-    autoFlyingRef.current = true;
+    const next = { lat: initialLat, lng: initialLng };
+    centerRef.current = next;
+    setCenter(next);
+    setConfirming(false);
     const t = setTimeout(() => {
       pickerCameraRef.current?.flyTo({
         center: [initialLng, initialLat],
         zoom: 15,
         duration: 500,
       });
-      // Clear the flag after animation + buffer so subsequent user drags aren't ignored
-      setTimeout(() => { autoFlyingRef.current = false; }, 700);
     }, 320);
     return () => clearTimeout(t);
-  }, [visible]);
+  }, [visible, initialLat, initialLng]);
 
   const pulseAnim   = useRef(new Animated.Value(0.8)).current;
   const settledAnim = useRef(new Animated.Value(1)).current;
@@ -69,24 +94,49 @@ export default function LocationPickerModal({ visible, initialLat, initialLng, o
     }).start();
   }, [moving]);
 
+  function updateCenter(next: { lat: number; lng: number }) {
+    centerRef.current = next;
+    setCenter(next);
+  }
+
+  async function handleConfirm() {
+    if (confirming) return;
+    setConfirming(true);
+    try {
+      // Prefer live map center — region event payload can lag or be empty on some builds
+      const live = await mapRef.current?.getCenter?.();
+      if (Array.isArray(live) && live.length >= 2) {
+        const lng = Number(live[0]);
+        const lat = Number(live[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          onConfirm(lat, lng);
+          return;
+        }
+      }
+      onConfirm(centerRef.current.lat, centerRef.current.lng);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   return (
-    <Modal visible={visible} animationType="slide" statusBarTranslucent>
+    <Modal visible={visible} animationType="fade" statusBarTranslucent transparent={false}>
       <View style={styles.root}>
         {/* Map */}
         <MapLibreMap
+          ref={mapRef}
           style={StyleSheet.absoluteFillObject}
           mapStyle={STYLE_URL}
-          onRegionIsChanging={() => {
-            autoFlyingRef.current = false; // user started dragging — their position wins
+          onRegionIsChanging={(e: any) => {
+            // Ignore programmatic camera moves
+            if (e?.nativeEvent?.userInteraction === false) return;
             setMoving(true);
           }}
-          onRegionDidChange={(feature: any) => {
+          onRegionDidChange={(e: any) => {
             setMoving(false);
-            if (autoFlyingRef.current) return; // ignore events from our own flyTo
-            const coords = feature?.geometry?.coordinates;
-            if (Array.isArray(coords) && coords.length >= 2) {
-              setCenter({ lng: coords[0], lat: coords[1] });
-            }
+            if (e?.nativeEvent?.userInteraction === false) return;
+            const next = parseCenter(e);
+            if (next) updateCenter(next);
           }}
           touchRotate={false}
           touchPitch={false}
@@ -104,7 +154,6 @@ export default function LocationPickerModal({ visible, initialLat, initialLng, o
 
         {/* Center pin — fixed at screen center */}
         <View style={styles.pinWrap} pointerEvents="none">
-          {/* Pulsing highlight ring when map is settled */}
           <Animated.View
             style={[
               styles.pulseRing,
@@ -137,8 +186,9 @@ export default function LocationPickerModal({ visible, initialLat, initialLng, o
         {/* Footer */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <TouchableOpacity
-            style={styles.confirmBtn}
-            onPress={() => onConfirm(center.lat, center.lng)}
+            style={[styles.confirmBtn, confirming && { opacity: 0.7 }]}
+            onPress={handleConfirm}
+            disabled={confirming}
             activeOpacity={0.88}
           >
             <Ionicons name="checkmark-circle" size={20} color="#FFF" />
@@ -156,7 +206,6 @@ export default function LocationPickerModal({ visible, initialLat, initialLng, o
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#E8E8E8' },
 
-  // Center pin
   pinWrap: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
@@ -187,7 +236,6 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
 
-  // Header
   header: {
     position: 'absolute',
     top: 0,
@@ -214,7 +262,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Hint
   hintWrap: {
     position: 'absolute',
     bottom: '44%',
@@ -242,7 +289,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Footer
   footer: {
     position: 'absolute',
     bottom: 0,

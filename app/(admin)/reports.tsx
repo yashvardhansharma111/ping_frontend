@@ -12,7 +12,7 @@ import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
 const STATUS_COLOR: Record<string, string> = {
   pending: '#F97316', escalated: '#EF4444',
-  resolved: '#22C55E', dismissed: '#9490C0',
+  resolved: '#22C55E', dismissed: '#6B7280',
 };
 
 const TARGET_ICON: Record<string, string> = {
@@ -29,12 +29,12 @@ type PendingAction = {
 };
 
 function ReportRow({ item, onAction }: { item: AdminReport; onAction: (r: AdminReport) => void }) {
-  const statusColor = STATUS_COLOR[item.status] ?? '#9490C0';
+  const statusColor = STATUS_COLOR[item.status] ?? '#6B7280';
   const icon = (TARGET_ICON[item.targetType] ?? 'alert-circle-outline') as any;
   return (
     <TouchableOpacity style={s.row} onPress={() => onAction(item)} activeOpacity={0.75}>
       <View style={[s.typeIcon, { backgroundColor: `${Ping.purple}1A` }]}>
-        <Ionicons name={icon} size={18} color={Ping.purpleLight} />
+        <Ionicons name={icon} size={18} color={Ping.purple} />
       </View>
       <View style={s.rowBody}>
         <Text style={s.rowType} numberOfLines={1}>
@@ -93,7 +93,7 @@ function ReasonModal({
             value={reason}
             onChangeText={setReason}
             placeholder="Reason…"
-            placeholderTextColor="#5C5A80"
+            placeholderTextColor="#9CA3AF"
             multiline
             maxLength={200}
             autoFocus
@@ -118,20 +118,20 @@ function ReasonModal({
 
 const rm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
-  sheet: { backgroundColor: '#11112A', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
-  title: { ...Typography.h4, color: '#F1F0FF' },
-  sub: { ...Typography.bodySm, color: '#9490C0' },
+  sheet: { backgroundColor: '#FFFFFF', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
+  title: { ...Typography.h4, color: '#111827' },
+  sub: { ...Typography.bodySm, color: '#6B7280' },
   input: {
-    backgroundColor: '#1A1A38', borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.2)', padding: 12, color: '#F1F0FF',
+    backgroundColor: '#F3F4F6', borderRadius: Radius.md, borderWidth: 1,
+    borderColor: '#E5E7EB', padding: 12, color: '#111827',
     ...Typography.body, minHeight: 80, textAlignVertical: 'top',
   },
   btns: { flexDirection: 'row', gap: Spacing.sm },
   cancelBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: Radius.sm,
+    backgroundColor: '#F3F4F6', borderRadius: Radius.sm,
   },
-  cancelText: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600' },
+  cancelText: { ...Typography.bodySm, color: '#6B7280', fontWeight: '600' },
   confirmBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
     backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: Radius.sm,
@@ -186,8 +186,8 @@ function ActionSheet({
                 style={as.btn}
                 onPress={() => act(() => adminApi.dismissReport(report._id), 'Report dismissed')}
               >
-                <Ionicons name="close-circle-outline" size={20} color="#9490C0" />
-                <Text style={[as.btnText, { color: '#9490C0' }]}>Dismiss (no action)</Text>
+                <Ionicons name="close-circle-outline" size={20} color="#6B7280" />
+                <Text style={[as.btnText, { color: '#6B7280' }]}>Dismiss (no action)</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -279,7 +279,7 @@ export default function AdminReports() {
           keyExtractor={r => r._id}
           renderItem={({ item }) => <ReportRow item={item} onAction={setSelected} />}
           ItemSeparatorComponent={() => <View style={s.sep} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(tab, true)} tintColor={Ping.purpleLight} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(tab, true)} tintColor={Ping.purple} />}
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <Ionicons name="checkmark-circle-outline" size={48} color="rgba(34,197,94,0.4)" />
@@ -319,72 +319,74 @@ export default function AdminReports() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080815' },
+  root: { flex: 1, backgroundColor: '#F7F7F8' },
   headerBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(167,139,250,0.12)',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8E8ED',
   },
-  title: { ...Typography.h3, color: '#F1F0FF' },
+  title: { ...Typography.h3, color: '#111827', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
   count: {
     ...Typography.caption, color: '#FFF', fontWeight: '700',
-    backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+    backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
     overflow: 'hidden',
   },
   tabRow: {
-    flexDirection: 'row', paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm, gap: 6,
+    flexDirection: 'row', paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm, gap: 8, backgroundColor: '#FFFFFF',
   },
   tab: {
-    paddingHorizontal: Spacing.sm, paddingVertical: 5, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full,
+    backgroundColor: '#F3F4F6',
   },
-  tabActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-  tabText: { ...Typography.caption, color: '#9490C0', fontWeight: '600' },
+  tabActive: { backgroundColor: '#111827' },
+  tabText: { ...Typography.caption, color: '#6B7280', fontWeight: '600' },
   tabTextActive: { color: '#FFF' },
   row: {
     flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md,
-    paddingHorizontal: Spacing.lg, paddingVertical: 12,
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
   },
   typeIcon: {
     width: 36, height: 36, borderRadius: Radius.sm,
     alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
   rowBody: { flex: 1, gap: 3 },
-  rowType: { ...Typography.bodyMed, color: '#F1F0FF' },
-  rowReason: { ...Typography.caption, color: '#9490C0' },
-  rowTarget: { ...Typography.caption, color: '#5C5A80' },
+  rowType: { ...Typography.bodyMed, color: '#111827', fontWeight: '600' },
+  rowReason: { ...Typography.caption, color: '#6B7280' },
+  rowTarget: { ...Typography.caption, color: '#9CA3AF' },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.sm, alignSelf: 'flex-start' },
-  badgeText: { ...Typography.caption, fontWeight: '700' },
-  sep: { height: 1, backgroundColor: 'rgba(167,139,250,0.07)' },
+  badgeText: { ...Typography.caption, fontWeight: '600' },
+  sep: { height: StyleSheet.hairlineWidth, backgroundColor: '#F0F0F3' },
   emptyWrap: { alignItems: 'center', gap: Spacing.md, paddingTop: 80 },
-  empty: { ...Typography.bodySm, color: '#9490C0', textAlign: 'center' },
+  empty: { ...Typography.bodySm, color: '#9CA3AF', textAlign: 'center' },
 });
 
 const as = StyleSheet.create({
   overlay: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   sheet: {
-    backgroundColor: '#11112A', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    borderTopWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    borderTopWidth: StyleSheet.hairlineWidth, borderColor: '#E8E8ED',
   },
   handle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(167,139,250,0.3)',
+    backgroundColor: '#E5E7EB',
     alignSelf: 'center', marginTop: Spacing.sm,
   },
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 4 },
-  type: { ...Typography.bodyMed, color: '#9490C0', textTransform: 'capitalize' },
-  reason: { ...Typography.bodyMed, color: '#F1F0FF' },
+  type: { ...Typography.bodyMed, color: '#6B7280', textTransform: 'capitalize' },
+  reason: { ...Typography.bodyMed, color: '#111827' },
   actions: { padding: Spacing.lg, gap: Spacing.sm },
   btn: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.12)', backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: Spacing.md, borderRadius: Radius.md,
+    backgroundColor: '#F3F4F6',
   },
   btnText: { ...Typography.bodyMed, fontWeight: '600' },
   cancelBtn: {
     alignItems: 'center', paddingVertical: Spacing.md, marginTop: Spacing.sm,
-    borderRadius: Radius.md, backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: Radius.md, backgroundColor: '#F3F4F6',
   },
-  cancelText: { ...Typography.bodyMed, color: '#9490C0' },
+  cancelText: { ...Typography.bodyMed, color: '#6B7280' },
 });

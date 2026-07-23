@@ -34,7 +34,7 @@ type PendingAction = {
 };
 
 function UserRow({ user, onAction }: { user: AdminUser; onAction: (u: AdminUser) => void }) {
-  const statusColor = STATUS_COLOR[user.status] ?? '#9490C0';
+  const statusColor = STATUS_COLOR[user.status] ?? '#6B7280';
   return (
     <TouchableOpacity style={s.row} onPress={() => onAction(user)} activeOpacity={0.75}>
       <View style={[s.avatar, { backgroundColor: `${Ping.purple}33` }]}>
@@ -90,7 +90,7 @@ function ReasonModal({
             value={reason}
             onChangeText={setReason}
             placeholder="Reason…"
-            placeholderTextColor="#5C5A80"
+            placeholderTextColor="#9CA3AF"
             multiline
             maxLength={200}
             autoFocus
@@ -115,20 +115,20 @@ function ReasonModal({
 
 const rm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
-  sheet: { backgroundColor: '#11112A', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
-  title: { ...Typography.h4, color: '#F1F0FF' },
-  sub: { ...Typography.bodySm, color: '#9490C0' },
+  sheet: { backgroundColor: '#FFFFFF', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
+  title: { ...Typography.h4, color: '#111827' },
+  sub: { ...Typography.bodySm, color: '#6B7280' },
   input: {
-    backgroundColor: '#1A1A38', borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.2)', padding: 12, color: '#F1F0FF',
+    backgroundColor: '#F3F4F6', borderRadius: Radius.md, borderWidth: 1,
+    borderColor: '#E5E7EB', padding: 12, color: '#111827',
     ...Typography.body, minHeight: 80, textAlignVertical: 'top',
   },
   btns: { flexDirection: 'row', gap: Spacing.sm },
   cancelBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: Radius.sm,
+    backgroundColor: '#F3F4F6', borderRadius: Radius.sm,
   },
-  cancelText: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600' },
+  cancelText: { ...Typography.bodySm, color: '#6B7280', fontWeight: '600' },
   confirmBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
     backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: Radius.sm,
@@ -186,16 +186,16 @@ function BanDurationSheet({
 const bd = StyleSheet.create({
   sheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#11112A', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    borderTopWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    borderTopWidth: 1, borderColor: '#E8E8ED',
     padding: Spacing.lg, gap: Spacing.sm,
   },
   handle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(167,139,250,0.3)',
+    backgroundColor: '#E5E7EB',
     alignSelf: 'center', marginBottom: Spacing.sm,
   },
-  title: { ...Typography.h4, color: '#F1F0FF', marginBottom: Spacing.xs },
+  title: { ...Typography.h4, color: '#111827', marginBottom: Spacing.xs },
   option: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
@@ -208,9 +208,9 @@ const bd = StyleSheet.create({
   optionTextDanger: { color: '#EF4444' },
   cancelOption: {
     alignItems: 'center', paddingVertical: Spacing.md, marginTop: Spacing.xs,
-    borderRadius: Radius.md, backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: Radius.md, backgroundColor: '#F3F4F6',
   },
-  cancelText: { ...Typography.bodyMed, color: '#9490C0' },
+  cancelText: { ...Typography.bodyMed, color: '#6B7280' },
 });
 
 function ActionSheet({
@@ -338,11 +338,11 @@ export default function AdminUsers() {
 
       {/* Search */}
       <View style={s.searchRow}>
-        <Ionicons name="search-outline" size={16} color="#5C5A80" style={s.searchIcon} />
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={s.searchIcon} />
         <TextInput
           style={s.searchInput}
           placeholder="Search name, @username, phone…"
-          placeholderTextColor="#5C5A80"
+          placeholderTextColor="#9CA3AF"
           value={q}
           onChangeText={(v) => { setQ(v); load(v, filter); }}
           autoCapitalize="none"
@@ -373,7 +373,7 @@ export default function AdminUsers() {
           keyExtractor={u => u._id}
           renderItem={({ item }) => <UserRow user={item} onAction={setSelectedUser} />}
           ItemSeparatorComponent={() => <View style={s.sep} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(q, filter, true)} tintColor={Ping.purpleLight} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(q, filter, true)} tintColor={Ping.purple} />}
           ListEmptyComponent={
             <Text style={s.empty}>No users found</Text>
           }
@@ -419,80 +419,82 @@ export default function AdminUsers() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080815' },
+  root: { flex: 1, backgroundColor: '#F7F7F8' },
   headerBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(167,139,250,0.12)',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8E8ED',
   },
-  title: { ...Typography.h3, color: '#F1F0FF' },
-  count: { ...Typography.caption, color: '#9490C0' },
+  title: { ...Typography.h3, color: '#111827', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  count: { ...Typography.caption, color: '#6B7280', fontWeight: '600' },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: Spacing.lg, marginTop: Spacing.md,
-    backgroundColor: '#11112A', borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.15)', paddingHorizontal: Spacing.md, height: 42,
+    marginHorizontal: Spacing.lg, marginTop: Spacing.sm,
+    backgroundColor: '#FFFFFF', borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8E8ED', paddingHorizontal: 12, height: 44,
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, ...Typography.bodyMed, color: '#F1F0FF' },
+  searchInput: { flex: 1, ...Typography.bodySm, color: '#111827', paddingVertical: 0 },
   filterRow: {
     flexDirection: 'row', paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm, gap: Spacing.sm,
+    paddingVertical: Spacing.sm, gap: 8, backgroundColor: '#FFFFFF',
   },
   filterChip: {
-    paddingHorizontal: Spacing.md, paddingVertical: 5,
-    borderRadius: Radius.full, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: '#F3F4F6',
   },
-  filterChipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-  filterText: { ...Typography.caption, color: '#9490C0', fontWeight: '600' },
+  filterChipActive: { backgroundColor: '#111827' },
+  filterText: { ...Typography.caption, color: '#6B7280', fontWeight: '600' },
   filterTextActive: { color: '#FFF' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    paddingHorizontal: Spacing.lg, paddingVertical: 12,
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
   },
-  sep: { height: 1, backgroundColor: 'rgba(167,139,250,0.07)', marginLeft: 72 },
+  sep: { height: StyleSheet.hairlineWidth, backgroundColor: '#F0F0F3', marginLeft: 72 },
   avatar: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { ...Typography.bodyMed, color: Ping.purpleLight, fontWeight: '700' },
+  avatarText: { ...Typography.bodyMed, color: Ping.purple, fontWeight: '700' },
   rowBody: { flex: 1, gap: 2 },
-  rowName: { ...Typography.bodyMed, color: '#F1F0FF' },
-  rowSub: { ...Typography.caption, color: '#9490C0' },
+  rowName: { ...Typography.bodyMed, color: '#111827', fontWeight: '600' },
+  rowSub: { ...Typography.caption, color: '#6B7280' },
   rowRight: { alignItems: 'flex-end', gap: 3 },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.sm },
   badgeText: { ...Typography.caption, fontWeight: '600', textTransform: 'capitalize' },
-  strikes: { ...Typography.caption, color: '#F97316' },
-  empty: { ...Typography.bodySm, color: '#9490C0', textAlign: 'center', marginTop: 60 },
+  strikes: { ...Typography.caption, color: '#D97706' },
+  empty: { ...Typography.bodySm, color: '#9CA3AF', textAlign: 'center', marginTop: 48 },
 });
 
 const as = StyleSheet.create({
   overlay: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   sheet: {
-    backgroundColor: '#11112A', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    borderTopWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    borderTopWidth: StyleSheet.hairlineWidth, borderColor: '#E8E8ED',
   },
   handle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(167,139,250,0.3)',
+    backgroundColor: '#E5E7EB',
     alignSelf: 'center', marginTop: Spacing.sm,
   },
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
-  name: { ...Typography.h3, color: '#F1F0FF' },
-  sub: { ...Typography.caption, color: '#9490C0' },
+  name: { ...Typography.h3, color: '#111827' },
+  sub: { ...Typography.caption, color: '#6B7280' },
   actions: { padding: Spacing.lg, gap: Spacing.sm },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.12)', backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: Spacing.md, borderRadius: Radius.md,
+    backgroundColor: '#F3F4F6',
   },
   actionText: { ...Typography.bodyMed, fontWeight: '600' },
   cancelBtn: {
     alignItems: 'center', paddingVertical: Spacing.md,
     marginTop: Spacing.sm, borderRadius: Radius.md,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: '#F3F4F6',
   },
-  cancelText: { ...Typography.bodyMed, color: '#9490C0' },
+  cancelText: { ...Typography.bodyMed, color: '#6B7280' },
 });

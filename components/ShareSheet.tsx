@@ -7,11 +7,14 @@ import {
   Share,
   Linking,
   Animated,
+  Platform,
 } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
+import Toast from 'react-native-toast-message';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as Haptics from 'expo-haptics';
@@ -68,7 +71,6 @@ function buildShareText(content: ShareContent): string {
     ].join('\n');
   }
 
-  // invite / default
   const lines: string[] = [];
   if (content.emoji) lines.push(`${content.emoji} ${content.title}`);
   else lines.push(content.title);
@@ -77,14 +79,57 @@ function buildShareText(content: ShareContent): string {
   return lines.join('\n');
 }
 
-async function openApp(scheme: string, text: string) {
-  const url = `${scheme}${encodeURIComponent(text)}`;
-  const canOpen = await Linking.canOpenURL(url).catch(() => false);
-  if (canOpen) {
-    await Linking.openURL(url).catch(() => {});
-  } else {
-    Share.share({ message: text }).catch(() => {});
+/** Try URLs in order — do NOT gate on canOpenURL (Android often returns false). */
+async function tryOpenUrls(urls: string[]): Promise<boolean> {
+  for (const url of urls) {
+    try {
+      await Linking.openURL(url);
+      return true;
+    } catch {
+      // try next
+    }
   }
+  return false;
+}
+
+async function shareWhatsApp(text: string) {
+  const q = encodeURIComponent(text);
+  const opened = await tryOpenUrls([
+    `whatsapp://send?text=${q}`,
+    `https://wa.me/?text=${q}`,
+  ]);
+  if (!opened) await Share.share({ message: text });
+}
+
+async function shareTelegram(text: string) {
+  const q = encodeURIComponent(text);
+  const opened = await tryOpenUrls([
+    `tg://msg?text=${q}`,
+    `https://t.me/share/url?url=${encodeURIComponent(STORE_URL)}&text=${q}`,
+  ]);
+  if (!opened) await Share.share({ message: text });
+}
+
+async function shareInstagram(text: string) {
+  // Instagram has no text-share URL — copy first, then open the app
+  await Clipboard.setStringAsync(text);
+  const opened = await tryOpenUrls([
+    'instagram://app',
+    'https://www.instagram.com/',
+  ]);
+  Toast.show({
+    type: 'info',
+    text1: 'Copied to clipboard',
+    text2: opened ? 'Paste it in Instagram' : 'Open Instagram and paste',
+  });
+}
+
+async function shareSms(text: string) {
+  const q = encodeURIComponent(text);
+  const opened = await tryOpenUrls([
+    Platform.OS === 'ios' ? `sms:&body=${q}` : `sms:?body=${q}`,
+  ]);
+  if (!opened) await Share.share({ message: text });
 }
 
 interface ShareOption {
@@ -93,7 +138,7 @@ interface ShareOption {
   icon: MCIName;
   color: string;
   bg: string;
-  onPress: (text: string) => void;
+  run: (text: string) => Promise<void>;
 }
 
 const OPTIONS: ShareOption[] = [
@@ -103,15 +148,15 @@ const OPTIONS: ShareOption[] = [
     icon: 'whatsapp',
     color: '#25D366',
     bg: 'rgba(37,211,102,0.12)',
-    onPress: (text) => openApp('whatsapp://send?text=', text),
+    run: shareWhatsApp,
   },
   {
     key: 'telegram',
     label: 'Telegram',
-    icon: 'send-circle',
+    icon: 'send',
     color: '#2AABEE',
     bg: 'rgba(42,171,238,0.12)',
-    onPress: (text) => openApp('tg://msg?text=', text),
+    run: shareTelegram,
   },
   {
     key: 'instagram',
@@ -119,15 +164,15 @@ const OPTIONS: ShareOption[] = [
     icon: 'instagram',
     color: '#E1306C',
     bg: 'rgba(225,48,108,0.12)',
-    onPress: (text) => Share.share({ message: text }).catch(() => {}),
+    run: shareInstagram,
   },
   {
-    key: 'more',
-    label: 'More',
-    icon: 'dots-horizontal-circle',
-    color: '#A78BFA',
-    bg: 'rgba(167,139,250,0.12)',
-    onPress: (text) => Share.share({ message: text }).catch(() => {}),
+    key: 'sms',
+    label: 'Messages',
+    icon: 'message-text',
+    color: '#34C759',
+    bg: 'rgba(52,199,89,0.12)',
+    run: shareSms,
   },
 ];
 
@@ -138,9 +183,11 @@ export default function ShareSheet({ visible, onClose, content }: Props) {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (visible) {
+      setCopied(false);
       Animated.parallel([
         Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 260, mass: 0.9, useNativeDriver: true }),
         Animated.timing(opacityAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
@@ -156,20 +203,41 @@ export default function ShareSheet({ visible, onClose, content }: Props) {
   const shareText = buildShareText(content);
 
   async function handleOption(opt: ShareOption) {
+    if (busy) return;
+    setBusy(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await opt.onPress(shareText);
+    try {
+      await opt.run(shareText);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleCopy() {
+    if (busy) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
-      // Try expo-clipboard if available, otherwise Share
-      const Clipboard = require('expo-clipboard');
       await Clipboard.setStringAsync(shareText);
       setCopied(true);
+      Toast.show({ type: 'success', text1: 'Copied', text2: 'Share text is on your clipboard' });
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      Share.share({ message: shareText }).catch(() => {});
+      Toast.show({ type: 'error', text1: 'Could not copy' });
+    }
+  }
+
+  async function handleNativeShare() {
+    if (busy) return;
+    setBusy(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await Share.share({ message: shareText });
+      onClose();
+    } catch {
+      // user dismissed
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -181,96 +249,91 @@ export default function ShareSheet({ visible, onClose, content }: Props) {
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-      </Animated.View>
+      <View style={styles.root}>
+        <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.sheet,
-          { backgroundColor: c.surface, paddingBottom: insets.bottom + 8 },
-          { transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        {/* Handle */}
-        <View style={[styles.handle, { backgroundColor: c.border }]} />
+        <Animated.View
+          style={[
+            styles.sheet,
+            { backgroundColor: c.surface, paddingBottom: insets.bottom + 8 },
+            { transform: [{ translateY: slideAnim }] },
+          ]}
+        >
+          <View style={[styles.handle, { backgroundColor: c.border }]} />
 
-        {/* Content preview */}
-        <View style={[styles.preview, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={styles.previewEmoji}>{content.emoji ?? '📤'}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.previewTitle, { color: c.text }]} numberOfLines={1}>
-              {content.title}
-            </Text>
-            {content.subtitle ? (
-              <Text style={[styles.previewSub, { color: c.textSecondary }]} numberOfLines={1}>
-                {content.subtitle}
+          <View style={[styles.preview, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Text style={styles.previewEmoji}>{content.emoji ?? '📤'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.previewTitle, { color: c.text }]} numberOfLines={1}>
+                {content.title}
               </Text>
-            ) : null}
+              {content.subtitle ? (
+                <Text style={[styles.previewSub, { color: c.textSecondary }]} numberOfLines={1}>
+                  {content.subtitle}
+                </Text>
+              ) : null}
+            </View>
           </View>
-        </View>
 
-        {/* Platform share buttons */}
-        <View style={styles.optionRow}>
-          {OPTIONS.map((opt) => (
+          <View style={styles.optionRow}>
+            {OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                style={styles.optionBtn}
+                onPress={() => handleOption(opt)}
+                activeOpacity={0.75}
+                disabled={busy}
+              >
+                <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
+                  <MaterialCommunityIcons name={opt.icon} size={26} color={opt.color} />
+                </View>
+                <Text style={[styles.optionLabel, { color: c.textSecondary }]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.actionRow, { borderTopColor: c.border }]}>
             <TouchableOpacity
-              key={opt.key}
-              style={styles.optionBtn}
-              onPress={() => handleOption(opt)}
-              activeOpacity={0.75}
+              style={[styles.actionBtn, { backgroundColor: c.card, borderColor: c.border }]}
+              onPress={handleCopy}
+              activeOpacity={0.8}
+              disabled={busy}
             >
-              <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
-                <MaterialCommunityIcons name={opt.icon} size={26} color={opt.color} />
-              </View>
-              <Text style={[styles.optionLabel, { color: c.textSecondary }]}>{opt.label}</Text>
+              <Ionicons
+                name={copied ? 'checkmark-circle' : 'copy-outline'}
+                size={18}
+                color={copied ? Ping.green : c.icon}
+              />
+              <Text style={[styles.actionBtnText, { color: copied ? Ping.green : c.text }]}>
+                {copied ? 'Copied!' : 'Copy text'}
+              </Text>
             </TouchableOpacity>
-          ))}
-        </View>
 
-        {/* Copy + Native share row */}
-        <View style={[styles.actionRow, { borderTopColor: c.border }]}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: c.card, borderColor: c.border }]}
-            onPress={handleCopy}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={copied ? 'checkmark-circle' : 'copy-outline'}
-              size={18}
-              color={copied ? Ping.green : c.icon}
-            />
-            <Text style={[styles.actionBtnText, { color: copied ? Ping.green : c.text }]}>
-              {copied ? 'Copied!' : 'Copy text'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: Ping.purple }]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              Share.share({ message: shareText }).catch(() => {});
-            }}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="share-outline" size={18} color="#FFF" />
-            <Text style={[styles.actionBtnText, { color: '#FFF', fontWeight: '700' }]}>Share</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: Ping.purple, borderColor: Ping.purple }]}
+              onPress={handleNativeShare}
+              activeOpacity={0.85}
+              disabled={busy}
+            >
+              <Ionicons name="share-outline" size={18} color="#FFF" />
+              <Text style={[styles.actionBtnText, { color: '#FFF', fontWeight: '700' }]}>More</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: Spacing.sm,
@@ -300,7 +363,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     marginBottom: Spacing.lg,
   },
-  optionBtn: { alignItems: 'center', gap: 6 },
+  optionBtn: { alignItems: 'center', gap: 6, minWidth: 68 },
   optionIcon: {
     width: 56,
     height: 56,

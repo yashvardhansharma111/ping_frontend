@@ -1,26 +1,27 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Ping } from '@/constants/theme';
 import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useRef, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
-
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-// ── Animated tab icon ─────────────────────────────────────────────────────────
+import {
+  MapTrifold,
+  Lightning,
+  UsersThree,
+  CalendarBlank,
+  User,
+} from 'phosphor-react-native';
+import type { Icon } from 'phosphor-react-native';
 
 function TabIcon({
-  name,
-  nameFilled,
+  IconComp,
   label,
   focused,
   color,
 }: {
-  name: IoniconName;
-  nameFilled: IoniconName;
+  IconComp: Icon;
   label: string;
   focused: boolean;
   color: string;
@@ -39,7 +40,7 @@ function TabIcon({
 
   const bg = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(124,58,237,0)', 'rgba(124,58,237,0.18)'],
+    outputRange: ['rgba(187,146,255,0)', 'rgba(187,146,255,0.2)'],
   });
   const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] });
   const labelOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
@@ -49,7 +50,7 @@ function TabIcon({
   return (
     <Animated.View style={[s.iconWrap, { backgroundColor: bg, transform: [{ scale }] }]}>
       <Animated.View style={{ transform: [{ translateY: iconTranslateY }] }}>
-        <Ionicons name={focused ? nameFilled : name} size={21} color={color} />
+        <IconComp size={22} color={color} weight={focused ? 'fill' : 'regular'} />
       </Animated.View>
       <Animated.Text
         style={[s.label, { color, opacity: labelOpacity, transform: [{ translateY: labelTranslateY }] }]}
@@ -60,23 +61,18 @@ function TabIcon({
   );
 }
 
-// ── Tab config ────────────────────────────────────────────────────────────────
-
 const TAB_SCREENS = [
-  { name: 'index',   label: 'Map',     icon: 'map-outline' as IoniconName,      iconFilled: 'map' as IoniconName },
-  { name: 'explore', label: 'Explore', icon: 'flash-outline' as IoniconName,    iconFilled: 'flash' as IoniconName },
-  { name: 'friends', label: 'Friends', icon: 'people-outline' as IoniconName,   iconFilled: 'people' as IoniconName },
-  { name: 'events',  label: 'Events',  icon: 'calendar-outline' as IoniconName, iconFilled: 'calendar' as IoniconName },
-  { name: 'profile', label: 'Profile', icon: 'person-outline' as IoniconName,   iconFilled: 'person' as IoniconName },
+  { name: 'index',   label: 'Map',     Icon: MapTrifold },
+  { name: 'explore', label: 'Explore', Icon: Lightning },
+  { name: 'friends', label: 'Friends', Icon: UsersThree },
+  { name: 'events',  label: 'Events',  Icon: CalendarBlank },
+  { name: 'profile', label: 'Profile', Icon: User },
 ];
-
-// ── Fully custom tab bar — gives pixel-perfect vertical centering ──────────────
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme() ?? 'dark';
-  const activeColor = scheme === 'dark' ? Ping.purpleLight : Ping.purple;
-  const inactiveColor = scheme === 'dark' ? '#4A4870' : '#A89CC8';
+  const c = Colors[scheme];
 
   return (
     <View
@@ -84,9 +80,9 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         s.bar,
         {
           bottom: insets.bottom + 10,
-          backgroundColor: scheme === 'dark' ? 'rgba(12,12,28,0.97)' : 'rgba(255,255,255,0.97)',
-          borderColor: scheme === 'dark' ? 'rgba(124,58,237,0.25)' : 'rgba(124,58,237,0.12)',
-          shadowOpacity: scheme === 'dark' ? 0.4 : 0.15,
+          backgroundColor: scheme === 'dark' ? 'rgba(15,15,18,0.94)' : 'rgba(255,255,255,0.94)',
+          borderColor: scheme === 'dark' ? 'rgba(187,146,255,0.22)' : 'rgba(143,99,244,0.14)',
+          shadowOpacity: scheme === 'dark' ? 0.45 : 0.12,
         },
       ]}
     >
@@ -107,18 +103,12 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         }
 
         return (
-          <TouchableOpacity
-            key={route.key}
-            style={s.tab}
-            onPress={onPress}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity key={route.key} style={s.tab} onPress={onPress} activeOpacity={0.7}>
             <TabIcon
-              name={cfg.icon}
-              nameFilled={cfg.iconFilled}
+              IconComp={cfg.Icon}
               label={cfg.label}
               focused={focused}
-              color={focused ? activeColor : inactiveColor}
+              color={focused ? c.tabIconSelected : c.tabIconDefault}
             />
           </TouchableOpacity>
         );
@@ -126,8 +116,6 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     </View>
   );
 }
-
-// ── Layout ────────────────────────────────────────────────────────────────────
 
 export default function TabLayout() {
   return (
@@ -144,8 +132,6 @@ export default function TabLayout() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
   bar: {
     position: 'absolute',
@@ -155,17 +141,17 @@ const s = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 1,
     flexDirection: 'row',
-    alignItems: 'center',        // vertical center for all children
-    shadowColor: Ping.purple,
+    alignItems: 'center',
+    shadowColor: Ping.purpleDim,
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 24,
     elevation: 20,
   },
   tab: {
     flex: 1,
-    height: 64,                  // fill the full bar height
-    alignItems: 'center',        // horizontal center
-    justifyContent: 'center',    // vertical center — this is the key fix
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconWrap: {
     width: 56,
@@ -178,7 +164,6 @@ const s = StyleSheet.create({
   label: {
     fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 0.3,
-    lineHeight: 11,
+    letterSpacing: 0.2,
   },
 });

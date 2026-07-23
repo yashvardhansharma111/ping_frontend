@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,15 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Image,
   PanResponder,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { activitiesApi } from '@/lib/api';
+import * as ImagePicker from 'expo-image-picker';
+import { activitiesApi, uploadApi } from '@/lib/api';
 import { scheduleStartingNotification } from '@/lib/notifications';
 import {
   fetchCategorizedPlaces,
@@ -218,58 +220,216 @@ function TimePicker({ value, onChange, isDark }: { value: TimeState; onChange: (
   );
 }
 
-// ── Vertical Type List ────────────────────────────────────────────────────────
+// ── Activity type cards (strict 4-per-row) ────────────────────────────────────
+
+const TYPE_COLS = 4;
+const TYPE_GAP = 8;
+const TYPE_CARD_W =
+  (Dimensions.get('window').width - Spacing.lg * 2 - TYPE_GAP * (TYPE_COLS - 1)) / TYPE_COLS;
 
 function makeTlStyles(isDark: boolean) {
   return StyleSheet.create({
-    container: {
-      height: 218,
-      backgroundColor: isDark ? '#1A1A38' : '#F4F0FF',
-      borderRadius: Radius.md,
-      borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)',
-      overflow: 'hidden',
-    },
-    row: {
+    grid: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 14,
-      height: 46,
+      flexWrap: 'wrap',
+      gap: TYPE_GAP,
     },
-    rowBorder: { borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(167,139,250,0.08)' : 'rgba(124,58,237,0.06)' },
-    iconCircle: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-    typeLabel: { flex: 1, ...Typography.bodyMed, color: isDark ? '#9490C0' : '#6B6080' },
-    typeLabelActive: { color: isDark ? '#F1F0FF' : '#1A1730', fontWeight: '700' },
+    card: {
+      width: TYPE_CARD_W,
+      aspectRatio: 0.95,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(167,139,250,0.16)' : 'rgba(124,58,237,0.1)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+      paddingVertical: 8,
+      paddingHorizontal: 2,
+    },
+    iconCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    typeLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#9490C0' : '#6B6080',
+      textAlign: 'center',
+    },
+    typeLabelActive: {
+      color: isDark ? '#F1F0FF' : '#1A1730',
+      fontWeight: '700',
+    },
   });
 }
 
 function TypeList({ value, onChange, isDark }: { value: string; onChange: (k: string) => void; isDark: boolean }) {
   const tl = useMemo(() => makeTlStyles(isDark), [isDark]);
   return (
-    <View style={tl.container}>
-      <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
-        {TYPES.map((t, i) => {
-          const active = value === t.key;
-          return (
-            <TouchableOpacity
-              key={t.key}
-              style={[tl.row, active && { backgroundColor: `${t.color}18` }, i < TYPES.length - 1 && tl.rowBorder]}
-              onPress={() => onChange(t.key)}
-              activeOpacity={0.7}
-            >
-              <View style={[tl.iconCircle, { backgroundColor: `${t.color}25` }]}>
-                <MaterialCommunityIcons name={t.icon} size={17} color={t.color} />
-              </View>
-              <Text style={[tl.typeLabel, active && tl.typeLabelActive]}>{t.label}</Text>
-              {active && <Ionicons name="checkmark-circle" size={17} color={t.color} />}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+    <View style={tl.grid}>
+      {TYPES.map((t) => {
+        const active = value === t.key;
+        return (
+          <TouchableOpacity
+            key={t.key}
+            style={[
+              tl.card,
+              active && {
+                backgroundColor: `${t.color}18`,
+                borderColor: t.color,
+              },
+            ]}
+            onPress={() => onChange(t.key)}
+            activeOpacity={0.75}
+          >
+            <View style={[tl.iconCircle, { backgroundColor: `${t.color}${active ? '35' : '20'}` }]}>
+              <MaterialCommunityIcons name={t.icon} size={17} color={t.color} />
+            </View>
+            <Text style={[tl.typeLabel, active && tl.typeLabelActive]} numberOfLines={1}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
+
+// ── Live ping preview card ────────────────────────────────────────────────────
+
+function PingPreviewCard({
+  title,
+  typeKey,
+  typeIcon,
+  typeColor,
+  typeLabel,
+  vibe,
+  venue,
+  whenLabel,
+  isDark,
+}: {
+  title: string;
+  typeKey: string;
+  typeIcon: MCIName;
+  typeColor: string;
+  typeLabel: string;
+  vibe: string | null;
+  venue: string;
+  whenLabel: string;
+  isDark: boolean;
+}) {
+  const vibeMeta = vibe ? VIBES.find((v) => v.key === vibe) : null;
+  return (
+    <View
+      style={[
+        preview.card,
+        {
+          backgroundColor: isDark ? '#16162E' : '#F8F6FF',
+          borderColor: isDark ? `${typeColor}40` : `${typeColor}30`,
+        },
+      ]}
+    >
+      <View style={[preview.accentBar, { backgroundColor: typeColor }]} />
+      <View style={preview.body}>
+        <View style={[preview.iconRing, { backgroundColor: `${typeColor}22`, borderColor: `${typeColor}45` }]}>
+          <MaterialCommunityIcons name={typeIcon} size={22} color={typeColor} />
+        </View>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[preview.title, { color: isDark ? '#F1F0FF' : '#1A1730' }]} numberOfLines={1}>
+            {title.trim() || 'Your ping title'}
+          </Text>
+          <View style={preview.metaRow}>
+            <Text style={[preview.meta, { color: typeColor }]}>{typeLabel}</Text>
+            {vibeMeta ? (
+              <>
+                <Text style={preview.dot}>·</Text>
+                <Text style={[preview.meta, { color: vibeMeta.color }]}>{vibeMeta.label}</Text>
+              </>
+            ) : null}
+          </View>
+          <View style={preview.metaRow}>
+            <Ionicons name="time-outline" size={11} color={isDark ? '#6B6B9A' : '#8B85A0'} />
+            <Text style={[preview.sub, { color: isDark ? '#9490C0' : '#6B6080' }]} numberOfLines={1}>
+              {whenLabel}
+            </Text>
+            {venue.trim() ? (
+              <>
+                <Text style={preview.dot}>·</Text>
+                <Ionicons name="location-outline" size={11} color={isDark ? '#6B6B9A' : '#8B85A0'} />
+                <Text style={[preview.sub, { color: isDark ? '#9490C0' : '#6B6080', flex: 1 }]} numberOfLines={1}>
+                  {venue.trim()}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </View>
+      <Text style={[preview.hint, { color: isDark ? '#5C5A80' : '#8B85A0' }]}>Preview</Text>
+    </View>
+  );
+}
+
+const preview = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  accentBar: {
+    height: 3,
+    width: '100%',
+  },
+  body: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+  },
+  iconRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  meta: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  dot: {
+    color: 'rgba(148,144,192,0.5)',
+    fontSize: 11,
+  },
+  hint: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+});
 
 // ── Vibe Grid ─────────────────────────────────────────────────────────────────
 
@@ -313,10 +473,12 @@ function VibeGrid({ value, onChange, isDark }: { value: string | null; onChange:
 }
 
 // ── Sheet sizing ─────────────────────────────────────────────────────────────
-const SCREEN_H      = Dimensions.get('window').height;
-const SHEET_MIN_H   = SCREEN_H * 0.30;
-const SHEET_MAX_H   = SCREEN_H * 0.92;
-const SHEET_DEFAULT = SCREEN_H * 0.55;
+const SCREEN_H  = Dimensions.get('window').height;
+const SHEET_MID = Math.round(SCREEN_H * 0.6);                         // default — map peeks above
+const SHEET_MAX = Math.min(Math.round(SCREEN_H * 0.92), SCREEN_H - 40); // fully stretched
+const SHEET_MIN = Math.round(SCREEN_H * 0.42);                         // drag floor before dismiss
+/** @deprecated use SHEET_MID — kept so hot-reload never hits a missing binding */
+const SHEET_H = SHEET_MID;
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -343,7 +505,8 @@ function makeStyles(isDark: boolean) {
 
   return StyleSheet.create({
     overlay: { flex: 1, justifyContent: 'flex-end' },
-    backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+    backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.28)' },
+    keyboardWrap: { width: '100%', justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: sheetBg,
       borderTopLeftRadius: Radius.xl,
@@ -351,14 +514,20 @@ function makeStyles(isDark: boolean) {
       borderTopWidth: 1,
       borderColor: border15,
       overflow: 'hidden',
+      width: '100%',
+      flexDirection: 'column',
     },
     handleArea: {
-      width: '100%', height: 28,
-      alignItems: 'center', justifyContent: 'center',
+      width: '100%',
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     handle: {
-      width: 36, height: 4, borderRadius: 2,
-      backgroundColor: isDark ? 'rgba(167,139,250,0.3)' : 'rgba(124,58,237,0.2)',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(167,139,250,0.4)' : 'rgba(124,58,237,0.28)',
     },
     header: {
       flexDirection: 'row',
@@ -398,6 +567,65 @@ function makeStyles(isDark: boolean) {
       paddingHorizontal: Spacing.md,
       ...Typography.bodyMed,
       color: text,
+    },
+    imagePicker: {
+      height: 140,
+      borderRadius: Radius.md,
+      borderWidth: 1.5,
+      borderColor: border,
+      borderStyle: 'dashed',
+      backgroundColor: inputBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      gap: 6,
+    },
+    imageIconWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: isDark ? 'rgba(124,58,237,0.18)' : 'rgba(124,58,237,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    imageHint: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: muted,
+    },
+    imageSub: {
+      fontSize: 11,
+      color: hint,
+    },
+    imageOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.28)',
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      justifyContent: 'space-between',
+      padding: 10,
+    },
+    imageChangeBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: Radius.full,
+    },
+    imageChangeTxt: {
+      color: '#FFF',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    imageRemoveBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     customTypeWrap: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -529,22 +757,74 @@ function makeStyles(isDark: boolean) {
     locText: { ...Typography.caption, color: hint, flex: 1 },
     changeLocBtn: { fontSize: 12, color: Ping.purple, fontWeight: '700' },
     footer: {
-      paddingHorizontal: Spacing.lg, paddingTop: Spacing.md,
-      borderTopWidth: 1, borderTopColor: border10,
+      paddingHorizontal: Spacing.lg,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: border10,
+      gap: 8,
+      backgroundColor: sheetBg,
+    },
+    stepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    stepDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+    },
+    stepDotActive: {
+      width: 18,
+      backgroundColor: Ping.purple,
+    },
+    stepHint: {
+      textAlign: 'center',
+      fontSize: 11,
+      fontWeight: '600',
+      color: muted,
+    },
+    footerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    backBtn: {
+      height: 52,
+      paddingHorizontal: 16,
+      borderRadius: Radius.md,
+      borderWidth: 1.5,
+      borderColor: border,
+      backgroundColor: chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     createBtn: {
-      backgroundColor: Ping.purple, borderRadius: Radius.md,
-      height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      width: '100%',
+      backgroundColor: Ping.purple,
+      borderRadius: Radius.md,
+      height: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       gap: Spacing.sm,
       shadowColor: Ping.purple,
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.55, shadowRadius: 12, elevation: 8,
+      shadowOpacity: 0.55,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    createBtnFlex: {
+      flex: 1,
+      width: 'auto' as any,
     },
     createBtnDisabled: { opacity: 0.6 },
     createBtnText: { ...Typography.bodyMed, color: '#FFF', fontWeight: '700' },
     cancelBtn: {
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: 8,
     },
     cancelBtnText: {
       fontSize: 14,
@@ -581,29 +861,80 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [customLat, setCustomLat] = useState<number | null>(null);
   const [customLng, setCustomLng] = useState<number | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const scrollRef = useRef<ScrollView>(null);
 
-  // Draggable sheet height
-  const sheetH    = useRef(new Animated.Value(SHEET_DEFAULT)).current;
-  const sheetHRef = useRef(SHEET_DEFAULT);
+  // Smooth open/close — native driver only (avoids Android flicker from height anim)
+  const slideY = useRef(new Animated.Value(SCREEN_H)).current;
+  const backdropOp = useRef(new Animated.Value(0)).current;
+  const sheetHeight = useRef(new Animated.Value(SHEET_MID)).current;
+  const dragStartH = useRef(SHEET_MID);
+  const closingRef = useRef(false);
+  const animateCloseRef = useRef<(after?: () => void) => void>(() => {});
 
-  const sheetPan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 4,
-    onPanResponderMove: (_, { dy }) => {
-      const next = Math.min(SHEET_MAX_H, Math.max(SHEET_MIN_H, sheetHRef.current - dy));
-      sheetH.setValue(next);
-    },
-    onPanResponderRelease: (_, { dy }) => {
-      const next = Math.min(SHEET_MAX_H, Math.max(SHEET_MIN_H, sheetHRef.current - dy));
-      sheetHRef.current = next;
-      Animated.spring(sheetH, { toValue: next, damping: 22, stiffness: 200, useNativeDriver: false }).start();
-    },
-  })).current;
+  const snapSheet = useCallback((to: number) => {
+    Animated.spring(sheetHeight, {
+      toValue: to,
+      damping: 24,
+      stiffness: 240,
+      mass: 0.85,
+      useNativeDriver: false,
+    }).start();
+  }, [sheetHeight]);
+
+  const handlePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          sheetHeight.stopAnimation((v) => {
+            dragStartH.current = v;
+          });
+        },
+        onPanResponderMove: (_, g) => {
+          // Drag up → taller sheet; drag down → shorter
+          const next = Math.max(SHEET_MIN * 0.55, Math.min(SHEET_MAX, dragStartH.current - g.dy));
+          sheetHeight.setValue(next);
+        },
+        onPanResponderRelease: (_, g) => {
+          const current = Math.max(SHEET_MIN * 0.55, Math.min(SHEET_MAX, dragStartH.current - g.dy));
+          // Flick / drag down far enough → dismiss
+          if (current < SHEET_MID * 0.72 || g.vy > 1.15) {
+            animateCloseRef.current();
+            return;
+          }
+          // Snap to mid (60%) or max (~92%)
+          const midPoint = (SHEET_MID + SHEET_MAX) / 2;
+          snapSheet(current >= midPoint ? SHEET_MAX : SHEET_MID);
+        },
+      }),
+    [sheetHeight, snapSheet],
+  );
 
   useEffect(() => {
     if (visible) {
-      sheetH.setValue(SHEET_DEFAULT);
-      sheetHRef.current = SHEET_DEFAULT;
+      closingRef.current = false;
+      sheetHeight.setValue(SHEET_MID);
+      slideY.setValue(SCREEN_H);
+      backdropOp.setValue(0);
+      Animated.parallel([
+        Animated.spring(slideY, {
+          toValue: 0,
+          damping: 22,
+          stiffness: 220,
+          mass: 0.9,
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropOp, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
   }, [visible]);
 
@@ -619,6 +950,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         setCustomTypeName(dt);
       }
       setTitle(defaultTitle ?? '');
+      setStep(1);
     }
   }, [visible]);
 
@@ -659,9 +991,71 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
     setActiveLocCategory('cafes');
     setCustomLat(null);
     setCustomLng(null);
+    setImageUrl(null);
+    setUploadingImage(false);
+    setStep(1);
   }
 
-  function handleClose() { reset(); onClose(); }
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({ type: 'error', text1: 'Permission needed', text2: 'Allow photo access to add a ping image.' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [16, 9],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingImage(true);
+    try {
+      const url = await uploadApi.uploadImage(result.assets[0].uri, 'pings');
+      setImageUrl(url);
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Upload failed', text2: err.message || 'Could not upload image.' });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  function animateClose(after?: () => void) {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    Animated.parallel([
+      Animated.timing(slideY, { toValue: SCREEN_H, duration: 220, useNativeDriver: true }),
+      Animated.timing(backdropOp, { toValue: 0, duration: 180, useNativeDriver: true }),
+    ]).start(() => {
+      reset();
+      sheetHeight.setValue(SHEET_MID);
+      after?.();
+      onClose();
+      closingRef.current = false;
+    });
+  }
+  animateCloseRef.current = animateClose;
+
+  function handleClose() { animateClose(); }
+
+  function goNext() {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      Toast.show({ type: 'error', text1: 'Title required', text2: 'Give your ping a short title.' });
+      return;
+    }
+    if (type === 'custom' && !customTypeName.trim()) {
+      Toast.show({ type: 'error', text1: 'Type required', text2: 'Enter a custom activity type (e.g. yoga, chess).' });
+      return;
+    }
+    setStep(2);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+  }
+
+  function goBack() {
+    setStep(1);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+  }
 
   async function handleCreate() {
     const trimmed = title.trim();
@@ -701,6 +1095,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         ...(details.trim() ? { description: details.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(vibe ? { vibe } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
       });
       if (created?.activity?.startsAt) {
         scheduleStartingNotification(
@@ -709,9 +1104,9 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
           new Date(created.activity.startsAt),
         );
       }
-      reset();
       onCreated();
-      onClose();
+      animateClose();
+      return;
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not create ping.' });
     } finally {
@@ -726,389 +1121,470 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
 
   return (
     <>
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        style={s.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={handleClose} />
+    {/* Hide create modal while location picker is open — nested Modals flicker on some Androids */}
+    <Modal
+      visible={visible && !showLocationPicker}
+      animationType="none"
+      transparent
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      <View style={s.overlay}>
+        <Animated.View style={[s.backdrop, { opacity: backdropOp }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleClose} />
+        </Animated.View>
 
-        <Animated.View style={[s.sheet, { height: sheetH }]}>
-          {/* Handle */}
-          <View {...sheetPan.panHandlers} style={s.handleArea}>
-            <View style={s.handle} />
-          </View>
-
-          {/* Header */}
-          <View style={s.header}>
-            <View style={s.headerLeft}>
-              <View style={[s.headerIcon, { backgroundColor: `${selectedType.color}22` }]}>
-                <MaterialCommunityIcons name={selectedType.icon} size={20} color={selectedType.color} />
-              </View>
-              <View>
-                <Text style={s.headerTitle} numberOfLines={1}>{title.trim() || 'New Ping'}</Text>
-                {vibe && (
-                  <Text style={s.headerVibe}>
-                    {VIBES.find(v => v.key === vibe)?.label} vibe
-                  </Text>
-                )}
-              </View>
-            </View>
-            <TouchableOpacity onPress={handleClose} hitSlop={10}>
-              <Ionicons name="close" size={22} color={mutedIconColor} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={s.body}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={s.keyboardWrap}
+          pointerEvents="box-none"
+        >
+          <Animated.View style={{ width: '100%', transform: [{ translateY: slideY }] }}>
+          <Animated.View
+            style={[
+              s.sheet,
+              { height: sheetHeight },
+            ]}
           >
-            {/* ── Title ── */}
-            <View style={s.section}>
-              <Text style={s.label}>What's happening?</Text>
-              <TextInput
-                style={s.titleInput}
-                placeholder="Name it. Something people will actually tap."
-                placeholderTextColor={placeholderColor}
-                value={title}
-                onChangeText={setTitle}
-                maxLength={80}
-                returnKeyType="done"
-              />
+            {/* Handle — drag to stretch / collapse */}
+            <View style={s.handleArea} {...handlePan.panHandlers}>
+              <View style={s.handle} />
             </View>
 
-            {/* ── Type (vertical list) ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Activity type</Text>
-              <TypeList value={type} onChange={setType} isDark={isDark} />
-              {type === 'custom' && (
-                <View style={s.customTypeWrap}>
-                  <MaterialCommunityIcons name="tag-outline" size={16} color="#A78BFA" />
-                  <TextInput
-                    style={s.customTypeInput}
-                    placeholder="e.g. yoga, chess, cycling…"
-                    placeholderTextColor={placeholderColor}
-                    value={customTypeName}
-                    onChangeText={setCustomTypeName}
-                    maxLength={30}
-                    autoFocus
-                    returnKeyType="done"
-                    autoCapitalize="none"
-                  />
+            {/* Header */}
+            <View style={s.header}>
+              <View style={s.headerLeft}>
+                <View style={[s.headerIcon, { backgroundColor: `${selectedType.color}22` }]}>
+                  <MaterialCommunityIcons name={selectedType.icon} size={20} color={selectedType.color} />
                 </View>
-              )}
-            </View>
-
-            {/* ── Vibe ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Vibe  <Text style={s.labelOptional}>(optional)</Text></Text>
-              <VibeGrid value={vibe} onChange={setVibe} isDark={isDark} />
-            </View>
-
-            {/* ── When ── */}
-            <View style={s.section}>
-              <Text style={s.label}>When?</Text>
-              <View style={s.whenRow}>
-                <TouchableOpacity
-                  style={[s.whenChip, isNow && s.whenChipActive]}
-                  onPress={() => setIsNow(true)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[s.liveDot, { opacity: isNow ? 1 : 0.3 }]} />
-                  <Text style={[s.whenLabel, isNow && s.whenLabelActive]}>Now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.whenChip, !isNow && s.whenChipActive]}
-                  onPress={() => setIsNow(false)}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="time-outline" size={15} color={!isNow ? '#FFF' : mutedIconColor} />
-                  <Text style={[s.whenLabel, !isNow && s.whenLabelActive]}>
-                    {isNow ? 'Schedule' : formatTimeDisplay(scheduledTime, selectedDateOffset)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {!isNow && (
-                <View style={s.timePickerWrap}>
-                  <Text style={s.timePickerLabel}>Date</Text>
-                  <DateStrip value={selectedDateOffset} onChange={setSelectedDateOffset} isDark={isDark} />
-                  <Text style={[s.timePickerLabel, { marginTop: 4 }]}>Time</Text>
-                  <TimePicker value={scheduledTime} onChange={setScheduledTime} isDark={isDark} />
+                <View>
+                  <Text style={s.headerTitle} numberOfLines={1}>{title.trim() || 'New Ping'}</Text>
+                  {vibe && (
+                    <Text style={s.headerVibe}>
+                      {VIBES.find(v => v.key === vibe)?.label} vibe
+                    </Text>
+                  )}
                 </View>
-              )}
+              </View>
+              <TouchableOpacity onPress={handleClose} hitSlop={10}>
+                <Ionicons name="close" size={22} color={mutedIconColor} />
+              </TouchableOpacity>
             </View>
 
-            {/* ── Duration ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Expected duration</Text>
-              <View style={s.chipRow}>
-                {DURATIONS.map((d) => {
-                  const active = duration === d.value;
-                  return (
-                    <TouchableOpacity
-                      key={d.value}
-                      style={[s.durationChip, active && s.durationChipActive]}
-                      onPress={() => setDuration(d.value)}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[s.durationLabel, active && s.durationLabelActive]}>{d.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+            <ScrollView
+              ref={scrollRef}
+              style={{ flex: 1, minHeight: 0 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={s.body}
+              bounces={false}
+              overScrollMode="never"
+            >
+              {step === 1 ? (
+                <>
+                  <View style={s.section}>
+                    <Text style={s.label}>What's happening?</Text>
+                    <TextInput
+                      style={s.titleInput}
+                      placeholder="Name it. Something people will actually tap."
+                      placeholderTextColor={placeholderColor}
+                      value={title}
+                      onChangeText={setTitle}
+                      maxLength={80}
+                      returnKeyType="done"
+                    />
+                  </View>
 
-            {/* ── Venue ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Preferred venue  <Text style={s.labelOptional}>(optional)</Text></Text>
-              <View style={s.iconInput}>
-                <Ionicons name="location-outline" size={16} color={mutedIconColor} />
-                <TextInput
-                  style={s.iconInputText}
-                  placeholder="A park, a café, your building lobby. Anywhere."
-                  placeholderTextColor={placeholderColor}
-                  value={venue}
-                  onChangeText={setVenue}
-                  maxLength={120}
-                  returnKeyType="done"
-                />
-              </View>
+                  <View style={s.section}>
+                    <Text style={s.label}>Activity type</Text>
+                    <TypeList value={type} onChange={setType} isDark={isDark} />
+                    {type === 'custom' && (
+                      <View style={s.customTypeWrap}>
+                        <MaterialCommunityIcons name="tag-outline" size={16} color="#A78BFA" />
+                        <TextInput
+                          style={s.customTypeInput}
+                          placeholder="e.g. yoga, chess, cycling…"
+                          placeholderTextColor={placeholderColor}
+                          value={customTypeName}
+                          onChangeText={setCustomTypeName}
+                          maxLength={30}
+                          returnKeyType="done"
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    )}
+                  </View>
 
-              {/* Location category tabs + place chips */}
-              {(loadingPlaces || Object.keys(categorizedPlaces).length > 0) && (
-                <View style={s.locSuggestWrap}>
-                  {/* Category tabs */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={s.locCatRow}
-                  >
-                    {LOCATION_CATEGORIES.map((cat) => {
-                      const active = activeLocCategory === cat.key;
-                      const count = categorizedPlaces[cat.key]?.length ?? 0;
-                      return (
-                        <TouchableOpacity
-                          key={cat.key}
-                          style={[s.locCatChip, active && s.locCatChipActive]}
-                          onPress={() => setActiveLocCategory(cat.key)}
-                          activeOpacity={0.75}
-                        >
-                          <Ionicons
-                            name={cat.icon as any}
-                            size={12}
-                            color={active ? '#FFF' : mutedIconColor}
-                          />
-                          <Text style={[s.locCatLabel, active && s.locCatLabelActive]}>
-                            {cat.label}
-                            {!loadingPlaces && count > 0 ? ` (${count})` : ''}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Place chips */}
-                  {loadingPlaces ? (
-                    <View style={s.locLoadingRow}>
-                      <ActivityIndicator size="small" color={Ping.purpleLight} />
-                      <Text style={s.locLoadingText}>Finding nearby places…</Text>
+                  <View style={s.section}>
+                    <Text style={s.label}>When?</Text>
+                    <View style={s.whenRow}>
+                      <TouchableOpacity
+                        style={[s.whenChip, isNow && s.whenChipActive]}
+                        onPress={() => setIsNow(true)}
+                        activeOpacity={0.75}
+                      >
+                        <View style={[s.liveDot, { opacity: isNow ? 1 : 0.3 }]} />
+                        <Text style={[s.whenLabel, isNow && s.whenLabelActive]}>Now</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.whenChip, !isNow && s.whenChipActive]}
+                        onPress={() => setIsNow(false)}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons name="time-outline" size={15} color={!isNow ? '#FFF' : mutedIconColor} />
+                        <Text style={[s.whenLabel, !isNow && s.whenLabelActive]}>
+                          {isNow ? 'Schedule' : formatTimeDisplay(scheduledTime, selectedDateOffset)}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                  ) : (categorizedPlaces[activeLocCategory]?.length ?? 0) > 0 ? (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      keyboardShouldPersistTaps="handled"
-                      contentContainerStyle={s.suggestionsRow}
+                    {!isNow && (
+                      <View style={s.timePickerWrap}>
+                        <Text style={s.timePickerLabel}>Date</Text>
+                        <DateStrip value={selectedDateOffset} onChange={setSelectedDateOffset} isDark={isDark} />
+                        <Text style={[s.timePickerLabel, { marginTop: 4 }]}>Time</Text>
+                        <TimePicker value={scheduledTime} onChange={setScheduledTime} isDark={isDark} />
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Vibe  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <VibeGrid value={vibe} onChange={setVibe} isDark={isDark} />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <PingPreviewCard
+                    title={title}
+                    typeKey={type}
+                    typeIcon={selectedType.icon}
+                    typeColor={selectedType.color}
+                    typeLabel={type === 'custom' && customTypeName.trim() ? customTypeName.trim() : selectedType.label}
+                    vibe={vibe}
+                    venue={venue}
+                    whenLabel={isNow ? 'Live now' : formatTimeDisplay(scheduledTime, selectedDateOffset)}
+                    isDark={isDark}
+                  />
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Photo  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <TouchableOpacity
+                      style={s.imagePicker}
+                      onPress={pickImage}
+                      activeOpacity={0.8}
+                      disabled={uploadingImage}
                     >
-                      {(categorizedPlaces[activeLocCategory] ?? []).map((p) => {
-                        const selected = venue === p.name;
-                        const activeCat = LOCATION_CATEGORIES.find((c) => c.key === activeLocCategory);
+                      {uploadingImage ? (
+                        <ActivityIndicator size="large" color={Ping.purple} />
+                      ) : imageUrl ? (
+                        <>
+                          <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                          <View style={s.imageOverlay}>
+                            <TouchableOpacity style={s.imageChangeBtn} onPress={pickImage} activeOpacity={0.85}>
+                              <Ionicons name="camera-outline" size={15} color="#FFF" />
+                              <Text style={s.imageChangeTxt}>Change</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={s.imageRemoveBtn}
+                              onPress={() => setImageUrl(null)}
+                              activeOpacity={0.85}
+                              hitSlop={8}
+                            >
+                              <Ionicons name="close" size={16} color="#FFF" />
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : (
+                        <>
+                          <View style={s.imageIconWrap}>
+                            <Ionicons name="image-outline" size={28} color={Ping.purpleLight} />
+                          </View>
+                          <Text style={s.imageHint}>Tap to add a photo</Text>
+                          <Text style={s.imageSub}>Optional · 16:9 works best</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Expected duration</Text>
+                    <View style={s.chipRow}>
+                      {DURATIONS.map((d) => {
+                        const active = duration === d.value;
                         return (
                           <TouchableOpacity
-                            key={p.name}
-                            style={[s.suggestionChip, selected && s.suggestionChipActive]}
-                            onPress={() => setVenue(selected ? '' : p.name)}
+                            key={d.value}
+                            style={[s.durationChip, active && s.durationChipActive]}
+                            onPress={() => setDuration(d.value)}
                             activeOpacity={0.75}
                           >
-                            <Ionicons
-                              name={(activeCat?.icon ?? 'location-outline') as any}
-                              size={12}
-                              color={selected ? Ping.purpleLight : mutedIconColor}
-                            />
-                            <Text
-                              style={[s.suggestionText, selected && s.suggestionTextActive]}
-                              numberOfLines={1}
-                            >
-                              {p.name}
+                            <Text style={[s.durationLabel, active && s.durationLabelActive]}>{d.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Preferred venue  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <View style={s.iconInput}>
+                      <Ionicons name="location-outline" size={16} color={mutedIconColor} />
+                      <TextInput
+                        style={s.iconInputText}
+                        placeholder="A park, a café, your building lobby. Anywhere."
+                        placeholderTextColor={placeholderColor}
+                        value={venue}
+                        onChangeText={setVenue}
+                        maxLength={120}
+                        returnKeyType="done"
+                      />
+                    </View>
+
+                    {(loadingPlaces || Object.keys(categorizedPlaces).length > 0) && (
+                      <View style={s.locSuggestWrap}>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          keyboardShouldPersistTaps="handled"
+                          contentContainerStyle={s.locCatRow}
+                        >
+                          {LOCATION_CATEGORIES.map((cat) => {
+                            const active = activeLocCategory === cat.key;
+                            const count = categorizedPlaces[cat.key]?.length ?? 0;
+                            return (
+                              <TouchableOpacity
+                                key={cat.key}
+                                style={[s.locCatChip, active && s.locCatChipActive]}
+                                onPress={() => setActiveLocCategory(cat.key)}
+                                activeOpacity={0.75}
+                              >
+                                <Ionicons name={cat.icon as any} size={12} color={active ? '#FFF' : mutedIconColor} />
+                                <Text style={[s.locCatLabel, active && s.locCatLabelActive]}>
+                                  {cat.label}
+                                  {!loadingPlaces && count > 0 ? ` (${count})` : ''}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+
+                        {loadingPlaces ? (
+                          <View style={s.locLoadingRow}>
+                            <ActivityIndicator size="small" color={Ping.purpleLight} />
+                            <Text style={s.locLoadingText}>Finding nearby places…</Text>
+                          </View>
+                        ) : (categorizedPlaces[activeLocCategory]?.length ?? 0) > 0 ? (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={s.suggestionsRow}
+                          >
+                            {(categorizedPlaces[activeLocCategory] ?? []).map((p) => {
+                              const selected = venue === p.name;
+                              const activeCat = LOCATION_CATEGORIES.find((c) => c.key === activeLocCategory);
+                              return (
+                                <TouchableOpacity
+                                  key={p.name}
+                                  style={[s.suggestionChip, selected && s.suggestionChipActive]}
+                                  onPress={() => setVenue(selected ? '' : p.name)}
+                                  activeOpacity={0.75}
+                                >
+                                  <Ionicons
+                                    name={(activeCat?.icon ?? 'location-outline') as any}
+                                    size={12}
+                                    color={selected ? Ping.purpleLight : mutedIconColor}
+                                  />
+                                  <Text style={[s.suggestionText, selected && s.suggestionTextActive]} numberOfLines={1}>
+                                    {p.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        ) : (
+                          <Text style={s.locEmptyText}>
+                            No {LOCATION_CATEGORIES.find((c) => c.key === activeLocCategory)?.label ?? 'places'} found nearby
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Activity details  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <TextInput
+                      style={s.multiInput}
+                      placeholder="Context helps. People are confused by default."
+                      placeholderTextColor={placeholderColor}
+                      value={details}
+                      onChangeText={setDetails}
+                      maxLength={500}
+                      multiline
+                      numberOfLines={3}
+                      returnKeyType="default"
+                      textAlignVertical="top"
+                    />
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Special notes  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <View style={s.iconInput}>
+                      <Ionicons name="sparkles-outline" size={16} color={mutedIconColor} />
+                      <TextInput
+                        style={s.iconInputText}
+                        placeholder="e.g. Bring your gear. Or don't — we're not your mom."
+                        placeholderTextColor={placeholderColor}
+                        value={notes}
+                        onChangeText={setNotes}
+                        maxLength={300}
+                        returnKeyType="done"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Who can see it?</Text>
+                    <View style={s.visRow}>
+                      {(['public', 'friends'] as const).map((v) => {
+                        const active = visibility === v;
+                        return (
+                          <TouchableOpacity
+                            key={v}
+                            style={[s.visChip, active && s.visChipActive]}
+                            onPress={() => setVisibility(v)}
+                            activeOpacity={0.75}
+                          >
+                            <Ionicons name={v === 'public' ? 'earth-outline' : 'people-outline'} size={15} color={active ? '#FFF' : mutedIconColor} />
+                            <Text style={[s.visLabel, active && s.visLabelActive]}>
+                              {v === 'public' ? 'Everyone' : 'Friends only'}
                             </Text>
                           </TouchableOpacity>
                         );
                       })}
-                    </ScrollView>
-                  ) : (
-                    <Text style={s.locEmptyText}>
-                      No {LOCATION_CATEGORIES.find((c) => c.key === activeLocCategory)?.label ?? 'places'} found nearby
+                    </View>
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Who can join?</Text>
+                    <View style={s.genderRow}>
+                      {([
+                        { key: 'all', label: 'Everyone', icon: 'earth-outline' },
+                        { key: 'women_only', label: 'Women only', icon: 'female-outline' },
+                        { key: 'men_only', label: 'Men only', icon: 'male-outline' },
+                      ] as const).map((g) => {
+                        const active = genderFilter === g.key;
+                        const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : Ping.purple;
+                        return (
+                          <TouchableOpacity
+                            key={g.key}
+                            style={[
+                              s.genderChip,
+                              active
+                                ? { backgroundColor: color, borderColor: color }
+                                : { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)' },
+                            ]}
+                            onPress={() => setGenderFilter(g.key)}
+                            activeOpacity={0.75}
+                          >
+                            <Ionicons name={g.icon as any} size={14} color={active ? '#FFF' : mutedIconColor} />
+                            <Text style={[s.genderLabel, active && s.genderLabelActive]}>{g.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Max participants  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <View style={s.iconInput}>
+                      <Ionicons name="people-outline" size={16} color={mutedIconColor} />
+                      <TextInput
+                        style={s.iconInputText}
+                        placeholder="Leave blank for unlimited (chaos mode)"
+                        placeholderTextColor={placeholderColor}
+                        value={maxPeople}
+                        onChangeText={(v) => setMaxPeople(v.replace(/\D/g, ''))}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        returnKeyType="done"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={s.locNote}>
+                    <Ionicons
+                      name={customLat ? 'location' : 'location-outline'}
+                      size={13}
+                      color={customLat ? Ping.purple : hintColor}
+                    />
+                    <Text style={[s.locText, customLat != null && { color: Ping.purple, fontWeight: '600' }]}>
+                      {customLat != null ? 'Custom location set' : 'Ping is placed at your current location'}
                     </Text>
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* ── Activity details ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Activity details  <Text style={s.labelOptional}>(optional)</Text></Text>
-              <TextInput
-                style={s.multiInput}
-                placeholder="Context helps. People are confused by default."
-                placeholderTextColor={placeholderColor}
-                value={details}
-                onChangeText={setDetails}
-                maxLength={500}
-                multiline
-                numberOfLines={3}
-                returnKeyType="default"
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* ── Special notes ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Special notes  <Text style={s.labelOptional}>(optional)</Text></Text>
-              <View style={s.iconInput}>
-                <Ionicons name="sparkles-outline" size={16} color={mutedIconColor} />
-                <TextInput
-                  style={s.iconInputText}
-                  placeholder="e.g. Bring your gear. Or don't — we're not your mom."
-                  placeholderTextColor={placeholderColor}
-                  value={notes}
-                  onChangeText={setNotes}
-                  maxLength={300}
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-
-            {/* ── Visibility ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Who can see it?</Text>
-              <View style={s.visRow}>
-                {(['public', 'friends'] as const).map((v) => {
-                  const active = visibility === v;
-                  return (
-                    <TouchableOpacity
-                      key={v}
-                      style={[s.visChip, active && s.visChipActive]}
-                      onPress={() => setVisibility(v)}
-                      activeOpacity={0.75}
-                    >
-                      <Ionicons name={v === 'public' ? 'earth-outline' : 'people-outline'} size={15} color={active ? '#FFF' : mutedIconColor} />
-                      <Text style={[s.visLabel, active && s.visLabelActive]}>
-                        {v === 'public' ? 'Everyone' : 'Friends only'}
+                    <TouchableOpacity onPress={() => setShowLocationPicker(true)} hitSlop={8}>
+                      <Text style={s.changeLocBtn}>
+                        {customLat ? 'Change' : 'Pick another'}
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* ── Gender filter ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Who can join?</Text>
-              <View style={s.genderRow}>
-                {([
-                  { key: 'all',        label: 'Everyone',   icon: 'earth-outline'   },
-                  { key: 'women_only', label: 'Women only', icon: 'female-outline'  },
-                  { key: 'men_only',   label: 'Men only',   icon: 'male-outline'    },
-                ] as const).map((g) => {
-                  const active = genderFilter === g.key;
-                  const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : Ping.purple;
-                  return (
-                    <TouchableOpacity
-                      key={g.key}
-                      style={[
-                        s.genderChip,
-                        active
-                          ? { backgroundColor: color, borderColor: color }
-                          : { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)' },
-                      ]}
-                      onPress={() => setGenderFilter(g.key)}
-                      activeOpacity={0.75}
-                    >
-                      <Ionicons name={g.icon as any} size={14} color={active ? '#FFF' : mutedIconColor} />
-                      <Text style={[s.genderLabel, active && s.genderLabelActive]}>{g.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* ── Max participants ── */}
-            <View style={s.section}>
-              <Text style={s.label}>Max participants  <Text style={s.labelOptional}>(optional)</Text></Text>
-              <View style={s.iconInput}>
-                <Ionicons name="people-outline" size={16} color={mutedIconColor} />
-                <TextInput
-                  style={s.iconInputText}
-                  placeholder="Leave blank for unlimited (chaos mode)"
-                  placeholderTextColor={placeholderColor}
-                  value={maxPeople}
-                  onChangeText={(v) => setMaxPeople(v.replace(/\D/g, ''))}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-
-            <View style={s.locNote}>
-              <Ionicons
-                name={customLat ? 'location' : 'location-outline'}
-                size={13}
-                color={customLat ? Ping.purple : hintColor}
-              />
-              <Text style={[s.locText, customLat && { color: Ping.purple, fontWeight: '600' }]}>
-                {customLat ? 'Custom location set' : 'Ping is placed at your current location'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowLocationPicker(true)} hitSlop={8}>
-                <Text style={s.changeLocBtn}>
-                  {customLat ? 'Change' : 'Pick another'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+                  </View>
+                </>
+              )}
+            </ScrollView>
 
           {/* Footer */}
           <View style={[s.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
-            <TouchableOpacity
-              style={[s.createBtn, saving && s.createBtnDisabled]}
-              onPress={handleCreate}
-              disabled={saving}
-              activeOpacity={0.85}
-            >
-              {saving ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name={isNow ? 'flash' : 'time'} size={20} color="#FFF" />
-                  <Text style={s.createBtnText}>
-                    {isNow ? 'Drop Ping Now' : `Schedule for ${formatTimeDisplay(scheduledTime, selectedDateOffset)}`}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.cancelBtn}
-              onPress={handleClose}
-              disabled={saving}
-              activeOpacity={0.7}
-            >
-              <Text style={s.cancelBtnText}>Nah, never mind</Text>
-            </TouchableOpacity>
+            <View style={s.stepRow}>
+              <View style={[s.stepDot, step === 1 && s.stepDotActive]} />
+              <View style={[s.stepDot, step === 2 && s.stepDotActive]} />
+            </View>
+            <Text style={s.stepHint}>
+              {step === 1 ? 'Step 1 of 2 - The basics' : 'Step 2 of 2 - Details & who'}
+            </Text>
+
+            {step === 1 ? (
+              <>
+                <TouchableOpacity style={s.createBtn} onPress={goNext} activeOpacity={0.85}>
+                  <Text style={s.createBtnText}>Continue</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cancelBtn} onPress={handleClose} activeOpacity={0.7}>
+                  <Text style={s.cancelBtnText}>Nah, never mind</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={s.footerRow}>
+                <TouchableOpacity
+                  style={s.backBtn}
+                  onPress={goBack}
+                  disabled={saving || uploadingImage}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="arrow-back" size={20} color={mutedIconColor} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.createBtn, (saving || uploadingImage) && s.createBtnDisabled, s.createBtnFlex]}
+                  onPress={handleCreate}
+                  disabled={saving || uploadingImage}
+                  activeOpacity={0.85}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name={isNow ? 'flash' : 'time'} size={20} color="#FFF" />
+                      <Text style={s.createBtnText}>
+                        {isNow ? 'Drop Ping Now' : 'Schedule Ping'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
+          </Animated.View>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
 
     <LocationPickerModal

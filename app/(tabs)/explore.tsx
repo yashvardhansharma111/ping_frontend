@@ -12,24 +12,43 @@ import {
   Animated,
   Modal,
   ScrollView,
-  Image,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { activitiesApi, type Activity } from '@/lib/api';
 import { useLocation } from '@/hooks/useLocation';
 import ActivityCard from '@/components/ActivityCard';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  MagnifyingGlass,
+  Faders,
+  MapPin,
+  CheckCircle,
+  Star,
+  Sparkle,
+  Lightning,
+  X,
+  Coffee,
+  Smiley,
+  Leaf,
+  Buildings,
+  Barbell,
+  SoccerBall,
+  ForkKnife,
+  MusicNotes,
+  BookOpen,
+  SunHorizon,
+  GameController,
+  UsersThree,
+} from 'phosphor-react-native';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 type Filter = 'nearby' | 'joined' | 'mine';
 
-const FILTERS: { key: Filter; label: string; icon: IoniconName }[] = [
-  { key: 'nearby', label: 'Nearby',  icon: 'location-outline' },
-  { key: 'joined', label: 'Joined',  icon: 'checkmark-circle-outline' },
-  { key: 'mine',   label: 'Mine',    icon: 'star-outline' },
+const FILTERS: { key: Filter; label: string; Icon: typeof MapPin }[] = [
+  { key: 'nearby', label: 'Nearby', Icon: MapPin },
+  { key: 'joined', label: 'Joined', Icon: CheckCircle },
+  { key: 'mine',   label: 'Mine',   Icon: Star },
 ];
 
 interface ActiveFilters {
@@ -47,23 +66,23 @@ const DISTANCE_OPTIONS = [
   { label: '5 km',  meters: 5000 },
 ];
 
-const VIBE_OPTIONS: { key: string; label: string; icon: IoniconName }[] = [
-  { key: 'cozy',        label: 'Cozy',        icon: 'cafe-outline' },
-  { key: 'fun',         label: 'Fun',         icon: 'happy-outline' },
-  { key: 'exciting',    label: 'Exciting',    icon: 'flash-outline' },
-  { key: 'chill',       label: 'Chill',       icon: 'leaf-outline' },
-  { key: 'networking',  label: 'Networking',  icon: 'business-outline' },
-  { key: 'fitness',     label: 'Fitness',     icon: 'barbell-outline' },
+const VIBE_OPTIONS: { key: string; label: string; Icon: typeof Coffee }[] = [
+  { key: 'cozy',        label: 'Cozy',        Icon: Coffee },
+  { key: 'fun',         label: 'Fun',         Icon: Smiley },
+  { key: 'exciting',    label: 'Exciting',    Icon: Lightning },
+  { key: 'chill',       label: 'Chill',       Icon: Leaf },
+  { key: 'networking',  label: 'Networking',  Icon: Buildings },
+  { key: 'fitness',     label: 'Fitness',     Icon: Barbell },
 ];
 
-const CATEGORY_OPTIONS: { key: string; label: string; icon: IoniconName }[] = [
-  { key: 'sport',   label: 'Sport',   icon: 'football-outline' },
-  { key: 'food',    label: 'Food',    icon: 'restaurant-outline' },
-  { key: 'music',   label: 'Music',   icon: 'musical-notes-outline' },
-  { key: 'study',   label: 'Study',   icon: 'book-outline' },
-  { key: 'outdoor', label: 'Outdoor', icon: 'partly-sunny-outline' },
-  { key: 'gaming',  label: 'Gaming',  icon: 'game-controller-outline' },
-  { key: 'meetup',  label: 'Meetup',  icon: 'people-outline' },
+const CATEGORY_OPTIONS: { key: string; label: string; Icon: typeof SoccerBall }[] = [
+  { key: 'sport',   label: 'Sport',   Icon: SoccerBall },
+  { key: 'food',    label: 'Food',    Icon: ForkKnife },
+  { key: 'music',   label: 'Music',   Icon: MusicNotes },
+  { key: 'study',   label: 'Study',   Icon: BookOpen },
+  { key: 'outdoor', label: 'Outdoor', Icon: SunHorizon },
+  { key: 'gaming',  label: 'Gaming',  Icon: GameController },
+  { key: 'meetup',  label: 'Meetup',  Icon: UsersThree },
 ];
 
 function countActive(f: ActiveFilters): number {
@@ -183,24 +202,14 @@ export default function ActivitiesScreen() {
       >
         <View>
           <View style={styles.titleRow}>
-            <Image source={require('../../assets/images/icon.png')} style={styles.headerIcon} />
             <Text style={[styles.title, { color: c.text }]}>Activities</Text>
+            <Sparkle size={18} color={Ping.purple} weight="fill" />
           </View>
           <Text style={[styles.subtitle, { color: c.textSecondary }]}>
             Discover what's happening near you
           </Text>
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={[styles.filterBtn, { backgroundColor: c.surface, borderColor: activeCount > 0 ? Ping.purple : c.border }]}
-            onPress={openFilterSheet}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="options-outline" size={16} color={activeCount > 0 ? c.tint : c.icon} />
-            <Text style={[styles.filterBtnLabel, { color: activeCount > 0 ? c.tint : c.textSecondary }]}>
-              Filters{activeCount > 0 ? ` (${activeCount})` : ''}
-            </Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerBtn, { backgroundColor: c.surface, borderColor: c.border }]}
             onPress={() => {
@@ -212,7 +221,22 @@ export default function ActivitiesScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={c.icon} />
+            {searchOpen
+              ? <X size={18} color={c.icon} weight="bold" />
+              : <MagnifyingGlass size={18} color={c.icon} weight="bold" />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.headerBtn,
+              {
+                backgroundColor: activeCount > 0 ? `${Ping.purple}18` : c.surface,
+                borderColor: activeCount > 0 ? Ping.purple : c.border,
+              },
+            ]}
+            onPress={openFilterSheet}
+            activeOpacity={0.8}
+          >
+            <Faders size={18} color={activeCount > 0 ? Ping.purple : c.icon} weight="bold" />
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -220,7 +244,7 @@ export default function ActivitiesScreen() {
       {/* Search bar */}
       {searchOpen && (
         <View style={[styles.searchWrap, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <Ionicons name="search" size={16} color={c.icon} />
+          <MagnifyingGlass size={16} color={c.icon} weight="bold" />
           <TextInput
             ref={searchRef}
             style={[styles.searchInput, { color: c.text }]}
@@ -233,7 +257,7 @@ export default function ActivitiesScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={c.icon} />
+              <X size={16} color={c.icon} weight="bold" />
             </TouchableOpacity>
           )}
         </View>
@@ -243,6 +267,7 @@ export default function ActivitiesScreen() {
       <View style={styles.filterRow}>
         {FILTERS.map((f) => {
           const active = filter === f.key;
+          const TabIcon = f.Icon;
           return (
             <Animated.View key={f.key} style={{ transform: [{ scale: chipScales[f.key] }] }}>
               <TouchableOpacity
@@ -254,7 +279,7 @@ export default function ActivitiesScreen() {
                 onPress={() => switchFilter(f.key)}
                 activeOpacity={0.75}
               >
-                <Ionicons name={f.icon} size={13} color={active ? '#FFF' : c.textSecondary} />
+                <TabIcon size={14} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
                 <Text style={[styles.chipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
                   {f.label}
                 </Text>
@@ -283,7 +308,7 @@ export default function ActivitiesScreen() {
               <Text style={[styles.activePillText, { color: c.tint }]}>
                 {DISTANCE_OPTIONS.find(d => d.meters === activeFilters.distance)?.label ?? 'Distance'}
               </Text>
-              <Ionicons name="close" size={12} color={c.tint} />
+              <X size={12} color={c.tint} weight="bold" />
             </TouchableOpacity>
           )}
           {activeFilters.vibe !== null && (
@@ -294,7 +319,7 @@ export default function ActivitiesScreen() {
               <Text style={[styles.activePillText, { color: c.tint }]}>
                 {VIBE_OPTIONS.find(v => v.key === activeFilters.vibe)?.label ?? activeFilters.vibe}
               </Text>
-              <Ionicons name="close" size={12} color={c.tint} />
+              <X size={12} color={c.tint} weight="bold" />
             </TouchableOpacity>
           )}
           {activeFilters.category !== null && (
@@ -305,7 +330,7 @@ export default function ActivitiesScreen() {
               <Text style={[styles.activePillText, { color: c.tint }]}>
                 {CATEGORY_OPTIONS.find(cat => cat.key === activeFilters.category)?.label ?? activeFilters.category}
               </Text>
-              <Ionicons name="close" size={12} color={c.tint} />
+              <X size={12} color={c.tint} weight="bold" />
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -332,7 +357,7 @@ export default function ActivitiesScreen() {
             ) : (
               <View style={styles.empty}>
                 <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}18` }]}>
-                  <Ionicons name="flash-outline" size={36} color={Ping.purpleLight} />
+                  <Lightning size={36} color={Ping.purpleLight} weight="duotone" />
                 </View>
                 <Text style={[styles.emptyTitle, { color: c.text }]}>Nothing here</Text>
                 <Text style={[styles.emptyText, { color: c.textSecondary }]}>
@@ -417,7 +442,7 @@ export default function ActivitiesScreen() {
                       onPress={() => setPendingFilters((p) => ({ ...p, vibe: active ? null : v.key }))}
                       activeOpacity={0.75}
                     >
-                      <Ionicons name={v.icon} size={13} color={active ? '#FFF' : c.textSecondary} />
+                      <v.Icon size={13} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
                       <Text style={[fs.optionChipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
                         {v.label}
                       </Text>
@@ -442,7 +467,7 @@ export default function ActivitiesScreen() {
                       onPress={() => setPendingFilters((p) => ({ ...p, category: active ? null : cat.key }))}
                       activeOpacity={0.75}
                     >
-                      <Ionicons name={cat.icon} size={13} color={active ? '#FFF' : c.textSecondary} />
+                      <cat.Icon size={13} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
                       <Text style={[fs.optionChipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
                         {cat.label}
                       </Text>
@@ -481,7 +506,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIcon: { width: 28, height: 28 },
   title: { ...Typography.h2, fontSize: 26 },
   subtitle: { ...Typography.caption, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
@@ -550,7 +574,7 @@ const styles = StyleSheet.create({
     borderColor: `${Ping.purple}44`,
   },
   activePillText: { fontSize: 12, color: Ping.purpleLight, fontWeight: '600' },
-  list: { paddingHorizontal: Spacing.lg, paddingBottom: 130, gap: Spacing.sm },
+  list: { paddingHorizontal: Spacing.lg, paddingBottom: 130, gap: 12 },
   center: { paddingTop: 80, alignItems: 'center' },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.sm },
   emptyIconWrap: {

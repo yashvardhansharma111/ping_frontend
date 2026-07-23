@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Dimensions,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
@@ -16,448 +18,361 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
-import { authApi, usersApi, friendsApi, uploadApi, activitiesApi } from '@/lib/api';
+import { usersApi, friendsApi, uploadApi, activitiesApi } from '@/lib/api';
 import HighlightsSection from '@/components/HighlightsSection';
-import ConfirmSheet from '@/components/ConfirmSheet';
-import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
+import { Spacing, Radius, Typography, Colors, Ping } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-const INTEREST_EMOJIS: Record<string, string> = {
-  Aviation: '✈️', Art: '🎨', Crypto: '🪙', Baking: '🥐', Botany: '🌿',
-  Cars: '🚗', 'Real Estate': '🏠', Technology: '💻', Fashion: '👗', Dogs: '🐕',
-  Birds: '🐦', 'Health care': '🏥', Geography: '🗺️', Finance: '💵', Cats: '🐈',
-  LGBTQ: '🏳️‍🌈', 'Mental Health': '🧠', Programming: '⌨️', Cinema: '🎬', Sports: '🏀',
-  Travel: '✈️', Gaming: '🎮', Photography: '📷', Design: '✏️', UFO: '🛸',
-  Music: '🎵', Food: '🍕', Fitness: '💪', Coffee: '☕', Yoga: '🧘',
-  Cooking: '👨‍🍳', Reading: '📚', Dancing: '💃', Anime: '🎌',
-};
+const { width: SCREEN_W } = Dimensions.get('window');
+const HERO_H = Math.round(SCREEN_W * 1.2);
 
-const OCCUPATION_MAP: Record<string, string> = {
-  job: '👨‍💻 Working',
-  student: '🎓 Student',
-  founder: '🚀 Founder',
-  business: '💼 Business',
-  freelancer: '🖥️ Freelancer',
-  exploring: '🌍 Exploring',
-};
-
-type MenuItem = {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-  badge?: string;
-};
+function getAge(dob?: string): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+}
 
 export default function ProfileScreen() {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, setUser, refreshToken, logout } = useAuthStore();
+  const { user, setUser } = useAuthStore();
 
-  const [friendCount, setFriendCount]               = useState<number | null>(null);
-  const [activityCount, setActivityCount]           = useState<number | null>(null);
-  const [completedPingCount, setCompletedPingCount] = useState<number | null>(null);
-  const [uploadingAvatar, setUploadingAvatar]       = useState(false);
-  const [showLogout, setShowLogout]                 = useState(false);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [activityCount, setActivityCount] = useState<number | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
 
-  const scrollRef  = useRef<ScrollView>(null);
-  const settingsY  = useRef(0);
-
-  const heroAnim  = useRef(new Animated.Value(0)).current;
-  const statsAnim = useRef(new Animated.Value(0)).current;
-  const menuAnim  = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     friendsApi.list().then((r) => setFriendCount(r.friends?.length ?? 0)).catch(() => {});
     activitiesApi.mine('all').then((r) => setActivityCount(r.activities?.length ?? 0)).catch(() => {});
-    activitiesApi.mine('expired').then((r) => setCompletedPingCount(r.activities?.length ?? 0)).catch(() => {});
-    Animated.stagger(90, [
-      Animated.spring(heroAnim,  { toValue: 1, damping: 18, stiffness: 180, mass: 0.9, useNativeDriver: true }),
-      Animated.spring(statsAnim, { toValue: 1, damping: 18, stiffness: 180, mass: 0.9, useNativeDriver: true }),
-      Animated.spring(menuAnim,  { toValue: 1, damping: 18, stiffness: 180, mass: 0.9, useNativeDriver: true }),
-    ]).start();
+    Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }).start();
   }, []);
 
-  const initials = (user?.displayName ?? user?.phone ?? '?')
-    .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  const photos = useMemo(() => {
+    const list = [...(user?.photos ?? [])];
+    if (user?.avatarUrl && !list.includes(user.avatarUrl)) list.unshift(user.avatarUrl);
+    return list;
+  }, [user?.photos, user?.avatarUrl]);
 
-  const isVerified       = user?.verificationStatus === 'verified';
-  const verificationStatus = user?.verificationStatus ?? 'none';
-  const hobbies          = (user as any)?.hobbies as string[] | undefined;
+  const initials = (user?.displayName ?? user?.phone ?? '?')
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const age = getAge(user?.dob);
+  const isVerified = user?.verificationStatus === 'verified';
+  const hobbies = (user?.hobbies ?? []).slice(0, 6);
+  const metaLine = [age ? String(age) : null, user?.city || null].filter(Boolean).join(' · ');
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Toast.show({ type: 'info', text1: 'Permission needed', text2: 'Allow photo access to update your profile picture.' });
+      Toast.show({ type: 'info', text1: 'Permission needed', text2: 'Allow photo access to update your picture.' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], quality: 0.85, allowsEditing: true, aspect: [1, 1],
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [3, 4],
     });
     if (result.canceled || !result.assets[0]) return;
     setUploadingAvatar(true);
     try {
       const url = await uploadApi.uploadImage(result.assets[0].uri, 'avatars');
-      const res = await usersApi.updateMe({ avatarUrl: url });
+      const nextPhotos = [...(user?.photos ?? [])];
+      if (!nextPhotos.length) nextPhotos.push(url);
+      const res = await usersApi.updateMe({
+        avatarUrl: url,
+        ...(nextPhotos.length ? { photos: nextPhotos } : {}),
+      });
       setUser(res.user);
     } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Upload failed', text2: err.message || 'Could not update profile picture.' });
-    } finally { setUploadingAvatar(false); }
-  }
-
-  // ── Settings groups ──────────────────────────────────────────────────────────
-  const profileGroup: MenuItem[] = [
-    { icon: 'person-outline',    label: 'Edit Profile', onPress: () => router.push('/edit-profile' as any) },
-    { icon: 'flash-outline',     label: 'My Activity',  onPress: () => router.push('/my-activity' as any) },
-    { icon: 'megaphone-outline', label: 'My Ads',       onPress: () => router.push('/ads') },
-  ];
-
-  const prefGroup: MenuItem[] = [
-    { icon: 'color-palette-outline', label: 'Appearance',         onPress: () => router.push('/appearance' as any) },
-    { icon: 'eye-outline',           label: 'Privacy & Location',  onPress: () => router.push('/privacy' as any) },
-    { icon: 'notifications-outline', label: 'Notifications',       onPress: () => router.push('/notifications' as any) },
-  ];
-
-  const accountGroup: MenuItem[] = [
-    {
-      icon: verificationStatus === 'verified'
-        ? 'shield-checkmark-outline'
-        : verificationStatus === 'pending'
-        ? 'hourglass-outline'
-        : 'shield-half-outline',
-      label: verificationStatus === 'verified'
-        ? 'Identity Verified'
-        : verificationStatus === 'pending'
-        ? 'Verification Pending…'
-        : 'Get Verified',
-      onPress: () => router.push('/verification' as any),
-      badge: verificationStatus !== 'verified' ? '!' : undefined,
-    },
-    { icon: 'shield-outline', label: 'Safety & Account', onPress: () => router.push('/safety' as any) },
-  ];
-
-  function SettingsGroup({ items }: { items: MenuItem[] }) {
-    return (
-      <View style={[styles.settingsCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-        {items.map((item, i) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[
-              styles.settingsRow,
-              i < items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-            ]}
-            onPress={item.onPress}
-            activeOpacity={0.65}
-          >
-            <View style={[styles.settingsIconWrap, { backgroundColor: 'rgba(124,58,237,0.1)' }]}>
-              <Ionicons name={item.icon} size={18} color={c.tint} />
-            </View>
-            <Text style={[styles.settingsLabel, { color: c.text }]}>{item.label}</Text>
-            {item.badge && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{item.badge}</Text>
-              </View>
-            )}
-            <Ionicons name="chevron-forward" size={15} color={c.icon} />
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
+      Toast.show({ type: 'error', text1: 'Upload failed', text2: err.message || 'Could not update photo.' });
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
-
-      {/* ── Sticky top bar ── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 4, backgroundColor: c.background, borderBottomColor: c.border }]}>
-        <Text style={[styles.topTitle, { color: c.text }]}>Profile</Text>
-        <TouchableOpacity
-          style={[styles.gearBtn, { backgroundColor: c.surface }]}
-          onPress={() => scrollRef.current?.scrollTo({ y: settingsY.current - 16, animated: true })}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="settings-outline" size={20} color={c.icon} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
-        ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
         showsVerticalScrollIndicator={false}
       >
-
-        {/* ── Hero ── */}
-        <Animated.View style={[styles.hero, {
-          opacity: heroAnim,
-          transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
-        }]}>
-          {/* Avatar with gradient ring */}
-          <TouchableOpacity onPress={pickAvatar} activeOpacity={0.85} style={styles.avatarWrap}>
-            <LinearGradient
-              colors={['#A78BFA', '#7C3AED', '#EC4899']}
-              style={styles.gradientRing}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={[styles.avatarInner, { backgroundColor: c.background }]}>
-                {user?.avatarUrl ? (
-                  <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
-                ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: Ping.purple }]}>
-                    <Text style={styles.avatarInitials}>{initials}</Text>
-                  </View>
+        <Animated.View style={{ opacity: fadeAnim }}>
+          <View style={[styles.hero, { height: HERO_H }]}>
+            {photos.length > 0 ? (
+              <FlatList
+                data={photos}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) =>
+                  setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))
+                }
+                keyExtractor={(uri, i) => `${uri}-${i}`}
+                renderItem={({ item }) => (
+                  <Image source={{ uri: item }} style={{ width: SCREEN_W, height: HERO_H }} resizeMode="cover" />
                 )}
-              </View>
-            </LinearGradient>
-            <View style={[styles.cameraBtn, { backgroundColor: Ping.purple, borderColor: c.background }]}>
-              {uploadingAvatar
-                ? <ActivityIndicator size="small" color="#FFF" />
-                : <Ionicons name="camera" size={13} color="#FFF" />}
-            </View>
-          </TouchableOpacity>
+              />
+            ) : (
+              <TouchableOpacity
+                style={[styles.heroEmpty, { backgroundColor: c.surface }]}
+                onPress={pickAvatar}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.heroInitials, { color: c.text }]}>{initials}</Text>
+                <Text style={[styles.heroEmptyHint, { color: c.textSecondary }]}>Add a photo</Text>
+              </TouchableOpacity>
+            )}
 
-          {/* Name + verified badge */}
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: c.text }]}>
-              {user?.displayName ?? 'No name set'}
-            </Text>
-            {isVerified && (
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark" size={10} color="#FFF" />
-                <Text style={styles.verifiedText}>Verified</Text>
+            <LinearGradient
+              colors={['rgba(0,0,0,0.45)', 'transparent', 'transparent', 'rgba(0,0,0,0.82)']}
+              locations={[0, 0.22, 0.55, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+
+            <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+              <Text style={styles.topTitle}>Profile</Text>
+              <View style={styles.topActions}>
+                <TouchableOpacity style={styles.iconBtn} onPress={pickAvatar} activeOpacity={0.75}>
+                  {uploadingAvatar ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Ionicons name="camera-outline" size={18} color="#FFF" />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  onPress={() => router.push('/settings' as any)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="settings-outline" size={18} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {photos.length > 1 && (
+              <View style={[styles.dots, { top: insets.top + 56 }]}>
+                {photos.map((_, i) => (
+                  <View key={i} style={[styles.dot, i === photoIndex && styles.dotActive]} />
+                ))}
               </View>
             )}
+
+            <View style={styles.heroIdentity} pointerEvents="none">
+              <View style={styles.nameRow}>
+                <Text style={styles.heroName} numberOfLines={1}>
+                  {user?.displayName ?? 'Your name'}
+                </Text>
+                {isVerified && <Ionicons name="checkmark-circle" size={20} color="#BB92FF" />}
+              </View>
+              {metaLine ? <Text style={styles.heroMeta}>{metaLine}</Text> : null}
+            </View>
           </View>
 
-          {/* Username */}
-          {user?.username ? (
-            <Text style={[styles.username, { color: c.textSecondary }]}>@{user.username}</Text>
-          ) : null}
-
-          {/* Bio */}
-          {(user as any)?.bio ? (
-            <Text style={[styles.bio, { color: c.textSecondary }]}>{(user as any).bio}</Text>
-          ) : null}
-
-          {/* Occupation chip */}
-          {user?.occupation ? (
-            <View style={[styles.occupationChip, { backgroundColor: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.2)' }]}>
-              <Text style={[styles.occupationText, { color: c.tint }]}>
-                {OCCUPATION_MAP[user.occupation as string] ?? user.occupation}
+          <View style={styles.body}>
+            {user?.bio ? (
+              <Text style={[styles.bio, { color: c.text }]}>{user.bio}</Text>
+            ) : (
+              <Text style={[styles.bioMuted, { color: c.textSecondary }]}>
+                Add a short bio so people know your vibe.
               </Text>
-            </View>
-          ) : null}
-        </Animated.View>
+            )}
 
-        {/* ── Stats ── */}
-        <Animated.View style={[styles.statsRow, { backgroundColor: c.surface, borderColor: c.border }, {
-          opacity: statsAnim,
-          transform: [{ translateY: statsAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
-        }]}>
-          {[
-            { label: 'Friends',  value: friendCount          !== null ? String(friendCount)          : '—' },
-            { label: 'Pings',    value: activityCount        !== null ? String(activityCount)        : '—' },
-            { label: 'Done',     value: completedPingCount   !== null ? String(completedPingCount)   : '—' },
-          ].map((stat, i) => (
-            <View
-              key={stat.label}
-              style={[
-                styles.statItem,
-                i < 2 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: c.border },
-              ]}
-            >
-              <Text style={[styles.statValue, { color: c.text }]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, { color: c.textSecondary }]}>{stat.label}</Text>
-            </View>
-          ))}
-        </Animated.View>
-
-        {/* ── Interests ── */}
-        {hobbies && hobbies.length > 0 && (
-          <Animated.View style={{
-            opacity: statsAnim,
-            transform: [{ translateY: statsAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
-          }}>
-            <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>INTERESTS</Text>
-            <View style={styles.interestWrap}>
-              {hobbies.map((h) => (
+            <View style={[styles.statsRow, { borderColor: c.border }]}>
+              {[
+                { label: 'Friends', value: friendCount !== null ? String(friendCount) : '—' },
+                { label: 'Pings', value: activityCount !== null ? String(activityCount) : '—' },
+              ].map((stat, i) => (
                 <View
-                  key={h}
-                  style={[styles.interestChip, { backgroundColor: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.18)' }]}
+                  key={stat.label}
+                  style={[
+                    styles.statItem,
+                    i === 0 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: c.border },
+                  ]}
                 >
-                  <Text style={styles.interestEmoji}>{INTEREST_EMOJIS[h] ?? '✨'}</Text>
-                  <Text style={[styles.interestText, { color: c.text }]}>{h}</Text>
+                  <Text style={[styles.statValue, { color: c.text }]}>{stat.value}</Text>
+                  <Text style={[styles.statLabel, { color: c.textSecondary }]}>{stat.label}</Text>
                 </View>
               ))}
             </View>
-          </Animated.View>
-        )}
 
-        {/* ── Highlights ── */}
-        {user && (
-          <HighlightsSection userId={user._id} isOwnProfile={true} scheme={scheme} />
-        )}
+            {hobbies.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>Interests</Text>
+                <View style={styles.chipWrap}>
+                  {hobbies.map((h) => (
+                    <View key={h} style={[styles.chip, { borderColor: Ping.lavender, backgroundColor: scheme === 'dark' ? c.soft : Ping.soft }]}>
+                      <Text style={[styles.chipText, { color: c.text }]}>{h}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
-        {/* ── Settings ── */}
-        <Animated.View
-          onLayout={(e) => { settingsY.current = e.nativeEvent.layout.y; }}
-          style={[{
-            opacity: menuAnim,
-            transform: [{ translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-            gap: Spacing.md,
-          }]}
-        >
-          <View style={styles.settingsTitleRow}>
-            <Ionicons name="settings-outline" size={12} color={c.icon} />
-            <Text style={[styles.sectionLabel, { color: c.textSecondary, marginBottom: 0 }]}>SETTINGS</Text>
+            <TouchableOpacity
+              style={[styles.editBtn, { backgroundColor: Ping.purple }]}
+              onPress={() => router.push('/edit-profile' as any)}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.editBtnText, { color: '#FFF' }]}>Edit profile</Text>
+            </TouchableOpacity>
+
+            {user && (
+              <View style={styles.section}>
+                <HighlightsSection userId={user._id} isOwnProfile scheme={scheme} />
+              </View>
+            )}
           </View>
-
-          <SettingsGroup items={profileGroup} />
-          <SettingsGroup items={prefGroup} />
-          <SettingsGroup items={accountGroup} />
-
-          <TouchableOpacity
-            style={[styles.logoutBtn, { borderColor: 'rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.06)' }]}
-            onPress={() => setShowLogout(true)}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="log-out-outline" size={18} color={Ping.red} />
-            <Text style={styles.logoutText}>Log out</Text>
-          </TouchableOpacity>
         </Animated.View>
-
-        <Text style={[styles.version, { color: c.icon }]}>Ping v1.0.0</Text>
       </ScrollView>
-
-      <ConfirmSheet
-        visible={showLogout}
-        onClose={() => setShowLogout(false)}
-        title="Log out?"
-        subtitle="You'll have to type your number again. Worth it?"
-        confirmLabel="Log out"
-        cancelLabel="Stay"
-        danger
-        onConfirm={async () => {
-          try { if (refreshToken) await authApi.logout(refreshToken); } catch {}
-          await logout();
-        }}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-
-  // Top bar
   topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
   },
-  topTitle: { ...Typography.h3 },
-  gearBtn: {
-    width: 38, height: 38, borderRadius: Radius.sm,
-    alignItems: 'center', justifyContent: 'center',
+  topTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: -0.2,
+  },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
 
-  content: { paddingHorizontal: Spacing.lg, gap: Spacing.lg, paddingTop: Spacing.lg },
-
-  // Hero
-  hero: { alignItems: 'center', gap: 6, paddingVertical: Spacing.sm },
-  avatarWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.xs },
-  gradientRing: {
-    width: 108, height: 108, borderRadius: 54, padding: 3,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarInner: {
-    width: 102, height: 102, borderRadius: 51,
-    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-  },
-  avatarImage:    { width: 102, height: 102 },
-  avatarFallback: { width: 102, height: 102, alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { fontSize: 36, fontWeight: '800', color: '#FFF' },
-  cameraBtn: {
-    position: 'absolute', bottom: 2, right: 2,
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2,
-  },
-  nameRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  name:         { ...Typography.h2 },
-  verifiedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  verifiedText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
-  username:     { ...Typography.bodySm },
-  bio: {
-    ...Typography.bodySm,
-    textAlign: 'center',
-    maxWidth: 260,
-    lineHeight: 20,
-  },
-  occupationChip: {
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: Radius.full, borderWidth: 1, marginTop: 2,
-  },
-  occupationText: { fontSize: 13, fontWeight: '600' },
-
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    borderRadius: Radius.lg,
-    borderWidth: 1,
+  hero: {
+    width: SCREEN_W,
+    backgroundColor: '#111',
     overflow: 'hidden',
   },
-  statItem: { flex: 1, paddingVertical: Spacing.md, alignItems: 'center', gap: 3 },
-  statValue: { ...Typography.h2 },
-  statLabel: { ...Typography.caption },
+  heroEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  heroInitials: { fontSize: 64, fontWeight: '800', letterSpacing: -1 },
+  heroEmptyHint: { ...Typography.bodySm, fontWeight: '600' },
+  dots: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+  },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
+  dotActive: { width: 16, backgroundColor: '#FFF' },
+  heroIdentity: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 22,
+    gap: 6,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroName: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -0.5,
+    lineHeight: 36,
+    flexShrink: 1,
+  },
+  heroMeta: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
 
-  // Interests
-  sectionLabel: { ...Typography.label, marginBottom: Spacing.sm },
-  interestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  interestChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: Radius.full, borderWidth: 1,
+  body: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 20,
   },
-  interestEmoji: { fontSize: 14 },
-  interestText:  { fontSize: 13, fontWeight: '500' },
+  bio: {
+    fontSize: 15,
+    fontWeight: '400',
+    lineHeight: 22,
+  },
+  bioMuted: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
 
-  // Settings
-  settingsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  settingsCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  settingsRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: Spacing.md, paddingVertical: 14,
-    gap: Spacing.md,
+  statsRow: {
+    flexDirection: 'row',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
   },
-  settingsIconWrap: {
-    width: 34, height: 34, borderRadius: Radius.sm,
-    alignItems: 'center', justifyContent: 'center',
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 3,
   },
-  settingsLabel: { ...Typography.bodyMed, flex: 1 },
-  notifBadge: {
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: Ping.red, alignItems: 'center', justifyContent: 'center',
-  },
-  notifBadgeText: { fontSize: 10, fontWeight: '800', color: '#FFF' },
+  statValue: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  statLabel: { fontSize: 12, fontWeight: '500' },
 
-  // Logout
-  logoutBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 15,
-    borderRadius: Radius.lg, borderWidth: 1,
+  section: { gap: 12 },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
-  logoutText: { fontSize: 15, fontWeight: '600', color: Ping.red },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  chipText: { fontSize: 13, fontWeight: '500' },
 
-  version: { ...Typography.caption, textAlign: 'center' },
+  editBtn: {
+    height: 52,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
 });

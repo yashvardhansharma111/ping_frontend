@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Modal, Animated,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Modal, Animated, LayoutAnimation, UIManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import FadeInItem from '@/components/FadeInItem';
 import useAuthStore from '@/lib/stores/authStore';
 import { usersApi, activitiesApi, uploadApi, type Activity } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
@@ -17,63 +18,18 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
-type SectionKey = 'basic' | 'personal' | 'social' | 'hobbies' | 'vibes' | 'activities' | 'personality' | 'pitch' | 'past';
-
-// ── Profile completion ────────────────────────────────────────────────────────
-type CompletionItem = {
-  key: string;
-  label: string;
-  sublabel: string;
-  icon: IoniconsName;
-  color: string;
-  done: boolean;
-  section: SectionKey | null;
-  weight: number;
-};
-
-function getCompletionItems(d: {
-  photoCount: number; displayName: string; bio: string; gender: string;
-  dobInput: string; city: string; hobbies: string[]; vibePreferences: string[];
-  vibeCount: number; pingPitch: string; email: string; instagramHandle: string; funTruth: string;
-}): CompletionItem[] {
-  return [
-    { key: 'main_photo',  label: 'Add a main photo',        sublabel: 'First impressions matter',           icon: 'camera-outline',         color: '#EC4899', done: d.photoCount >= 1,            section: null,          weight: 15 },
-    { key: 'more_photos', label: 'Add 2+ photos',           sublabel: 'Show more sides of yourself',         icon: 'images-outline',         color: '#F97316', done: d.photoCount >= 2,            section: null,          weight: 5  },
-    { key: 'name',        label: 'Set your display name',   sublabel: 'Let people know who you are',         icon: 'person-outline',         color: '#A78BFA', done: d.displayName.trim().length >= 2, section: 'basic',    weight: 10 },
-    { key: 'bio',         label: 'Write a bio',             sublabel: 'Say something interesting (10+ chars)',icon: 'create-outline',         color: '#A78BFA', done: d.bio.trim().length >= 10,    section: 'basic',       weight: 10 },
-    { key: 'gender',      label: 'Set your gender',         sublabel: 'Helps people find you',               icon: 'person-circle-outline',  color: '#F59E0B', done: !!d.gender,                   section: 'personal',    weight: 5  },
-    { key: 'dob',         label: 'Add date of birth',       sublabel: 'Required to show your age',           icon: 'calendar-outline',       color: '#F59E0B', done: !!d.dobInput.trim(),          section: 'personal',    weight: 5  },
-    { key: 'city',        label: 'Add your city',           sublabel: 'Show local connections',              icon: 'location-outline',       color: '#10B981', done: !!d.city.trim(),              section: 'personal',    weight: 5  },
-    { key: 'hobbies',     label: 'Pick 3+ interests',       sublabel: 'Match with like-minded people',       icon: 'heart-outline',          color: '#EF4444', done: d.hobbies.length >= 3,        section: 'hobbies',     weight: 10 },
-    { key: 'vibes',       label: 'Set vibe preferences',    sublabel: 'What energy do you bring?',           icon: 'sparkles-outline',       color: '#8B5CF6', done: d.vibePreferences.length >= 1, section: 'vibes',      weight: 5  },
-    { key: 'personality', label: 'Fill personality (4/8)',  sublabel: 'Sleep, food, timing, intent…',        icon: 'color-palette-outline',  color: '#A78BFA', done: d.vibeCount >= 4,             section: 'personality', weight: 10 },
-    { key: 'pitch',       label: 'Write your pitch',        sublabel: 'Why should people ping you?',         icon: 'magnet-outline',         color: Ping.purpleLight, done: !!d.pingPitch.trim(),  section: 'pitch',       weight: 10 },
-    { key: 'social',      label: 'Add a social link',       sublabel: 'Email or Instagram handle',           icon: 'link-outline',           color: '#E1306C', done: !!(d.email.trim() || d.instagramHandle.trim()), section: 'social', weight: 5 },
-    { key: 'fun_truth',   label: 'Share a fun truth',       sublabel: 'Something true that sounds fake',     icon: 'happy-outline',          color: '#F59E0B', done: !!d.funTruth.trim(),          section: 'pitch',       weight: 5  },
-  ];
-}
+type SectionKey = 'basic' | 'personal' | 'social' | 'hobbies' | 'personality' | 'pitch' | 'past';
+type CompletionSection = SectionKey | 'photos';
 
 const GENDERS = [
-  { key: 'male',   label: 'Male'   },
+  { key: 'male',   label: 'Male' },
   { key: 'female', label: 'Female' },
-  { key: 'other',  label: 'Other'  },
+  { key: 'other',  label: 'Prefer not to say' },
 ] as const;
 
 const HOBBY_OPTIONS = [
   'Music', 'Sports', 'Gaming', 'Travel', 'Food', 'Art',
   'Reading', 'Movies', 'Fitness', 'Photography', 'Dance', 'Coding',
-];
-
-const VIBE_OPTIONS: { key: string; label: string; icon: IoniconsName; color: string }[] = [
-  { key: 'Chill',        label: 'Chill',        icon: 'leaf-outline',          color: '#10B981' },
-  { key: 'Adventure',    label: 'Adventure',    icon: 'compass-outline',       color: '#F59E0B' },
-  { key: 'Social',       label: 'Social',       icon: 'people-outline',        color: '#8B5CF6' },
-  { key: 'Intellectual', label: 'Intellectual', icon: 'book-outline',          color: '#3B82F6' },
-  { key: 'Foodie',       label: 'Foodie',       icon: 'restaurant-outline',    color: '#F97316' },
-  { key: 'Night owl',    label: 'Night owl',    icon: 'moon-outline',          color: '#6366F1' },
-  { key: 'Active',       label: 'Active',       icon: 'bicycle-outline',       color: '#22C55E' },
-  { key: 'Creative',     label: 'Creative',     icon: 'color-palette-outline', color: '#EC4899' },
-  { key: 'Romantic',     label: 'Romantic',     icon: 'heart-outline',         color: '#EF4444' },
 ];
 
 const PITCH_PRESETS = [
@@ -154,253 +110,262 @@ const sbl = StyleSheet.create({
   text: { ...Typography.caption, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' },
 });
 
-// ── Completion sheet (bottom sheet listing all items) ─────────────────────────
-function CompletionSheet({ pct, items, color, c, onClose, onItemPress }: {
-  pct: number; items: CompletionItem[]; color: string;
-  c: (typeof Colors)['dark']; onClose: () => void;
-  onItemPress: (section: SectionKey | null) => void;
-}) {
-  const slide    = useRef(new Animated.Value(700)).current;
-  const backdrop = useRef(new Animated.Value(0)).current;
-  const pending  = items.filter(i => !i.done);
-  const done     = items.filter(i => i.done);
-  const itemAnims = useRef(pending.map(() => new Animated.Value(0))).current;
+// ── Profile completion checklist (mirrors backend User.profileCompletion) ─────
+type CompletionItem = {
+  key: string;
+  label: string;
+  hint: string;
+  section: CompletionSection;
+  done: boolean;
+};
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slide,    { toValue: 0, damping: 24, stiffness: 240, useNativeDriver: true }),
-      Animated.timing(backdrop, { toValue: 1, duration: 220, useNativeDriver: true }),
-    ]).start();
-    setTimeout(() => {
-      Animated.stagger(45, itemAnims.map(a =>
-        Animated.spring(a, { toValue: 1, damping: 22, stiffness: 200, useNativeDriver: true })
-      )).start();
-    }, 160);
-  }, []);
-
-  function dismiss() {
-    Animated.parallel([
-      Animated.timing(slide,    { toValue: 700, duration: 240, useNativeDriver: true }),
-      Animated.timing(backdrop, { toValue: 0,   duration: 200, useNativeDriver: true }),
-    ]).start(onClose);
-  }
-
-  return (
-    <View style={{ flex: 1 }}>
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdrop, backgroundColor: 'rgba(0,0,0,0.65)' }]} />
-      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={dismiss} />
-      <Animated.View style={[csh.container, { transform: [{ translateY: slide }] }]}>
-        <View style={csh.handle} />
-        <View style={csh.headRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={csh.headTitle}>Profile progress</Text>
-            <Text style={[csh.headSub, { color: c.textSecondary }]}>
-              {done.length} of {items.length} done · {pct}%
-            </Text>
-          </View>
-          <TouchableOpacity onPress={dismiss} style={csh.closeBtn} activeOpacity={0.7}>
-            <Ionicons name="close" size={18} color="#AAA" />
-          </TouchableOpacity>
-        </View>
-        <View style={[csh.bar, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-          <View style={[csh.barFill, { width: `${pct}%` as any, backgroundColor: color }]} />
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={csh.scroll}>
-          {pending.length > 0 && (
-            <>
-              <Text style={[csh.sectionLbl, { color: c.icon }]}>REMAINING · {pending.length}</Text>
-              {pending.map((item, i) => (
-                <Animated.View key={item.key} style={{
-                  opacity: itemAnims[i] ?? 1,
-                  transform: [{ translateX: (itemAnims[i] ?? new Animated.Value(1)).interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
-                }}>
-                  <TouchableOpacity
-                    style={[csh.row, { borderBottomColor: 'rgba(255,255,255,0.06)' }]}
-                    onPress={() => onItemPress(item.section)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[csh.rowIcon, { backgroundColor: `${item.color}18` }]}>
-                      <Ionicons name={item.icon} size={18} color={item.color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={csh.rowLabel}>{item.label}</Text>
-                      <Text style={[csh.rowSub, { color: c.textSecondary }]}>{item.sublabel}</Text>
-                    </View>
-                    <View style={[csh.weightBadge, { backgroundColor: `${item.color}18` }]}>
-                      <Text style={[csh.weightText, { color: item.color }]}>+{item.weight}%</Text>
-                    </View>
-                    {item.section !== null && <Ionicons name="chevron-forward" size={13} color={c.icon} />}
-                  </TouchableOpacity>
-                </Animated.View>
-              ))}
-            </>
-          )}
-
-          {done.length > 0 && (
-            <>
-              <Text style={[csh.sectionLbl, { color: c.icon, marginTop: 20 }]}>COMPLETED · {done.length}</Text>
-              {done.map(item => (
-                <View key={item.key} style={[csh.row, { borderBottomColor: 'rgba(255,255,255,0.04)', opacity: 0.5 }]}>
-                  <View style={[csh.rowIcon, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
-                    <Ionicons name="checkmark-circle" size={18} color={Ping.green} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[csh.rowLabel, { textDecorationLine: 'line-through' }]}>{item.label}</Text>
-                  </View>
-                  <View style={[csh.weightBadge, { backgroundColor: 'rgba(34,197,94,0.1)' }]}>
-                    <Text style={[csh.weightText, { color: Ping.green }]}>+{item.weight}%</Text>
-                  </View>
-                </View>
-              ))}
-            </>
-          )}
-          <View style={{ height: 36 }} />
-        </ScrollView>
-      </Animated.View>
-    </View>
-  );
+function completionStory(pct: number, remaining: number, nextLabel?: string): { headline: string; sub: string } {
+  if (pct >= 100) return { headline: 'Profile looking sharp', sub: 'You unlocked the full vibe — go explore.' };
+  if (pct >= 80) return { headline: 'Final stretch', sub: nextLabel ? `Next up: ${nextLabel}` : `${remaining} left — almost ready.` };
+  if (pct >= 60) return { headline: 'You’re taking shape', sub: nextLabel ? `Next up: ${nextLabel}` : `${remaining} more to feel complete.` };
+  if (pct >= 40) return { headline: 'Nice momentum', sub: nextLabel ? `Keep going — ${nextLabel}` : 'Keep stacking the details that matter.' };
+  if (pct >= 20) return { headline: 'Good start', sub: nextLabel ? `Next: ${nextLabel}` : 'A few more beats and your story lands.' };
+  return { headline: 'Build your story', sub: nextLabel ? `Start with: ${nextLabel}` : 'Tap to see what’s still empty.' };
 }
-const csh = StyleSheet.create({
-  container: {
-    backgroundColor: '#0E0E24',
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderTopWidth: 1, borderColor: 'rgba(167,139,250,0.18)',
-    maxHeight: '82%',
-  },
-  handle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(167,139,250,0.3)', alignSelf: 'center', marginTop: 10, marginBottom: 4 },
-  headRow:   { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 14 },
-  headTitle: { fontSize: 17, fontWeight: '700', color: '#F1F0FF' },
-  headSub:   { fontSize: 12, marginTop: 2 },
-  closeBtn:  { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
-  bar:       { height: 5, marginHorizontal: 20, borderRadius: 3, overflow: 'hidden', marginBottom: 16 },
-  barFill:   { height: '100%', borderRadius: 3 },
-  scroll:    { paddingHorizontal: 20 },
-  sectionLbl:{ fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 10 },
-  row:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth },
-  rowIcon:   { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  rowLabel:  { fontSize: 14, fontWeight: '600', color: '#F1F0FF' },
-  rowSub:    { fontSize: 12, marginTop: 1 },
-  weightBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  weightText:  { fontSize: 11, fontWeight: '700' },
-});
 
-// ── Completion banner (animated, tappable) ────────────────────────────────────
-function CompletionBanner({ pct, items, c, onItemPress }: {
-  pct: number; items: CompletionItem[];
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function CompletionBar({
+  items,
+  c,
+  onJump,
+}: {
+  items: CompletionItem[];
   c: (typeof Colors)['dark'];
-  onItemPress: (section: SectionKey | null) => void;
+  onJump: (section: CompletionSection, itemKey: string) => void;
 }) {
-  const [showSheet, setShowSheet] = useState(false);
-  const barAnim  = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
-  const bumpAnim = useRef(new Animated.Value(1)).current;
-  const prevPct  = useRef(0);
+  const doneCount = items.filter((i) => i.done).length;
+  const pct = Math.round((doneCount / items.length) * 100);
+  const remaining = items.filter((i) => !i.done);
+  const nextItem = remaining[0];
+  const story = completionStory(pct, remaining.length, nextItem?.label);
 
-  // Animate bar fill on mount
-  useEffect(() => {
-    Animated.timing(barAnim, { toValue: pct / 100, duration: 900, delay: 350, useNativeDriver: false }).start();
-    if (pct < 100) {
-      Animated.loop(Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.15, duration: 1600, useNativeDriver: true }),
-      ])).start();
-    }
-  }, []);
+  const [expanded, setExpanded] = useState(false);
+  const fillAnim = useRef(new Animated.Value(pct)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  const countAnim = useRef(new Animated.Value(pct)).current;
+  const [displayPct, setDisplayPct] = useState(pct);
+  const prevPct = useRef(pct);
 
-  // Re-animate bar + bump icon when pct changes
   useEffect(() => {
-    if (pct !== prevPct.current) {
-      prevPct.current = pct;
-      Animated.spring(barAnim, { toValue: pct / 100, damping: 18, stiffness: 120, useNativeDriver: false }).start();
+    Animated.spring(fillAnim, {
+      toValue: pct,
+      damping: 18,
+      stiffness: 120,
+      mass: 0.8,
+      useNativeDriver: false,
+    }).start();
+
+    const id = countAnim.addListener(({ value }) => setDisplayPct(Math.round(value)));
+    Animated.timing(countAnim, {
+      toValue: pct,
+      duration: 420,
+      useNativeDriver: false,
+    }).start();
+    return () => countAnim.removeListener(id);
+  }, [pct, fillAnim, countAnim]);
+
+  useEffect(() => {
+    if (pct > prevPct.current) {
       Animated.sequence([
-        Animated.spring(bumpAnim, { toValue: 1.18, damping: 8, stiffness: 320, useNativeDriver: true }),
-        Animated.spring(bumpAnim, { toValue: 1,    damping: 14, stiffness: 200, useNativeDriver: true }),
+        Animated.spring(pulse, { toValue: 1.14, friction: 4, tension: 180, useNativeDriver: true }),
+        Animated.spring(pulse, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }),
       ]).start();
     }
-  }, [pct]);
+    prevPct.current = pct;
+  }, [pct, pulse]);
 
-  if (pct >= 100) {
-    return (
-      <View style={[bann.wrap, { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.28)' }]}>
-        <Ionicons name="shield-checkmark" size={24} color={Ping.green} />
-        <View style={{ flex: 1 }}>
-          <Text style={[bann.label, { color: Ping.green }]}>Profile complete!</Text>
-          <Text style={[bann.hint, { color: c.textSecondary }]}>You're eligible for a Verified badge</Text>
-        </View>
-      </View>
-    );
+  if (pct >= 100 && !expanded) return null;
+
+  const color = pct >= 80 ? Ping.green : pct >= 50 ? Ping.orange : Ping.purpleLight;
+  const fillWidth = fillAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
+  function toggleExpand() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((v) => !v);
   }
 
-  const color   = pct >= 80 ? Ping.green : pct >= 50 ? Ping.orange : Ping.purpleLight;
-  const missing = items.filter(i => !i.done).length;
+  function jump(item: CompletionItem) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded(false);
+    onJump(item.section, item.key);
+  }
 
   return (
-    <>
-      <TouchableOpacity
-        style={[bann.wrap, { backgroundColor: c.surface, borderColor: c.border }]}
-        onPress={() => setShowSheet(true)}
-        activeOpacity={0.8}
-      >
-        <View style={bann.row}>
-          <Animated.View style={{ transform: [{ scale: bumpAnim }] }}>
-            <View style={[bann.iconWrap, { backgroundColor: `${color}18` }]}>
-              <Ionicons name="shield-half-outline" size={18} color={color} />
-            </View>
+    <View style={[cb.wrap, { backgroundColor: c.surface, borderColor: expanded ? `${color}55` : c.border }]}>
+      <TouchableOpacity activeOpacity={0.88} onPress={toggleExpand}>
+        <View style={cb.row}>
+          <Animated.View style={{ transform: [{ scale: pulse }] }}>
+            <Ionicons
+              name={pct >= 80 ? 'shield-checkmark-outline' : 'shield-half-outline'}
+              size={20}
+              color={color}
+            />
           </Animated.View>
-          <View style={{ flex: 1 }}>
-            <Text style={[bann.label, { color: c.text }]}>Profile {pct}% complete</Text>
-            <Text style={[bann.hint, { color: c.textSecondary }]}>
-              {missing} thing{missing !== 1 ? 's' : ''} left — tap to see what
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[cb.label, { color: c.text }]}>
+              {displayPct}% · {story.headline}
+            </Text>
+            <Text style={[cb.hint, { color: c.textSecondary }]} numberOfLines={2}>
+              {expanded
+                ? (remaining.length ? `${remaining.length} left — tap a step to jump there` : 'Everything filled in')
+                : story.sub}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={16} color={c.icon} />
+          <View style={[cb.badge, { backgroundColor: `${color}22` }]}>
+            <Text style={[cb.badgeText, { color }]}>
+              {doneCount}/{items.length}
+            </Text>
+          </View>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={c.icon} />
         </View>
 
-        {/* Animated progress track */}
-        <View style={[bann.track, { backgroundColor: c.border }]}>
-          <Animated.View style={[bann.fill, {
-            width: barAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-            backgroundColor: color,
-          }]}>
-            <Animated.View style={[bann.shimmer, { opacity: glowAnim }]} />
-          </Animated.View>
+        <View style={[cb.track, { backgroundColor: c.border, marginTop: 10 }]}>
+          <Animated.View style={[cb.fill, { width: fillWidth, backgroundColor: color }]} />
         </View>
       </TouchableOpacity>
 
-      {showSheet && (
-        <Modal visible transparent animationType="none" onRequestClose={() => setShowSheet(false)}>
-          <CompletionSheet
-            pct={pct} items={items} color={color} c={c}
-            onClose={() => setShowSheet(false)}
-            onItemPress={(sec) => { setShowSheet(false); onItemPress(sec); }}
-          />
-        </Modal>
+      {nextItem && !expanded && (
+        <TouchableOpacity
+          style={[cb.nextBtn, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}
+          onPress={() => jump(nextItem)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[cb.nextEyebrow, { color }]}>Continue</Text>
+            <Text style={[cb.nextLabel, { color: c.text }]} numberOfLines={1}>{nextItem.label}</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={16} color={color} />
+        </TouchableOpacity>
       )}
-    </>
+
+      {expanded && (
+        <View style={cb.list}>
+          {remaining.map((item, idx) => (
+            <FadeInItem key={`${expanded}-${item.key}`} delay={idx * 50} distance={12}>
+              <TouchableOpacity
+                style={[cb.item, { borderColor: c.border, backgroundColor: c.card }]}
+                activeOpacity={0.8}
+                onPress={() => jump(item)}
+              >
+                <View style={[cb.step, { backgroundColor: `${color}20` }]}>
+                  <Text style={[cb.stepText, { color }]}>{idx + 1}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[cb.itemTitle, { color: c.text }]}>{item.label}</Text>
+                  <Text style={[cb.itemHint, { color: c.textSecondary }]}>{item.hint}</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={14} color={c.icon} />
+              </TouchableOpacity>
+            </FadeInItem>
+          ))}
+          {remaining.length === 0 && (
+            <Text style={[cb.footerNote, { color: Ping.green }]}>All steps complete</Text>
+          )}
+          {remaining.length > 0 && (
+            <Text style={[cb.footerNote, { color: c.textSecondary }]}>
+              {doneCount} done · each step fills your story
+            </Text>
+          )}
+        </View>
+      )}
+    </View>
   );
 }
-const bann = StyleSheet.create({
-  wrap:    { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: 10 },
-  row:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconWrap:{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  label:   { ...Typography.bodyMed, fontWeight: '600' },
-  hint:    { ...Typography.caption, marginTop: 1 },
-  track:   { height: 6, borderRadius: 3, overflow: 'hidden' },
-  fill:    { height: '100%', borderRadius: 3, overflow: 'hidden' },
-  shimmer: { position: 'absolute', right: 0, width: 20, height: '100%', backgroundColor: 'rgba(255,255,255,0.55)', borderRadius: 3 },
+const cb = StyleSheet.create({
+  wrap: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: { ...Typography.bodyMed, fontWeight: '700' },
+  hint: { ...Typography.caption, lineHeight: 16 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.full },
+  badgeText: { ...Typography.caption, fontWeight: '700', fontSize: 11 },
+  track: { height: 6, borderRadius: 4, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 4 },
+  nextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  nextEyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 2 },
+  nextLabel: { fontSize: 14, fontWeight: '600' },
+  list: { gap: 8, marginTop: 2 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  step: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepText: { fontSize: 12, fontWeight: '800' },
+  itemTitle: { ...Typography.bodySm, fontWeight: '600' },
+  itemHint: { ...Typography.caption, marginTop: 2 },
+  footerNote: { ...Typography.caption, textAlign: 'center', marginTop: 2 },
 });
 
 // ── Photos section ────────────────────────────────────────────────────────────
 // 3 per row using percentage: 3 × 31% = 93% of container + 2 × 8px gaps fits any screen width ≥ 228px
 
-function PhotosSection({ c }: { c: (typeof Colors)['dark'] }) {
+function PhotosSection({
+  c,
+  highlighted,
+  onLayout,
+}: {
+  c: (typeof Colors)['dark'];
+  highlighted?: boolean;
+  onLayout?: (y: number) => void;
+}) {
   const { user, setUser } = useAuthStore();
   const [uploading, setUploading] = useState<number | null>(null);
   const [gridW, setGridW] = useState(0);
   const [photoMenuIdx, setPhotoMenuIdx] = useState<number | null>(null);
-  // Derived from actual measured grid width — immune to padding/border guessing
   const slotSize = gridW > 0 ? Math.floor((gridW - 16) / 3) : 0;
+  const glow = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!highlighted) {
+      glow.setValue(0);
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 220, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0.35, duration: 280, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 1, duration: 280, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0, duration: 500, useNativeDriver: false }),
+    ]).start();
+  }, [highlighted, glow]);
+
+  const borderColor = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [c.border, `${Ping.purpleLight}AA`],
+  });
+  const bgTint = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [c.surface, `${Ping.purple}14`],
+  });
 
   const photos: (string | null)[] = [
     ...(user?.photos ?? []),
@@ -450,7 +415,10 @@ function PhotosSection({ c }: { c: (typeof Colors)['dark'] }) {
   }
 
   return (
-    <View style={[ph.wrap, { backgroundColor: c.surface, borderColor: c.border }]}>
+    <Animated.View
+      onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}
+      style={[ph.wrap, { backgroundColor: bgTint, borderColor }]}
+    >
       <View style={ph.titleRow}>
         <View style={[ph.iconWrap, { backgroundColor: `${Ping.purple}18` }]}>
           <Ionicons name="camera-outline" size={18} color={Ping.purpleLight} />
@@ -537,7 +505,7 @@ function PhotosSection({ c }: { c: (typeof Colors)['dark'] }) {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 const ph = StyleSheet.create({
@@ -653,7 +621,7 @@ const pp = StyleSheet.create({
 
 // ── Accordion Section ─────────────────────────────────────────────────────────
 function AccordionSection({
-  sectionKey, openSection, onToggle, icon, iconColor, title, summary, hasValue, children, c,
+  sectionKey, openSection, onToggle, icon, iconColor, title, summary, hasValue, children, c, highlighted, onLayout,
 }: {
   sectionKey: SectionKey;
   openSection: SectionKey | null;
@@ -665,13 +633,43 @@ function AccordionSection({
   hasValue?: boolean;
   children: any;
   c: (typeof Colors)['dark'];
+  highlighted?: boolean;
+  onLayout?: (y: number) => void;
 }) {
   const isOpen = openSection === sectionKey;
+  const accent = isOpen || highlighted ? c.tint : c.icon;
+  const glow = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!highlighted) {
+      glow.setValue(0);
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 220, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0.35, duration: 280, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 1, duration: 280, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0, duration: 500, useNativeDriver: false }),
+    ]).start();
+  }, [highlighted, glow]);
+
+  const borderColor = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [c.border, `${Ping.purpleLight}AA`],
+  });
+  const bgTint = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [c.surface, `${Ping.purple}14`],
+  });
+
   return (
-    <View style={[ac.wrap, { backgroundColor: c.surface, borderColor: isOpen ? iconColor + '55' : c.border }]}>
+    <Animated.View
+      onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}
+      style={[ac.wrap, { backgroundColor: bgTint, borderColor }]}
+    >
       <TouchableOpacity style={ac.header} onPress={() => onToggle(sectionKey)} activeOpacity={0.75}>
-        <View style={[ac.iconWrap, { backgroundColor: iconColor + '18' }]}>
-          <Ionicons name={icon} size={18} color={iconColor} />
+        <View style={[ac.iconWrap, { backgroundColor: c.card }]}>
+          <Ionicons name={icon} size={18} color={accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[ac.title, { color: c.text }]}>{title}</Text>
@@ -681,27 +679,24 @@ function AccordionSection({
             </Text>
           ) : null}
         </View>
-        {hasValue && !isOpen && <View style={[ac.dot, { backgroundColor: iconColor }]} />}
-        <View style={[ac.chevronWrap, { backgroundColor: isOpen ? iconColor + '18' : c.card }]}>
-          <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color={isOpen ? iconColor : c.icon} />
-        </View>
+        {hasValue && !isOpen && <View style={[ac.dot, { backgroundColor: c.tint }]} />}
+        <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={c.icon} />
       </TouchableOpacity>
       {isOpen && (
         <View style={[ac.body, { borderTopColor: c.border }]}>
           {children}
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 const ac = StyleSheet.create({
-  wrap: { borderRadius: Radius.lg, borderWidth: 1 },
+  wrap: { borderRadius: Radius.lg, borderWidth: 1.5, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md },
-  iconWrap: { width: 38, height: 38, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  title: { ...Typography.bodyMed, fontWeight: '700' },
+  iconWrap: { width: 36, height: 36, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  title: { ...Typography.bodyMed, fontWeight: '600' },
   summary: { ...Typography.caption, marginTop: 2 },
-  dot: { width: 7, height: 7, borderRadius: 4, marginRight: 2, flexShrink: 0 },
-  chevronWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  dot: { width: 6, height: 6, borderRadius: 3, marginRight: 4, flexShrink: 0 },
   body: { padding: Spacing.md, gap: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
 });
 
@@ -714,6 +709,9 @@ export default function EditProfileScreen() {
   const { user, setUser } = useAuthStore();
 
   const [openSection, setOpenSection] = useState<SectionKey | null>('basic');
+  const [highlightSection, setHighlightSection] = useState<CompletionSection | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionYs = useRef<Partial<Record<CompletionSection, number>>>({});
 
   const [displayName, setDisplayName]           = useState(user?.displayName ?? '');
   const [username, setUsername]                 = useState(user?.username ?? '');
@@ -724,10 +722,11 @@ export default function EditProfileScreen() {
   const [city, setCity]                         = useState(user?.city ?? '');
   const [institute, setInstitute]               = useState(user?.institute ?? '');
   const [hobbies, setHobbies]                   = useState<string[]>(user?.hobbies ?? []);
-  const [vibePreferences, setVibePreferences]   = useState<string[]>(user?.vibePreferences ?? []);
   const [favoriteActivities, setFavoriteActivities] = useState<string[]>(user?.favoriteActivities ?? []);
   const [socialPreference, setSocialPreference] = useState<'introvert' | 'extrovert' | 'ambivert' | ''>(user?.socialPreference ?? '');
   const [instagramHandle, setInstagramHandle]   = useState(user?.instagramHandle ?? '');
+  const [linkedinHandle, setLinkedinHandle]     = useState(user?.linkedinHandle ?? '');
+  const [spotifyHandle, setSpotifyHandle]       = useState(user?.spotifyHandle ?? '');
   const [sleepType, setSleepType]               = useState<'night_owl' | 'early_bird' | ''>(user?.sleepType ?? '');
   const [spontaneity, setSpontaneity]           = useState<'planner' | 'spontaneous' | ''>(user?.spontaneity ?? '');
   const [foodPersonality, setFoodPersonality]   = useState<'street_food' | 'balanced' | 'cafe_aesthetic' | ''>(user?.foodPersonality ?? '');
@@ -746,9 +745,6 @@ export default function EditProfileScreen() {
   function toggleHobby(h: string) {
     setHobbies((prev) => prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]);
   }
-  function toggleVibe(v: string) {
-    setVibePreferences((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
-  }
   function toggleActivity(a: string) {
     setFavoriteActivities((prev) => prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]);
   }
@@ -759,14 +755,17 @@ export default function EditProfileScreen() {
     if (username.trim()) payload.username = username.trim();
     payload.bio = bio.trim();
     if (email.trim()) payload.email = email.trim();
+    else payload.email = '';
     if (gender) payload.gender = gender;
+    else payload.gender = null;
     payload.city = city.trim();
     payload.institute = institute.trim();
     payload.hobbies = hobbies;
-    payload.vibePreferences = vibePreferences;
     payload.favoriteActivities = favoriteActivities;
     payload.socialPreference = socialPreference || null;
     payload.instagramHandle = instagramHandle.trim().replace(/^@/, '');
+    payload.linkedinHandle = linkedinHandle.trim().replace(/^@/, '');
+    payload.spotifyHandle = spotifyHandle.trim().replace(/^@/, '');
     payload.sleepType = sleepType || null;
     payload.spontaneity = spontaneity || null;
     payload.foodPersonality = foodPersonality || null;
@@ -803,10 +802,49 @@ export default function EditProfileScreen() {
   const vibeCount = [sleepType, spontaneity, foodPersonality, timeRespect, distanceTolerance, availabilityPattern, intentSync, socialPreference].filter(Boolean).length;
   const placeholderColor = scheme === 'dark' ? '#5C5A80' : '#8B85A0';
 
-  // Live completion calculation from local state
-  const photoCount      = user?.photos?.length ?? 0;
-  const completionItems = getCompletionItems({ photoCount, displayName, bio, gender, dobInput, city, hobbies, vibePreferences, vibeCount, pingPitch, email, instagramHandle, funTruth });
-  const pct             = completionItems.filter(i => i.done).reduce((s, i) => s + i.weight, 0);
+  const completionItems: CompletionItem[] = useMemo(() => {
+    const hasPhoto = !!(user?.avatarUrl || (user?.photos?.length ?? 0) > 0);
+    const hasSocial = !!(instagramHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim());
+    const hasInterests = hobbies.length > 0 || favoriteActivities.length > 0;
+    return [
+      { key: 'photo', label: 'Add a photo', hint: 'First impression — at least one shot', section: 'photos', done: hasPhoto },
+      { key: 'name', label: 'Display name', hint: 'What should people call you?', section: 'basic', done: !!displayName.trim() },
+      { key: 'username', label: 'Username', hint: 'Your unique @handle', section: 'basic', done: !!username.trim() },
+      { key: 'bio', label: 'Write a bio', hint: 'One line that feels like you', section: 'basic', done: !!bio.trim() },
+      { key: 'dob', label: 'Date of birth', hint: 'Helps keep the vibe age-right', section: 'personal', done: !!dobInput.trim() },
+      { key: 'gender', label: 'Gender', hint: 'Optional — your call', section: 'personal', done: !!gender },
+      { key: 'city', label: 'Current city', hint: 'Where you hang out now', section: 'personal', done: !!city.trim() },
+      { key: 'email', label: 'Email', hint: 'For account & updates', section: 'personal', done: !!email.trim() },
+      { key: 'interests', label: 'Hobbies or activities', hint: 'Pick a few you actually do', section: 'hobbies', done: hasInterests },
+      { key: 'social', label: 'A social link', hint: 'Instagram, LinkedIn, or Spotify', section: 'social', done: hasSocial },
+    ];
+  }, [
+    user?.avatarUrl, user?.photos, displayName, username, bio, dobInput, gender, city, email,
+    hobbies, favoriteActivities, instagramHandle, linkedinHandle, spotifyHandle,
+  ]);
+
+  function jumpToCompletion(section: CompletionSection, _itemKey: string) {
+    if (section !== 'photos') {
+      setOpenSection(section);
+    }
+    setHighlightSection(section);
+
+    // Wait a beat so accordion opens / layout settles, then scroll
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const y = sectionYs.current[section] ?? 0;
+        scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+      }, section === 'photos' ? 80 : 220);
+    });
+
+    setTimeout(() => setHighlightSection(null), 1600);
+  }
+
+  function rememberY(section: CompletionSection) {
+    return (y: number) => {
+      sectionYs.current[section] = y;
+    };
+  }
 
   return (
     <View style={[s.root, { backgroundColor: c.background }]}>
@@ -823,19 +861,19 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 40 }]}
           showsVerticalScrollIndicator={false}
         >
-          <CompletionBanner
-            pct={pct}
-            items={completionItems}
-            c={c}
-            onItemPress={(sec) => { if (sec) setOpenSection(sec); }}
-          />
+          <CompletionBar items={completionItems} c={c} onJump={jumpToCompletion} />
 
           {/* Photos — always visible card */}
-          <PhotosSection c={c} />
+          <PhotosSection
+            c={c}
+            highlighted={highlightSection === 'photos'}
+            onLayout={rememberY('photos')}
+          />
 
           {/* ── Basic Info ── */}
           <AccordionSection
@@ -845,6 +883,8 @@ export default function EditProfileScreen() {
             summary={displayName.trim() ? `${displayName.trim()}${bio.trim() ? ' · has bio' : ''}` : 'Name, username & bio'}
             hasValue={!!(displayName.trim() || bio.trim())}
             c={c}
+            highlighted={highlightSection === 'basic'}
+            onLayout={rememberY('basic')}
           >
             <Field label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="Your name" autoCapitalize="words" c={c} />
             <Field label="Username" value={username} onChangeText={setUsername} placeholder="letters, numbers, _ and ." autoCapitalize="none" c={c} />
@@ -857,154 +897,184 @@ export default function EditProfileScreen() {
             icon="calendar-outline" iconColor="#F59E0B"
             title="Personal Details"
             summary={
-              [gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : '', city.trim()]
-                .filter(Boolean).join(' · ') || 'Date of birth, gender, city'
+              [
+                gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : gender === 'other' ? 'Prefer not to say' : '',
+                city.trim(),
+                email.trim(),
+              ].filter(Boolean).join(' · ') || 'DOB, gender, city & email'
             }
-            hasValue={!!(gender || city.trim() || dobInput.trim())}
+            hasValue={!!(gender || city.trim() || dobInput.trim() || email.trim())}
             c={c}
+            highlighted={highlightSection === 'personal'}
+            onLayout={rememberY('personal')}
           >
-            <View style={s.twoCol}>
-              <View style={{ flex: 1 }}>
-                <Field label="Date of birth" value={dobInput} onChangeText={setDobInput} placeholder="DD/MM/YYYY" autoCapitalize="none" c={c} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={fi.wrap}>
-                  <Text style={[fi.label, { color: c.textSecondary }]}>Gender</Text>
-                  <View style={s.genderRow}>
-                    {GENDERS.map(({ key, label }) => {
-                      const active = gender === key;
-                      return (
-                        <TouchableOpacity
-                          key={key}
-                          style={[s.genderChip, { borderColor: active ? Ping.purple : c.border, backgroundColor: active ? `${Ping.purple}22` : c.card, flex: 1 }]}
-                          onPress={() => setGender(active ? '' : key)} activeOpacity={0.8}
-                        >
-                          <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? Ping.purpleLight : c.textSecondary }}>{label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
+            <Field label="Date of birth" value={dobInput} onChangeText={setDobInput} placeholder="DD/MM/YYYY" autoCapitalize="none" c={c} />
+
+            <View style={fi.wrap}>
+              <Text style={[fi.label, { color: c.textSecondary }]}>Gender</Text>
+              <View style={s.genderRow}>
+                {GENDERS.map(({ key, label }) => {
+                  const active = gender === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[s.genderChip, { borderColor: active ? Ping.purple : c.border, backgroundColor: active ? `${Ping.purple}22` : c.card }]}
+                      onPress={() => setGender(active ? '' : key)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={{
+                          ...Typography.bodySm,
+                          fontWeight: '600',
+                          fontSize: key === 'other' ? 11 : 13,
+                          color: active ? Ping.purpleLight : c.textSecondary,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
-            <Field label="City / Hometown" value={city} onChangeText={setCity} placeholder="Where do you live? Actually live." autoCapitalize="words" c={c} />
+
+            <Field
+              label="Current city"
+              value={city}
+              onChangeText={setCity}
+              placeholder="Where do you live right now?"
+              autoCapitalize="words"
+              c={c}
+            />
+            <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" c={c} />
             <Field label="College / Institute" value={institute} onChangeText={setInstitute} placeholder="School, college, work — whatever applies." autoCapitalize="words" c={c} />
           </AccordionSection>
 
           {/* ── Social Links ── */}
           <AccordionSection
             sectionKey="social" openSection={openSection} onToggle={toggle}
-            icon="logo-instagram" iconColor="#E1306C"
+            icon="share-social-outline" iconColor="#E1306C"
             title="Social Links"
-            summary={[email.trim(), instagramHandle.trim() ? `@${instagramHandle}` : ''].filter(Boolean).join(' · ') || 'Email & Instagram'}
-            hasValue={!!(email.trim() || instagramHandle.trim())}
+            summary={
+              [
+                instagramHandle.trim() ? `IG @${instagramHandle}` : '',
+                linkedinHandle.trim() ? 'LinkedIn' : '',
+                spotifyHandle.trim() ? 'Spotify' : '',
+              ].filter(Boolean).join(' · ') || 'Instagram, LinkedIn & Spotify'
+            }
+            hasValue={!!(instagramHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim())}
             c={c}
+            highlighted={highlightSection === 'social'}
+            onLayout={rememberY('social')}
           >
-            <Field label="Email (optional)" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" c={c} />
             <View style={fi.wrap}>
               <Text style={[fi.label, { color: c.textSecondary }]}>Instagram</Text>
               <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Ionicons name="logo-instagram" size={16} color="#E1306C" style={{ marginRight: 6 }} />
                 <Text style={{ ...Typography.bodyMed, marginRight: 2, color: c.icon }}>@</Text>
                 <TextInput
                   style={[s.instaInput, { color: c.text }]}
-                  value={instagramHandle} onChangeText={(t) => setInstagramHandle(t.replace(/^@/, ''))}
-                  placeholder="your_handle (no @ needed)" placeholderTextColor={c.icon}
-                  autoCapitalize="none" autoCorrect={false}
+                  value={instagramHandle}
+                  onChangeText={(t) => setInstagramHandle(t.replace(/^@/, ''))}
+                  placeholder="your_handle"
+                  placeholderTextColor={c.icon}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+
+            <View style={fi.wrap}>
+              <Text style={[fi.label, { color: c.textSecondary }]}>LinkedIn</Text>
+              <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Ionicons name="logo-linkedin" size={16} color="#0A66C2" style={{ marginRight: 6 }} />
+                <TextInput
+                  style={[s.instaInput, { color: c.text }]}
+                  value={linkedinHandle}
+                  onChangeText={(t) => setLinkedinHandle(t.replace(/^@/, '').replace(/^https?:\/\/(www\.)?linkedin\.com\/(in\/)?/i, ''))}
+                  placeholder="profile-slug or username"
+                  placeholderTextColor={c.icon}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+
+            <View style={fi.wrap}>
+              <Text style={[fi.label, { color: c.textSecondary }]}>Spotify</Text>
+              <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Ionicons name="musical-notes" size={16} color="#1DB954" style={{ marginRight: 6 }} />
+                <TextInput
+                  style={[s.instaInput, { color: c.text }]}
+                  value={spotifyHandle}
+                  onChangeText={(t) => setSpotifyHandle(t.replace(/^@/, '').replace(/^https?:\/\/open\.spotify\.com\/user\//i, ''))}
+                  placeholder="username"
+                  placeholderTextColor={c.icon}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
             </View>
           </AccordionSection>
 
-          {/* ── Hobbies ── */}
+          {/* ── Interests ── */}
           <AccordionSection
             sectionKey="hobbies" openSection={openSection} onToggle={toggle}
-            icon="heart-outline" iconColor="#EF4444"
-            title="Hobbies & Interests"
-            summary={hobbies.length > 0
-              ? `${hobbies.slice(0, 3).join(', ')}${hobbies.length > 3 ? ` +${hobbies.length - 3} more` : ''}`
-              : 'None selected yet'}
-            hasValue={hobbies.length > 0}
+            icon="heart-outline" iconColor={c.tint}
+            title="Interests"
+            summary={
+              [...hobbies, ...favoriteActivities].length > 0
+                ? `${[...hobbies, ...favoriteActivities].slice(0, 3).join(', ')}${[...hobbies, ...favoriteActivities].length > 3 ? '…' : ''}`
+                : 'Hobbies & activities'
+            }
+            hasValue={hobbies.length > 0 || favoriteActivities.length > 0}
             c={c}
+            highlighted={highlightSection === 'hobbies'}
+            onLayout={rememberY('hobbies')}
           >
+            <SubLabel text="Hobbies" c={c} />
             <View style={s.chipGrid}>
               {HOBBY_OPTIONS.map((h) => {
                 const active = hobbies.includes(h);
                 return (
                   <TouchableOpacity
                     key={h}
-                    style={[s.hobbyChip, { borderColor: active ? Ping.purple : c.border, backgroundColor: active ? `${Ping.purple}22` : c.card }]}
+                    style={[s.hobbyChip, { borderColor: active ? c.tint : c.border, backgroundColor: active ? `${Ping.purple}18` : c.card }]}
                     onPress={() => toggleHobby(h)} activeOpacity={0.75}
                   >
-                    <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? Ping.purpleLight : c.textSecondary }}>{h}</Text>
+                    <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? c.tint : c.textSecondary }}>{h}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-          </AccordionSection>
-
-          {/* ── Vibe Preferences ── */}
-          <AccordionSection
-            sectionKey="vibes" openSection={openSection} onToggle={toggle}
-            icon="sparkles-outline" iconColor="#8B5CF6"
-            title="Vibe Preferences"
-            summary={vibePreferences.length > 0
-              ? `${vibePreferences.slice(0, 3).join(', ')}${vibePreferences.length > 3 ? ` +${vibePreferences.length - 3}` : ''}`
-              : 'What energy do you bring?'}
-            hasValue={vibePreferences.length > 0}
-            c={c}
-          >
-            <View style={s.chipGrid}>
-              {VIBE_OPTIONS.map((v) => {
-                const active = vibePreferences.includes(v.key);
-                return (
-                  <TouchableOpacity
-                    key={v.key}
-                    style={[s.iconChip, { borderColor: active ? v.color : c.border, backgroundColor: active ? `${v.color}1A` : c.card }]}
-                    onPress={() => toggleVibe(v.key)} activeOpacity={0.75}
-                  >
-                    <Ionicons name={v.icon} size={13} color={active ? v.color : c.icon} />
-                    <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? v.color : c.textSecondary }}>{v.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </AccordionSection>
-
-          {/* ── Favourite Activities ── */}
-          <AccordionSection
-            sectionKey="activities" openSection={openSection} onToggle={toggle}
-            icon="bicycle-outline" iconColor="#F97316"
-            title="Favourite Activities"
-            summary={favoriteActivities.length > 0
-              ? `${favoriteActivities.slice(0, 3).join(', ')}${favoriteActivities.length > 3 ? ` +${favoriteActivities.length - 3}` : ''}`
-              : 'What do you love doing?'}
-            hasValue={favoriteActivities.length > 0}
-            c={c}
-          >
+            <SubLabel text="Activities" c={c} />
             <View style={s.chipGrid}>
               {ACTIVITY_OPTIONS.map((a) => {
                 const active = favoriteActivities.includes(a);
                 return (
                   <TouchableOpacity
                     key={a}
-                    style={[s.hobbyChip, { borderColor: active ? '#F97316' : c.border, backgroundColor: active ? 'rgba(249,115,22,0.15)' : c.card }]}
+                    style={[s.hobbyChip, { borderColor: active ? c.tint : c.border, backgroundColor: active ? `${Ping.purple}18` : c.card }]}
                     onPress={() => toggleActivity(a)} activeOpacity={0.75}
                   >
-                    <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? '#FB923C' : c.textSecondary }}>{a}</Text>
+                    <Text style={{ ...Typography.bodySm, fontWeight: '600', color: active ? c.tint : c.textSecondary }}>{a}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </AccordionSection>
 
-          {/* ── Your Vibe & Style ── */}
+          {/* ── More about you ── */}
           <AccordionSection
             sectionKey="personality" openSection={openSection} onToggle={toggle}
-            icon="color-palette-outline" iconColor="#A78BFA"
-            title="Your Vibe & Style"
-            summary={vibeCount > 0 ? `${vibeCount} of 8 filled in` : 'Personality, schedule & intent'}
+            icon="sparkles-outline" iconColor={c.tint}
+            title="More about you"
+            summary={vibeCount > 0 ? `${vibeCount} of 8 filled in` : 'Optional lifestyle prefs'}
             hasValue={vibeCount > 0}
             c={c}
+            highlighted={highlightSection === 'personality'}
+            onLayout={rememberY('personality')}
           >
             <View style={fi.wrap}>
               <SubLabel text="Sleep type" c={c} />
@@ -1168,6 +1238,8 @@ export default function EditProfileScreen() {
               : 'Why should people ping you?'}
             hasValue={!!(pingPitch.trim() || funTruth.trim())}
             c={c}
+            highlighted={highlightSection === 'pitch'}
+            onLayout={rememberY('pitch')}
           >
             <View style={fi.wrap}>
               <SubLabel text="Why people should ping you" c={c} />
@@ -1228,6 +1300,8 @@ export default function EditProfileScreen() {
             title="Past Activity"
             summary="Your ping history"
             c={c}
+            highlighted={highlightSection === 'past'}
+            onLayout={rememberY('past')}
           >
             <PastPingsPreview c={c} />
           </AccordionSection>

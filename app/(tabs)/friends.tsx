@@ -40,13 +40,21 @@ const TAB_LABELS: Record<Tab, string> = {
 const TABS: Tab[] = ['received', 'sent', 'friends'];
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
-function Avatar({ user, size = 48 }: { user: Pick<User, 'displayName' | 'phone' | 'avatarUrl'>; size?: number }) {
+function Avatar({ user, size = 52 }: { user: Pick<User, 'displayName' | 'phone' | 'avatarUrl'>; size?: number }) {
   const initials = ((user.displayName ?? user.phone ?? '?'))
     .split(' ')
     .map((w) => w[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  if (user.avatarUrl) {
+    return (
+      <Image
+        source={{ uri: user.avatarUrl }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `${Ping.purple}33` }}
+      />
+    );
+  }
   return (
     <View style={[av.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[av.text, { fontSize: size * 0.34 }]}>{initials}</Text>
@@ -339,7 +347,7 @@ export default function FriendsScreen() {
         friendsApi.requests('received'),
         friendsApi.requests('sent'),
       ]);
-      setFriends(fr.friends ?? []);
+      setFriends((fr.friends ?? []).filter((f) => f.friend && f.friend.displayName !== 'Deleted user'));
       setReceived(recv.requests ?? []);
       setSent(snt.requests ?? []);
     } catch {
@@ -381,9 +389,9 @@ export default function FriendsScreen() {
   function cancelSent(userId: string, name: string) {
     setConfirm({
       visible: true,
-      title: `Withdraw request to ${name}?`,
-      subtitle: 'Your request will be cancelled.',
-      confirmLabel: 'Withdraw',
+      title: `Cancel request to ${name}?`,
+      subtitle: 'Your request will be withdrawn. They won’t be notified.',
+      confirmLabel: 'Cancel Request',
       cancelLabel: 'Keep',
       danger: true,
       icon: 'person-remove-outline',
@@ -394,104 +402,98 @@ export default function FriendsScreen() {
     });
   }
 
-  function removeFriend(userId: string, name: string) {
-    setConfirm({
-      visible: true,
-      title: `Remove ${name}?`,
-      subtitle: 'They will no longer be in your friends list.',
-      confirmLabel: 'Remove',
-      cancelLabel: 'Keep',
-      danger: true,
-      icon: 'person-remove-outline',
-      onConfirm: async () => {
-        try { await friendsApi.remove(userId); load(); }
-        catch (e: any) { setErrorToast(e.message || 'Something went wrong'); }
-      },
-    });
+  // Unfriend lives on the profile screen only — not in this list.
+
+  function timeAgo(iso: string) {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    return `${days}d ago`;
   }
 
-  // ── Render: Received request card ──────────────────────────────────────────
+  // ── Render: Incoming request ───────────────────────────────────────────────
   function renderReceived({ item, index }: { item: Friendship; index: number }) {
     const u = item.friend;
-    const acceptSc = new Animated.Value(1);
-    const declineSc = new Animated.Value(1);
-    function bounce(sc: Animated.Value) {
-      Animated.sequence([
-        Animated.spring(sc, { toValue: 0.8, damping: 20, stiffness: 500, useNativeDriver: true }),
-        Animated.spring(sc, { toValue: 1, damping: 12, stiffness: 220, mass: 0.8, useNativeDriver: true }),
-      ]).start();
-    }
+    if (!u) return <View />;
+
     return (
       <FadeInItem delay={index * 55}>
-        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-          <TouchableOpacity onPress={() => router.push(`/user/${u._id}`)} activeOpacity={0.8}>
-            <Avatar user={u} size={48} />
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+          onPress={() => router.push(`/user/${u._id}`)}
+          activeOpacity={0.85}
+        >
+          <Avatar user={u} size={52} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
             </Text>
-            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
-              {u.username ? `@${u.username}` : u.phone}
-            </Text>
+            {u.username ? (
+              <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
+                @{u.username}
+              </Text>
+            ) : null}
             <Text style={[styles.timeLabel, { color: c.textSecondary }]}>
-              Wants to connect
+              {timeAgo(item.createdAt)}
             </Text>
           </View>
           <View style={styles.reqActions}>
-            <Animated.View style={{ transform: [{ scale: acceptSc }] }}>
-              <TouchableOpacity
-                style={styles.acceptBtn}
-                onPress={() => { bounce(acceptSc); accept(u._id); }}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="checkmark" size={18} color="#FFF" />
-              </TouchableOpacity>
-            </Animated.View>
-            <Animated.View style={{ transform: [{ scale: declineSc }] }}>
-              <TouchableOpacity
-                style={[styles.declineBtn, { borderColor: c.border }]}
-                onPress={() => { bounce(declineSc); decline(u._id); }}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="close" size={18} color={c.icon} />
-              </TouchableOpacity>
-            </Animated.View>
+            <TouchableOpacity
+              style={styles.acceptBtn}
+              onPress={() => accept(u._id)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.declineBtn, { borderColor: c.border }]}
+              onPress={() => decline(u._id)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={18} color={c.textSecondary} />
+            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       </FadeInItem>
     );
   }
 
-  // ── Render: Sent request card ──────────────────────────────────────────────
+  // ── Render: Outgoing request ───────────────────────────────────────────────
   function renderSent({ item, index }: { item: Friendship; index: number }) {
     const u = item.friend;
+    if (!u) return <View />;
+
     return (
       <FadeInItem delay={index * 55}>
-        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-          <TouchableOpacity onPress={() => router.push(`/user/${u._id}`)} activeOpacity={0.8}>
-            <Avatar user={u} size={48} />
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+          onPress={() => router.push(`/user/${u._id}`)}
+          activeOpacity={0.85}
+        >
+          <Avatar user={u} size={52} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
             </Text>
-            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
-              {u.username ? `@${u.username}` : u.phone}
-            </Text>
             <View style={styles.pendingBadge}>
-              <View style={[styles.pendingDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={[styles.pendingText, { color: '#F59E0B' }]}>Pending</Text>
+              <View style={[styles.pendingDot, { backgroundColor: Ping.yellow }]} />
+              <Text style={[styles.pendingText, { color: Ping.yellow }]}>Pending</Text>
             </View>
+            <Text style={[styles.timeLabel, { color: c.textSecondary }]}>
+              Sent {timeAgo(item.createdAt)}
+            </Text>
           </View>
           <TouchableOpacity
             style={[styles.cancelBtn, { borderColor: c.border }]}
-            onPress={() => cancelSent(u._id, u.displayName ?? 'this user')}
+            onPress={() => cancelSent(u._id, u.displayName ?? 'User')}
             activeOpacity={0.8}
           >
             <Text style={[styles.cancelBtnText, { color: c.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </FadeInItem>
     );
   }
@@ -499,29 +501,48 @@ export default function FriendsScreen() {
   // ── Render: Accepted friend card ──────────────────────────────────────────
   function renderFriend({ item, index }: { item: Friendship; index: number }) {
     const u = item.friend;
+    if (!u || u.displayName === 'Deleted user') return <View />;
+
+    const metaBits = [
+      u.username ? `@${u.username}` : null,
+      u.city || null,
+      u.gender === 'female' ? 'Female' : u.gender === 'male' ? 'Male' : null,
+    ].filter(Boolean) as string[];
+
     return (
       <FadeInItem delay={index * 55}>
         <TouchableOpacity
-          style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+          style={[styles.card, styles.friendCard, { backgroundColor: c.card, borderColor: c.border }]}
           onPress={() => router.push(`/user/${u._id}`)}
           activeOpacity={0.8}
         >
-          <Avatar user={u} size={48} />
+          <Avatar user={u} size={56} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
             </Text>
-            <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
-              {u.username ? `@${u.username}` : u.phone}
-            </Text>
+            {metaBits.length > 0 ? (
+              <Text style={[styles.sub, { color: c.textSecondary }]} numberOfLines={1}>
+                {metaBits.join(' · ')}
+              </Text>
+            ) : null}
+            {u.bio?.trim() ? (
+              <Text style={[styles.bio, { color: c.textSecondary }]} numberOfLines={2}>
+                {u.bio.trim()}
+              </Text>
+            ) : u.institute ? (
+              <Text style={[styles.bio, { color: c.textSecondary }]} numberOfLines={1}>
+                {u.institute}
+              </Text>
+            ) : (
+              <Text style={[styles.bioHint, { color: `${Ping.purpleLight}99` }]} numberOfLines={1}>
+                Tap to view profile
+              </Text>
+            )}
           </View>
-          <TouchableOpacity
-            style={[styles.actionBtn, { borderColor: c.border }]}
-            onPress={() => removeFriend(u._id, u.displayName ?? 'this user')}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="person-remove-outline" size={16} color={c.textSecondary} />
-          </TouchableOpacity>
+          <View style={[styles.chevronWrap, { backgroundColor: `${Ping.purple}18` }]}>
+            <Ionicons name="chevron-forward" size={16} color={Ping.purpleLight} />
+          </View>
         </TouchableOpacity>
       </FadeInItem>
     );
@@ -779,6 +800,17 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: 130,
     gap: Spacing.sm,
+  },
+  friendCard: { alignItems: 'flex-start', paddingVertical: 14 },
+  bio: { fontSize: 12, fontWeight: '400', lineHeight: 16, marginTop: 2 },
+  bioHint: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  chevronWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
   },
   card: {
     flexDirection: 'row',

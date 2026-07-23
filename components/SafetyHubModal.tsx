@@ -241,7 +241,8 @@ export default function SafetyHubModal({
 
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [showAddContact, setShowAddContact] = useState(false);
-  const [sharingLocation, setSharingLocation] = useState(false);
+  const [sendingSos, setSendingSos] = useState(false);
+  const [sharingTrip, setSharingTrip] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [removeContactId, setRemoveContactId] = useState<string | null>(null);
   const [showCall112Confirm, setShowCall112Confirm] = useState(false);
@@ -283,7 +284,7 @@ export default function SafetyHubModal({
   }
 
   async function sendSOS() {
-    setSharingLocation(true);
+    setSendingSos(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -320,12 +321,12 @@ export default function SafetyHubModal({
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send SOS.' });
     } finally {
-      setSharingLocation(false);
+      setSendingSos(false);
     }
   }
 
   async function shareLocation() {
-    setSharingLocation(true);
+    setSharingTrip(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -339,7 +340,7 @@ export default function SafetyHubModal({
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not share location.' });
     } finally {
-      setSharingLocation(false);
+      setSharingTrip(false);
     }
   }
 
@@ -401,7 +402,7 @@ export default function SafetyHubModal({
                   label="Send SOS alert"
                   color="#F97316"
                   onPress={sendSOS}
-                  loading={sharingLocation}
+                  loading={sendingSos}
                   c={c}
                 />
                 <ToolCard
@@ -409,7 +410,7 @@ export default function SafetyHubModal({
                   label="Share trip status"
                   color="#3B82F6"
                   onPress={shareLocation}
-                  loading={sharingLocation}
+                  loading={sharingTrip}
                   c={c}
                 />
               </View>
@@ -567,10 +568,12 @@ export default function SafetyHubModal({
         visible={showDeleteAccountConfirm}
         onClose={() => setShowDeleteAccountConfirm(false)}
         title="Delete account?"
-        subtitle="This permanently removes your profile, activities and friend connections. This cannot be undone."
-        confirmLabel="Delete my account"
+        subtitle="This permanently deletes your account and data. Type delete to confirm. This cannot be undone."
+        confirmLabel="Delete forever"
         cancelLabel="Cancel"
         danger
+        requireType="delete"
+        typeHint='Type "delete" to confirm'
         onConfirm={() => { setShowDeleteAccountConfirm(false); doDeleteAccount(); }}
         icon="trash-outline"
       />

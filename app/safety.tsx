@@ -118,7 +118,8 @@ export default function SafetyScreen() {
 
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [showAddContact, setShowAddContact] = useState(false);
-  const [sharingLocation, setSharingLocation] = useState(false);
+  const [sendingSos, setSendingSos] = useState(false);
+  const [sharingTrip, setSharingTrip] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [removeContactId, setRemoveContactId] = useState<string | null>(null);
   const [showCall112Confirm, setShowCall112Confirm] = useState(false);
@@ -152,7 +153,7 @@ export default function SafetyScreen() {
   }
 
   async function sendSOS() {
-    setSharingLocation(true);
+    setSendingSos(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') { Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to send your position in the SOS.' }); return; }
@@ -170,11 +171,11 @@ export default function SafetyScreen() {
         if (contacts.length > 1) Toast.show({ type: 'info', text1: 'SOS sent', text2: `Message opened for ${first.name}. Also share with other trusted contacts if needed.` });
       } else { await Share.share({ message }); }
     } catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send SOS.' }); }
-    finally { setSharingLocation(false); }
+    finally { setSendingSos(false); }
   }
 
   async function shareLocation() {
-    setSharingLocation(true);
+    setSharingTrip(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') { Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to share your position.' }); return; }
@@ -183,7 +184,7 @@ export default function SafetyScreen() {
       const link = `https://maps.google.com/?q=${latitude},${longitude}`;
       await Share.share({ message: `My current location: ${link}`, url: link });
     } catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not share location.' }); }
-    finally { setSharingLocation(false); }
+    finally { setSharingTrip(false); }
   }
 
   function confirmDeleteAccount() {
@@ -215,8 +216,8 @@ export default function SafetyScreen() {
               <ToolCard icon="call-outline" label="Call safety support" color="#22C55E" onPress={callEmergency} c={c} />
             </View>
             <View style={styles.toolsRow}>
-              <ToolCard icon="warning-outline" label="Send SOS alert" color="#F97316" onPress={sendSOS} loading={sharingLocation} c={c} />
-              <ToolCard icon="navigate-outline" label="Share trip status" color="#3B82F6" onPress={shareLocation} loading={sharingLocation} c={c} />
+              <ToolCard icon="warning-outline" label="Send SOS alert" color="#F97316" onPress={sendSOS} loading={sendingSos} c={c} />
+              <ToolCard icon="navigate-outline" label="Share trip status" color="#3B82F6" onPress={shareLocation} loading={sharingTrip} c={c} />
             </View>
           </View>
 
@@ -325,10 +326,12 @@ export default function SafetyScreen() {
         visible={showDeleteAccountConfirm}
         onClose={() => setShowDeleteAccountConfirm(false)}
         title="Delete account?"
-        subtitle="This permanently removes your profile, activities and friend connections. This cannot be undone."
-        confirmLabel="Delete my account"
+        subtitle="This permanently deletes your account and data. Type delete to confirm. This cannot be undone."
+        confirmLabel="Delete forever"
         cancelLabel="Cancel"
         danger
+        requireType="delete"
+        typeHint='Type "delete" to confirm'
         onConfirm={() => { setShowDeleteAccountConfirm(false); doDeleteAccount(); }}
         icon="trash-outline"
       />

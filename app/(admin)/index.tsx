@@ -10,21 +10,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { adminApi, type AdminOverview, type AdminDailyPoint, authApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
-import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import { Spacing, Radius, Typography } from '@/constants/theme';
+import { Admin, adminChrome } from '@/constants/adminTheme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ── Stat card ────────────────────────────────────────────────────────────────
-
 function StatCard({ label, value, icon, color, sub }: {
   label: string; value: string | number; icon: IoniconName; color: string; sub?: string;
 }) {
   return (
-    <View style={[s.statCard, { borderColor: `${color}33` }]}>
-      <View style={[s.statIcon, { backgroundColor: `${color}1A` }]}>
-        <Ionicons name={icon} size={20} color={color} />
+    <View style={s.statCard}>
+      <View style={[s.statIcon, { backgroundColor: `${color}14` }]}>
+        <Ionicons name={icon} size={16} color={color} />
       </View>
       <Text style={s.statValue}>{value}</Text>
       <Text style={s.statLabel}>{label}</Text>
@@ -42,8 +41,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// ── Bar chart (pure RN, no external lib) ─────────────────────────────────────
-
 interface BarChartProps {
   data: AdminDailyPoint[];
   field: keyof AdminDailyPoint;
@@ -55,9 +52,8 @@ interface BarChartProps {
 function BarChart({ data, field, color, label, format }: BarChartProps) {
   const values = data.map(d => (d[field] as number) || 0);
   const max = Math.max(...values, 1);
-  const chartH = 80;
-  const barW = Math.floor(((SCREEN_W - Spacing.lg * 2 - 32) / data.length) - 6);
-
+  const chartH = 72;
+  const barW = Math.floor(((SCREEN_W - Spacing.lg * 2 - 28) / data.length) - 6);
   const total = values.reduce((a, b) => a + b, 0);
   const fmt = format ?? ((v: number) => String(v));
 
@@ -71,7 +67,7 @@ function BarChart({ data, field, color, label, format }: BarChartProps) {
         {data.map((d, i) => {
           const val = (d[field] as number) || 0;
           const heightPct = max > 0 ? val / max : 0;
-          const barH = Math.max(heightPct * chartH, val > 0 ? 4 : 2);
+          const barH = Math.max(heightPct * chartH, val > 0 ? 3 : 2);
           return (
             <View key={i} style={bc.barCol}>
               <View style={[bc.barBg, { height: chartH }]}>
@@ -80,15 +76,13 @@ function BarChart({ data, field, color, label, format }: BarChartProps) {
                     bc.barFill,
                     {
                       height: barH,
-                      backgroundColor: val > 0 ? color : 'rgba(255,255,255,0.06)',
+                      backgroundColor: val > 0 ? color : Admin.elevated,
                       width: barW,
                     },
                   ]}
                 />
               </View>
-              {val > 0 && (
-                <Text style={bc.barVal}>{fmt(val)}</Text>
-              )}
+              {val > 0 && <Text style={bc.barVal}>{fmt(val)}</Text>}
               <Text style={bc.barDay}>{d.day.replace(/^0/, '')}</Text>
             </View>
           );
@@ -100,59 +94,34 @@ function BarChart({ data, field, color, label, format }: BarChartProps) {
 
 const bc = StyleSheet.create({
   wrap: {
-    backgroundColor: '#11112A',
+    backgroundColor: Admin.surface,
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Admin.border,
     padding: Spacing.md,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  label: { ...Typography.bodySm, color: '#9490C0', fontWeight: '700' },
-  total: { ...Typography.bodySm, fontWeight: '800' },
-  chartArea: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  barCol: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 3,
-  },
-  barBg: {
-    width: '100%',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  barFill: {
-    borderRadius: 4,
-    minHeight: 2,
-  },
-  barVal: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#F1F0FF',
-  },
-  barDay: {
-    fontSize: 9,
-    color: '#5C5A80',
-    fontWeight: '600',
-  },
+  label: { ...Typography.bodySm, color: Admin.textSecondary, fontWeight: '600' },
+  total: { ...Typography.bodySm, fontWeight: '700' },
+  chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  barCol: { flex: 1, alignItems: 'center', gap: 2 },
+  barBg: { width: '100%', justifyContent: 'flex-end', alignItems: 'center' },
+  barFill: { borderRadius: 3, minHeight: 2 },
+  barVal: { fontSize: 8, fontWeight: '600', color: Admin.text },
+  barDay: { fontSize: 9, color: Admin.muted, fontWeight: '500' },
 });
-
-// ── Mini metric row inside chart ─────────────────────────────────────────────
 
 function MetricPill({ icon, label, value, color }: {
   icon: IoniconName; label: string; value: number | string; color: string;
 }) {
   return (
-    <View style={[mp.pill, { borderColor: `${color}30` }]}>
-      <View style={[mp.icon, { backgroundColor: `${color}18` }]}>
+    <View style={mp.pill}>
+      <View style={[mp.icon, { backgroundColor: `${color}14` }]}>
         <Ionicons name={icon} size={14} color={color} />
       </View>
       <View>
@@ -166,27 +135,22 @@ function MetricPill({ icon, label, value, color }: {
 const mp = StyleSheet.create({
   pill: {
     flex: 1,
-    minWidth: '28%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#11112A',
+    backgroundColor: Admin.surface,
     borderRadius: Radius.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Admin.border,
     padding: 10,
   },
   icon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
-  value: { ...Typography.bodySm, color: '#F1F0FF', fontWeight: '800', fontSize: 15 },
-  label: { ...Typography.caption, color: '#9490C0', fontSize: 10 },
+  value: { ...Typography.bodySm, color: Admin.text, fontWeight: '700', fontSize: 15 },
+  label: { ...Typography.caption, color: Admin.muted, fontSize: 10 },
 });
-
-// ── Main dashboard ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();
@@ -222,111 +186,74 @@ export default function AdminDashboard() {
   const fmtRupees = (minor: number) => `₹${Math.round(minor / 100)}`;
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <View style={s.adminBadge}>
-            <Ionicons name="shield-checkmark" size={16} color={Ping.purple} />
-          </View>
-          <View>
-            <Text style={s.headerTitle}>Admin Panel</Text>
-            <Text style={s.headerSub}>Ping Dashboard</Text>
-          </View>
+    <View style={[adminChrome.root, { paddingTop: insets.top }]}>
+      <View style={adminChrome.header}>
+        <View>
+          <Text style={adminChrome.title}>Admin</Text>
+          <Text style={s.subtitle}>Overview</Text>
         </View>
-        <TouchableOpacity onPress={() => setShowLogout(true)} hitSlop={8}>
-          <Ionicons name="log-out-outline" size={22} color="#5C5A80" />
+        <TouchableOpacity style={s.logoutBtn} onPress={() => setShowLogout(true)} hitSlop={8}>
+          <Ionicons name="log-out-outline" size={20} color={Admin.textSecondary} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <ActivityIndicator color={Ping.purple} style={{ marginTop: 60 }} />
+        <ActivityIndicator color={Admin.accent} style={{ marginTop: 60 }} />
       ) : (
         <ScrollView
           contentContainerStyle={s.body}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Ping.purpleLight} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Admin.accent} colors={[Admin.accent]} />
           }
         >
-          {/* ── Live pulse row ── */}
-          <View style={s.liveRow}>
-            <View style={s.livePulse} />
-            <Text style={s.liveLabel}>Live right now</Text>
-          </View>
           <View style={s.metricsRow}>
-            <MetricPill icon="radio-outline"     label="Active Users"  value={data?.live.activeNow ?? 0}     color="#22C55E" />
-            <MetricPill icon="location-outline"  label="Live Pings"    value={data?.live.activePings ?? 0}   color={Ping.purple} />
-            <MetricPill icon="megaphone-outline" label="Live Ads"      value={data?.live.activeAds ?? 0}     color="#F97316" />
-          </View>
-          <View style={[s.revCard, { borderColor: 'rgba(34,197,94,0.25)' }]}>
-            <Ionicons name="cash-outline" size={20} color="#22C55E" />
-            <View style={{ flex: 1 }}>
-              <Text style={s.revLabel}>Today's Revenue</Text>
-              <Text style={s.revValue}>{fmtRupees(data?.live.todaysRevenueMinor ?? 0)}</Text>
-            </View>
+            <MetricPill icon="radio-outline" label="Active" value={data?.live.activeNow ?? 0} color={Admin.success} />
+            <MetricPill icon="location-outline" label="Pings" value={data?.live.activePings ?? 0} color={Admin.accent} />
+            <MetricPill icon="megaphone-outline" label="Ads" value={data?.live.activeAds ?? 0} color={Admin.warning} />
           </View>
 
-          {/* ── Charts section ── */}
+          <View style={s.revCard}>
+            <Text style={s.revLabel}>Today</Text>
+            <Text style={s.revValue}>{fmtRupees(data?.live.todaysRevenueMinor ?? 0)}</Text>
+          </View>
+
           {daily.length > 0 && (
-            <Section title="Last 7 Days — Charts">
+            <Section title="Last 7 days">
               <View style={s.chartGrid}>
-                <BarChart
-                  data={daily}
-                  field="signups"
-                  color="#3B82F6"
-                  label="New Signups"
-                />
-                <BarChart
-                  data={daily}
-                  field="revenueMinor"
-                  color="#22C55E"
-                  label="Revenue"
-                  format={fmtRupees}
-                />
-                <BarChart
-                  data={daily}
-                  field="pings"
-                  color={Ping.purple}
-                  label="Pings Created"
-                />
-                <BarChart
-                  data={daily}
-                  field="ads"
-                  color="#F97316"
-                  label="Ads Launched"
-                />
+                <BarChart data={daily} field="signups" color={Admin.info} label="Signups" />
+                <BarChart data={daily} field="revenueMinor" color={Admin.success} label="Revenue" format={fmtRupees} />
+                <BarChart data={daily} field="pings" color={Admin.accent} label="Pings" />
+                <BarChart data={daily} field="ads" color={Admin.warning} label="Ads" />
               </View>
             </Section>
           )}
 
-          {/* ── 7-day totals ── */}
-          <Section title="Last 7 Days — Totals">
+          <Section title="Totals">
             <View style={s.grid}>
-              <StatCard label="New Signups"   value={data?.last7d.newSignups ?? 0}   icon="person-add-outline"    color="#3B82F6" />
-              <StatCard label="Pings Created" value={data?.last7d.pingsCreated ?? 0} icon="flash-outline"         color={Ping.purple} />
-              <StatCard label="Ads Launched"  value={data?.last7d.adsLaunched ?? 0}  icon="megaphone-outline"     color="#F97316" />
-              <StatCard label="Bans Issued"   value={data?.last7d.bansIssued ?? 0}   icon="ban-outline"           color="#EF4444" />
-              <StatCard label="Reports"       value={data?.last7d.reportsSubmitted ?? 0} icon="flag-outline"      color="#F59E0B" />
+              <StatCard label="Signups" value={data?.last7d.newSignups ?? 0} icon="person-add-outline" color={Admin.info} />
+              <StatCard label="Pings" value={data?.last7d.pingsCreated ?? 0} icon="flash-outline" color={Admin.accent} />
+              <StatCard label="Ads" value={data?.last7d.adsLaunched ?? 0} icon="megaphone-outline" color={Admin.warning} />
+              <StatCard label="Bans" value={data?.last7d.bansIssued ?? 0} icon="ban-outline" color={Admin.danger} />
+              <StatCard label="Reports" value={data?.last7d.reportsSubmitted ?? 0} icon="flag-outline" color={Admin.warning} />
             </View>
           </Section>
 
-          {/* ── Moderation queues ── */}
-          <Section title="Moderation Queue">
+          <Section title="Queue">
             <View style={s.grid}>
               <StatCard
-                label="Pending Reports"
+                label="Reports"
                 value={data?.queues.pendingReports ?? 0}
                 icon="flag-outline"
-                color={data?.queues.pendingReports ? '#EF4444' : '#22C55E'}
-                sub={data?.queues.pendingReports ? 'Needs action' : 'All clear'}
+                color={data?.queues.pendingReports ? Admin.danger : Admin.success}
+                sub={data?.queues.pendingReports ? 'Action needed' : 'Clear'}
               />
               <StatCard
-                label="Open Appeals"
+                label="Appeals"
                 value={data?.queues.pendingAppeals ?? 0}
                 icon="chatbubble-ellipses-outline"
-                color={data?.queues.pendingAppeals ? '#F97316' : '#22C55E'}
-                sub={data?.queues.pendingAppeals ? 'Needs review' : 'All clear'}
+                color={data?.queues.pendingAppeals ? Admin.warning : Admin.success}
+                sub={data?.queues.pendingAppeals ? 'Review' : 'Clear'}
               />
             </View>
           </Section>
@@ -348,57 +275,45 @@ export default function AdminDashboard() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080815' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(167,139,250,0.12)',
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  adminBadge: {
-    width: 36, height: 36, borderRadius: Radius.sm,
-    backgroundColor: 'rgba(124,58,237,0.15)',
+  subtitle: { ...Typography.caption, color: Admin.muted, marginTop: 2 },
+  logoutBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: Admin.elevated,
     alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: { ...Typography.h3, color: '#F1F0FF' },
-  headerSub: { ...Typography.caption, color: '#9490C0' },
-  body: { padding: Spacing.lg, gap: Spacing.xl, paddingBottom: 40 },
-  liveRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: -8,
-  },
-  livePulse: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#22C55E',
-    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9, shadowRadius: 4, elevation: 3,
-  },
-  liveLabel: { ...Typography.caption, color: '#22C55E', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  metricsRow: { flexDirection: 'row', gap: Spacing.sm },
+  body: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: 40 },
+  metricsRow: { flexDirection: 'row', gap: 8 },
   revCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#11112A', borderRadius: Radius.lg, borderWidth: 1,
-    padding: Spacing.md,
+    backgroundColor: Admin.surface,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Admin.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
   },
-  revLabel: { ...Typography.caption, color: '#9490C0' },
-  revValue: { ...Typography.h3, color: '#22C55E', fontSize: 28, fontWeight: '800' },
-  section: { gap: Spacing.md },
+  revLabel: { ...Typography.caption, color: Admin.muted, fontWeight: '600' },
+  revValue: { ...Typography.h3, color: Admin.text, fontSize: 28, fontWeight: '700', marginTop: 2 },
+  section: { gap: Spacing.sm },
   sectionTitle: {
-    ...Typography.caption, color: '#9490C0',
-    textTransform: 'uppercase', letterSpacing: 0.8,
+    ...Typography.caption, color: Admin.muted,
+    fontWeight: '600', letterSpacing: 0.2,
   },
-  chartGrid: { gap: Spacing.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  chartGrid: { gap: Spacing.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statCard: {
-    flex: 1, minWidth: '45%', backgroundColor: '#11112A',
-    borderRadius: Radius.lg, borderWidth: 1,
-    padding: Spacing.md, gap: 4,
+    flex: 1, minWidth: '45%',
+    backgroundColor: Admin.surface,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Admin.border,
+    padding: Spacing.md, gap: 2,
   },
   statIcon: {
-    width: 36, height: 36, borderRadius: Radius.sm,
+    width: 30, height: 30, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
   },
-  statValue: { ...Typography.h3, color: '#F1F0FF', fontSize: 26, fontWeight: '800' },
-  statLabel: { ...Typography.bodySm, color: '#9490C0' },
-  statSub: { ...Typography.caption, color: '#5C5A80' },
+  statValue: { ...Typography.h3, color: Admin.text, fontSize: 22, fontWeight: '700' },
+  statLabel: { ...Typography.caption, color: Admin.textSecondary },
+  statSub: { ...Typography.caption, color: Admin.muted, fontSize: 10 },
 });

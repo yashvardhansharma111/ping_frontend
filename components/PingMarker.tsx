@@ -1,18 +1,5 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
-type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-
-const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
-  sport:   { icon: 'dumbbell',              color: '#EF4444' },
-  food:    { icon: 'food-fork-drink',       color: '#F97316' },
-  music:   { icon: 'music',                 color: '#8B5CF6' },
-  study:   { icon: 'book-open-variant',     color: '#3B82F6' },
-  outdoor: { icon: 'walk',                  color: '#10B981' },
-  gaming:  { icon: 'gamepad-variant',       color: '#EC4899' },
-  meetup:  { icon: 'account-group',         color: '#7C3AED' },
-  default: { icon: 'map-marker',            color: '#6B7280' },
-};
 
 interface Props {
   type: string;
@@ -22,94 +9,30 @@ interface Props {
   isOwn?: boolean;
 }
 
-export default function PingMarker({ type, selected = false, count = 0, genderFilter, isOwn = false }: Props) {
-  const cfg = TYPE_CFG[type] ?? TYPE_CFG.default;
-
-  const SIZE  = selected ? 62 : isOwn ? 56 : 50;
-  const ICON  = selected ? 28 : 22;
-  const tipW  = selected ? 16 : 13;
-  const tipH  = selected ? 20 : 16;
-  const GLOW  = SIZE + 16;
+export default function PingMarker({ selected = false, count = 0, genderFilter, isOwn = false }: Props) {
+  const SIZE = selected ? 48 : isOwn ? 44 : 40;
 
   return (
     <View style={s.outer}>
-      {/* Outer ambient glow ring */}
-      <View
-        style={{
-          position: 'absolute',
-          top: -(GLOW - SIZE) / 2,
-          width: GLOW,
-          height: GLOW,
-          borderRadius: GLOW / 2,
-          backgroundColor: `${cfg.color}18`,
-          borderWidth: 1.5,
-          borderColor: `${cfg.color}35`,
-        }}
-      />
-
-      {/* Pin bubble */}
-      <View
-        style={[
-          s.head,
-          {
-            width: SIZE,
-            height: SIZE,
-            borderRadius: SIZE / 2,
-            backgroundColor: cfg.color,
-            shadowColor: cfg.color,
-            shadowOpacity: selected ? 0.75 : 0.55,
-            shadowRadius: selected ? 16 : 10,
-            elevation: selected ? 20 : 12,
-            borderWidth: selected ? 3.5 : 2.5,
-            borderColor: '#FFFFFF',
-          },
-        ]}
-      >
-        <MaterialCommunityIcons name={cfg.icon} size={ICON} color="#FFF" />
-
-        {/* 3D specular highlight */}
-        <View
-          style={[
-            s.specular,
-            {
-              width: SIZE * 0.42,
-              height: SIZE * 0.28,
-              top: SIZE * 0.1,
-              right: SIZE * 0.08,
-            },
-          ]}
+      <View style={[s.iconWrap, selected && s.iconWrapSelected]}>
+        <Image
+          source={require('../assets/images/icon.png')}
+          style={{ width: SIZE, height: SIZE, borderRadius: SIZE * 0.22 }}
+          resizeMode="contain"
         />
 
-        {/* Inner bottom rim for sphere depth */}
-        <View
-          style={[
-            s.innerRim,
-            {
-              width: SIZE * 0.7,
-              height: SIZE * 0.18,
-              bottom: SIZE * 0.08,
-              borderRadius: SIZE * 0.1,
-            },
-          ]}
-        />
-
-        {/* "Mine" badge for own ping */}
         {isOwn && (
-          <View style={[s.countBadge, { backgroundColor: '#FFF' }]}>
-            <Text style={[s.countText, { color: cfg.color }]}>ME</Text>
+          <View style={s.countBadge}>
+            <Text style={s.countText}>ME</Text>
           </View>
         )}
 
-        {/* Count badge */}
         {!isOwn && count > 1 && (
-          <View style={[s.countBadge, { backgroundColor: '#FFF' }]}>
-            <Text style={[s.countText, { color: cfg.color }]}>
-              {count > 9 ? '9+' : count}
-            </Text>
+          <View style={s.countBadge}>
+            <Text style={s.countText}>{count > 9 ? '9+' : count}</Text>
           </View>
         )}
 
-        {/* Gender badge */}
         {genderFilter && genderFilter !== 'all' && (
           <View
             style={[
@@ -125,91 +48,53 @@ export default function PingMarker({ type, selected = false, count = 0, genderFi
           </View>
         )}
       </View>
-
-      {/* Pin tip */}
-      <View
-        style={[
-          s.tip,
-          {
-            borderLeftWidth: tipW / 2,
-            borderRightWidth: tipW / 2,
-            borderTopWidth: tipH,
-            borderTopColor: cfg.color,
-          },
-        ]}
-      />
-
-      {/* Ground shadow */}
-      <View
-        style={[
-          s.groundShadow,
-          {
-            backgroundColor: `${cfg.color}30`,
-            width: tipW + 10,
-            shadowColor: cfg.color,
-          },
-        ]}
-      />
     </View>
   );
 }
 
 const s = StyleSheet.create({
   outer: { alignItems: 'center' },
-  head: {
+  iconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 5,
+    elevation: 6,
   },
-  specular: {
-    position: 'absolute',
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    transform: [{ rotate: '-20deg' }],
-  },
-  innerRim: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.12)',
-  },
-  tip: {
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    marginTop: -1,
-  },
-  groundShadow: {
-    height: 5,
-    borderRadius: 3,
-    marginTop: 2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 3,
+  iconWrapSelected: {
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+    transform: [{ scale: 1.06 }],
   },
   countBadge: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.08)',
     elevation: 3,
   },
-  countText: { fontSize: 10, fontWeight: '800', lineHeight: 11 },
+  countText: { fontSize: 9, fontWeight: '800', lineHeight: 11, color: '#7C3AED' },
   genderBadge: {
     position: 'absolute',
-    bottom: -4,
-    right: -5,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    bottom: -3,
+    right: -3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFF',
     elevation: 3,
   },

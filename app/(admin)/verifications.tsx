@@ -43,12 +43,12 @@ function VerificationCard({
         ) : (
           <View style={[c.photoCol]}>
             <View style={[c.photo, c.photoPlaceholder]}>
-              <Ionicons name="person" size={32} color="#5C5A80" />
+              <Ionicons name="person" size={32} color="#9CA3AF" />
             </View>
             <Text style={c.photoLabel}>Profile</Text>
           </View>
         )}
-        <Ionicons name="swap-horizontal-outline" size={22} color="#5C5A80" style={{ alignSelf: 'center' }} />
+        <Ionicons name="swap-horizontal-outline" size={22} color="#9CA3AF" style={{ alignSelf: 'center' }} />
         {user.verificationSelfieUrl ? (
           <View style={c.photoCol}>
             <Image source={{ uri: user.verificationSelfieUrl }} style={c.photo} />
@@ -57,7 +57,7 @@ function VerificationCard({
         ) : (
           <View style={c.photoCol}>
             <View style={[c.photo, c.photoPlaceholder]}>
-              <Ionicons name="camera" size={32} color="#5C5A80" />
+              <Ionicons name="camera" size={32} color="#9CA3AF" />
             </View>
             <Text style={c.photoLabel}>Selfie</Text>
           </View>
@@ -76,7 +76,7 @@ function VerificationCard({
           <Text style={c.approveBtnText}>Approve</Text>
         </TouchableOpacity>
         <TouchableOpacity style={c.rejectBtn} onPress={onReject}>
-          <Ionicons name="close-circle" size={16} color="#EF4444" />
+          <Ionicons name="close-circle" size={16} color="#DC2626" />
           <Text style={c.rejectBtnText}>Reject</Text>
         </TouchableOpacity>
       </View>
@@ -86,10 +86,10 @@ function VerificationCard({
 
 const c = StyleSheet.create({
   card: {
-    backgroundColor: '#11112A',
+    backgroundColor: '#FFFFFF',
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.15)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8E8ED',
     padding: Spacing.md,
     gap: 12,
   },
@@ -97,29 +97,29 @@ const c = StyleSheet.create({
   photoCol: { alignItems: 'center', gap: 6 },
   photo: { width: 100, height: 100, borderRadius: 50 },
   photoPlaceholder: {
-    backgroundColor: '#1A1A38',
+    backgroundColor: '#F3F4F6',
     alignItems: 'center', justifyContent: 'center',
   },
-  photoLabel: { ...Typography.caption, color: '#5C5A80' },
+  photoLabel: { ...Typography.caption, color: '#9CA3AF' },
   info: { gap: 2 },
-  name: { ...Typography.h4, color: '#F1F0FF' },
-  username: { ...Typography.bodySm, color: '#9490C0' },
-  meta: { ...Typography.caption, color: '#5C5A80' },
+  name: { ...Typography.h4, color: '#111827' },
+  username: { ...Typography.bodySm, color: '#6B7280' },
+  meta: { ...Typography.caption, color: '#9CA3AF' },
   actions: { flexDirection: 'row', gap: Spacing.sm },
   approveBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingVertical: 10,
-    backgroundColor: 'rgba(34,197,94,0.15)',
-    borderRadius: Radius.sm, borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+    backgroundColor: '#16A34A',
+    borderRadius: Radius.md,
   },
-  approveBtnText: { ...Typography.bodySm, color: '#22C55E', fontWeight: '700' },
+  approveBtnText: { ...Typography.bodySm, color: '#FFF', fontWeight: '600' },
   rejectBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingVertical: 10,
-    backgroundColor: 'rgba(239,68,68,0.08)',
-    borderRadius: Radius.sm, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
+    backgroundColor: '#F3F4F6',
+    borderRadius: Radius.md,
   },
-  rejectBtnText: { ...Typography.bodySm, color: '#EF4444', fontWeight: '700' },
+  rejectBtnText: { ...Typography.bodySm, color: '#DC2626', fontWeight: '600' },
 });
 
 // ── Reject reason modal ───────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ function RejectModal({
             value={reason}
             onChangeText={setReason}
             placeholder="e.g. Face not clearly visible"
-            placeholderTextColor="#5C5A80"
+            placeholderTextColor="#9CA3AF"
             multiline
             maxLength={200}
           />
@@ -169,20 +169,20 @@ function RejectModal({
 
 const rm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
-  sheet: { backgroundColor: '#11112A', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
-  title: { ...Typography.h4, color: '#F1F0FF' },
-  sub: { ...Typography.bodySm, color: '#9490C0' },
+  sheet: { backgroundColor: '#FFFFFF', borderRadius: Radius.xl, padding: Spacing.lg, width: '100%', gap: 12 },
+  title: { ...Typography.h4, color: '#111827' },
+  sub: { ...Typography.bodySm, color: '#6B7280' },
   input: {
-    backgroundColor: '#1A1A38', borderRadius: Radius.md, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.2)', padding: 12, color: '#F1F0FF',
+    backgroundColor: '#F3F4F6', borderRadius: Radius.md, borderWidth: 1,
+    borderColor: '#E5E7EB', padding: 12, color: '#111827',
     ...Typography.body, minHeight: 80, textAlignVertical: 'top',
   },
   btns: { flexDirection: 'row', gap: Spacing.sm },
   cancelBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: Radius.sm,
+    backgroundColor: '#F3F4F6', borderRadius: Radius.sm,
   },
-  cancelText: { ...Typography.bodySm, color: '#9490C0', fontWeight: '600' },
+  cancelText: { ...Typography.bodySm, color: '#6B7280', fontWeight: '600' },
   confirmBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',
     backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: Radius.sm,
@@ -276,7 +276,7 @@ export default function AdminVerifications() {
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={Ping.purpleLight} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={Ping.purple} />
           }
           renderItem={({ item }) => (
             <VerificationCard
@@ -287,7 +287,7 @@ export default function AdminVerifications() {
           )}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="shield-checkmark-outline" size={48} color="#2A2A50" />
+              <Ionicons name="shield-checkmark-outline" size={48} color="#D1D5DB" />
               <Text style={s.emptyTitle}>No pending verifications</Text>
               <Text style={s.emptySub}>All caught up! New submissions will appear here.</Text>
             </View>
@@ -323,24 +323,25 @@ export default function AdminVerifications() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080815' },
+  root: { flex: 1, backgroundColor: '#F7F7F8' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(167,139,250,0.12)',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8E8ED',
   },
-  headerTitle: { ...Typography.h3, color: '#F1F0FF' },
-  headerSub: { ...Typography.caption, color: '#9490C0', marginTop: 2 },
+  headerTitle: { ...Typography.h3, color: '#111827', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  headerSub: { ...Typography.caption, color: '#6B7280', marginTop: 2, fontWeight: '600' },
   badge: {
     minWidth: 28, height: 28, borderRadius: 14, paddingHorizontal: 8,
-    backgroundColor: '#1A1A38', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
   },
-  badgeLive: { backgroundColor: 'rgba(239,68,68,0.2)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)' },
-  badgeText: { ...Typography.caption, color: '#EF4444', fontWeight: '800' },
+  badgeLive: { backgroundColor: '#FEE2E2' },
+  badgeText: { ...Typography.caption, color: '#DC2626', fontWeight: '700' },
   list: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 40 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyTitle: { ...Typography.h3, color: '#5C5A80' },
-  emptySub: { ...Typography.bodySm, color: '#2A2A50', textAlign: 'center', maxWidth: 260 },
+  emptyTitle: { ...Typography.h3, color: '#111827', fontSize: 18 },
+  emptySub: { ...Typography.bodySm, color: '#9CA3AF', textAlign: 'center', maxWidth: 260 },
   loadMore: { alignItems: 'center', paddingVertical: Spacing.lg },
-  loadMoreText: { ...Typography.bodyMed, color: Ping.purpleLight },
+  loadMoreText: { ...Typography.bodyMed, color: '#6B7280', fontWeight: '600' },
 });

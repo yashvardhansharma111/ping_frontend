@@ -10,17 +10,17 @@ import {
   Image,
   Dimensions,
   FlatList,
+  Platform,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { usersApi, friendsApi, reportsApi, chatApi, activitiesApi, type UserProfile, type Activity } from '@/lib/api';
+import { usersApi, friendsApi, chatApi, activitiesApi, type UserProfile, type Activity } from '@/lib/api';
 import HighlightsSection from '@/components/HighlightsSection';
-import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ShareSheet from '@/components/ShareSheet';
@@ -28,47 +28,59 @@ import ShareSheet from '@/components/ShareSheet';
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const PHOTO_H = SCREEN_H * 0.70;
+const PHOTO_H = SCREEN_H;
+const THUMB = 92;
+const GALLERY_GAP = 12;
+
 
 const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
-  sport:   { icon: 'dumbbell',          color: '#EF4444' },
-  food:    { icon: 'food-fork-drink',   color: '#F97316' },
-  music:   { icon: 'music',             color: '#8B5CF6' },
-  study:   { icon: 'book-open-variant', color: '#3B82F6' },
-  outdoor: { icon: 'walk',             color: '#10B981' },
-  gaming:  { icon: 'gamepad-variant',  color: '#EC4899' },
+  sport:   { icon: 'dumbbell',          color: '#7C3AED' },
+  food:    { icon: 'food-fork-drink',   color: '#8B5CF6' },
+  music:   { icon: 'music',             color: '#A78BFA' },
+  study:   { icon: 'book-open-variant', color: '#6D28D9' },
+  outdoor: { icon: 'walk',             color: '#5B21B6' },
+  gaming:  { icon: 'gamepad-variant',  color: '#C4B5FD' },
   meetup:  { icon: 'account-group',    color: '#7C3AED' },
-  default: { icon: 'map-marker',       color: '#6B7280' },
+  default: { icon: 'map-marker',       color: '#A78BFA' },
 };
 
-// ── Photo carousel ──────────────────────────────────────────────────────────
+// ── Photo carousel (full-bleed preview) ──────────────────────────────────────
 
-function PhotoCarousel({ avatarUrl, photos, initials }: { avatarUrl?: string; photos?: string[]; initials: string }) {
+function PhotoCarousel({
+  photos,
+  initials,
+  height = PHOTO_H,
+}: {
+  photos: string[];
+  initials: string;
+  height?: number;
+}) {
   const [active, setActive] = useState(0);
-  const allPhotos = [avatarUrl, ...(photos ?? [])].filter(Boolean) as string[];
 
-  if (allPhotos.length === 0) {
+  if (photos.length === 0) {
     return (
-      <View style={[pc.single, { backgroundColor: '#1A1A2E' }]}>
+      <View style={[pc.single, { height, backgroundColor: '#141414' }]}>
         <Text style={pc.initials}>{initials}</Text>
       </View>
     );
   }
 
   return (
-    <View style={pc.wrap}>
+    <View style={[pc.wrap, { height }]}>
       <FlatList
-        data={allPhotos}
+        data={photos}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
-        renderItem={({ item }) => <Image source={{ uri: item }} style={pc.photo} resizeMode="cover" />}
+        renderItem={({ item }) => (
+          <Image source={{ uri: item }} style={[pc.photo, { height }]} resizeMode="cover" />
+        )}
         keyExtractor={(_, i) => String(i)}
       />
-      {allPhotos.length > 1 && (
+      {photos.length > 1 && (
         <View style={pc.dots}>
-          {allPhotos.map((_, i) => (
+          {photos.map((_, i) => (
             <View key={i} style={[pc.dot, i === active && pc.dotActive]} />
           ))}
         </View>
@@ -78,36 +90,212 @@ function PhotoCarousel({ avatarUrl, photos, initials }: { avatarUrl?: string; ph
 }
 
 const pc = StyleSheet.create({
-  wrap: { width: SCREEN_W, height: PHOTO_H },
-  photo: { width: SCREEN_W, height: PHOTO_H },
-  single: { width: SCREEN_W, height: PHOTO_H, alignItems: 'center', justifyContent: 'center' },
+  wrap: { width: SCREEN_W },
+  photo: { width: SCREEN_W },
+  single: { width: SCREEN_W, alignItems: 'center', justifyContent: 'center' },
   initials: { fontSize: 80, fontWeight: '800', color: '#FFF' },
-  dots: { position: 'absolute', top: 20, alignSelf: 'center', flexDirection: 'row', gap: 5 },
+  dots: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+  },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
   dotActive: { backgroundColor: '#FFF', width: 16 },
 });
 
-// ── Star display ─────────────────────────────────────────────────────────────
+// ── Glass card (detail) ──────────────────────────────────────────────────────
 
-function StarDisplay({ value, count }: { value: number; count: number }) {
-  const rounded = Math.round(value * 2) / 2;
+function GlassCard({ children }: { children: React.ReactNode }) {
+  if (Platform.OS === 'ios') {
+    return (
+      <BlurView intensity={55} tint="dark" style={glass.card}>
+        <View style={glass.inner}>{children}</View>
+      </BlurView>
+    );
+  }
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Ionicons key={n} name={n <= rounded ? 'star' : rounded === n - 0.5 ? 'star-half' : 'star-outline'} size={13} color="#FBBF24" />
-      ))}
-      <Text style={{ color: '#FBBF24', fontWeight: '700', fontSize: 12, marginLeft: 2 }}>{value.toFixed(1)}</Text>
-      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>({count})</Text>
+    <View style={[glass.card, glass.android]}>
+      <View style={glass.inner}>{children}</View>
     </View>
   );
 }
 
-function getAge(dob?: string): number | null {
-  if (!dob) return null;
-  const d = new Date(dob);
-  if (isNaN(d.getTime())) return null;
-  return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+const glass = StyleSheet.create({
+  card: {
+    borderRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  android: { backgroundColor: 'rgba(22,22,22,0.92)' },
+  inner: {
+    padding: 22,
+    gap: 16,
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(0,0,0,0.32)' : 'transparent',
+  },
+});
+
+// ── Thumbnail gallery with arrow controls ────────────────────────────────────
+
+function PhotoGallery({ photos }: { photos: string[] }) {
+  const listRef = useRef<FlatList>(null);
+  const [index, setIndex] = useState(0);
+  if (photos.length === 0) return null;
+
+  function scrollTo(next: number) {
+    const clamped = Math.max(0, Math.min(photos.length - 1, next));
+    setIndex(clamped);
+    listRef.current?.scrollToOffset({ offset: clamped * (THUMB + GALLERY_GAP), animated: true });
+  }
+
+  return (
+    <View style={gal.wrap}>
+      <FlatList
+        ref={listRef}
+        data={photos}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: GALLERY_GAP }}
+        onMomentumScrollEnd={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / (THUMB + GALLERY_GAP));
+          setIndex(Math.max(0, Math.min(photos.length - 1, i)));
+        }}
+        renderItem={({ item }) => (
+          <Image source={{ uri: item }} style={gal.thumb} resizeMode="cover" />
+        )}
+        keyExtractor={(_, i) => `g-${i}`}
+      />
+      {photos.length > 1 && (
+        <View style={gal.navRow}>
+          <TouchableOpacity
+            style={[gal.navBtn, index === 0 && gal.navBtnDisabled]}
+            onPress={() => scrollTo(index - 1)}
+            disabled={index === 0}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back" size={16} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[gal.navBtn, index >= photos.length - 1 && gal.navBtnDisabled]}
+            onPress={() => scrollTo(index + 1)}
+            disabled={index >= photos.length - 1}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-forward" size={16} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
 }
+
+const gal = StyleSheet.create({
+  wrap: { gap: 14 },
+  thumb: {
+    width: THUMB,
+    height: THUMB,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  navRow: { flexDirection: 'row', gap: 10 },
+  navBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navBtnDisabled: { opacity: 0.35 },
+});
+
+// ── Quote / testimonial card ─────────────────────────────────────────────────
+
+function QuoteCard({
+  text,
+  name,
+  handle,
+  avatarUrl,
+  initials,
+}: {
+  text: string;
+  name: string;
+  handle?: string | null;
+  avatarUrl?: string | null;
+  initials: string;
+}) {
+  return (
+    <View style={quote.card}>
+      <Text style={quote.text}>{text}</Text>
+      <View style={quote.attr}>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={quote.avatar} />
+        ) : (
+          <View style={[quote.avatar, quote.avatarFallback]}>
+            <Text style={quote.avatarText}>{initials}</Text>
+          </View>
+        )}
+        <View>
+          <Text style={quote.name}>{name}</Text>
+          {handle ? <Text style={quote.handle}>@{handle}</Text> : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const quote = StyleSheet.create({
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 22,
+    padding: 20,
+    gap: 16,
+  },
+  text: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
+    lineHeight: 23,
+    fontStyle: 'italic',
+  },
+  attr: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarFallback: { backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  name: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  handle: { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
+});
+
+// ── Stats (mock-style 3-up) ──────────────────────────────────────────────────
+
+function StatsRow({ items }: { items: { value: string; label: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <View style={st.row}>
+      {items.map((item) => (
+        <View key={item.label} style={st.item}>
+          <Text style={st.num}>{item.value}</Text>
+          <Text style={st.label}>{item.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
+  item: { alignItems: 'flex-start' },
+  num: { color: '#FFF', fontWeight: '800', fontSize: 22, letterSpacing: -0.4 },
+  label: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+});
 
 // ── Invite to Ping sheet ─────────────────────────────────────────────────────
 
@@ -216,7 +404,6 @@ export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const scheme = useColorScheme() ?? 'dark';
   const router = useRouter();
-  const { user: me } = useAuthStore();
   const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -227,9 +414,9 @@ export default function UserProfileScreen() {
   const [mutualCount, setMutualCount] = useState<number | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const [recentPings, setRecentPings] = useState<Activity[]>([]);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [mode, setMode] = useState<'preview' | 'detail'>('preview');
 
   useEffect(() => {
     usersApi.getProfile(userId)
@@ -238,7 +425,6 @@ export default function UserProfileScreen() {
         if (res.user.friendshipStatus !== 'self') {
           friendsApi.mutual(userId).then((r) => setMutualCount(r.count)).catch(() => {});
         }
-        activitiesApi.byUser(userId).then((r) => setRecentPings(r.activities)).catch(() => {});
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -312,15 +498,18 @@ export default function UserProfileScreen() {
     catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message }); }
   }
 
-  function handleMoreOptions() {
-    if (!profile) return;
-    setShowBlockConfirm(true);
+  function handleBack() {
+    if (mode === 'detail') {
+      setMode('preview');
+      return;
+    }
+    router.back();
   }
 
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color={Ping.purpleLight} size="large" />
+        <ActivityIndicator color="#FFF" size="large" />
       </View>
     );
   }
@@ -331,7 +520,7 @@ export default function UserProfileScreen() {
         <Ionicons name="person-outline" size={48} color="#555" />
         <Text style={{ color: '#888', ...Typography.bodyMed }}>User not found</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: Spacing.sm }}>
-          <Text style={{ color: Ping.purpleLight }}>Go back</Text>
+          <Text style={{ color: '#FFF' }}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -342,456 +531,473 @@ export default function UserProfileScreen() {
   const isPendingSent = profile.friendshipStatus === 'pending_sent';
   const isPendingReceived = profile.friendshipStatus === 'pending_received';
   const isVerified = profile.verificationStatus === 'verified';
-  const age = getAge(profile.dob);
-  const genderLabel = profile.gender === 'male' ? 'Male' : profile.gender === 'female' ? 'Female' : profile.gender === 'other' ? 'Other' : null;
 
-  const allTags = [
-    ...(profile.hobbies ?? []).map((h) => `#${h}`),
-    ...(profile.vibePreferences ?? []).map((v) => `#${v}`),
-    ...(profile.favoriteActivities ?? []).map((fa) => `#${fa}`),
+  const allPhotos = [profile.avatarUrl, ...(profile.photos ?? [])].filter(
+    (uri, i, arr) => !!uri && arr.indexOf(uri) === i,
+  ) as string[];
+
+  const interestTags = [
+    ...(profile.hobbies ?? []),
+    ...(profile.favoriteActivities ?? []),
+  ].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 8);
+
+  const hashTags = interestTags.map((t) => (t.startsWith('#') ? t : `#${t.replace(/\s+/g, '').toLowerCase()}`));
+
+  const galleryPhotos = (profile.photos?.length ? profile.photos : allPhotos).filter(Boolean) as string[];
+
+  const quoteText = profile.pingPitch || profile.funTruth || profile.bio || null;
+
+  // Always three stats like the mock for visual balance
+  const stats = [
+    {
+      value: mutualCount !== null ? String(mutualCount) : '—',
+      label: 'Mutuals',
+    },
+    {
+      value: String(profile.completedPingsCount ?? 0),
+      label: 'Pings',
+    },
+    profile.averageRating != null && (profile.ratingCount ?? 0) > 0
+      ? { value: profile.averageRating.toFixed(1), label: 'Rating' }
+      : { value: `${profile.trustRate ?? 100}%`, label: 'Trust' },
   ];
 
+  // ── Primary CTA label / action ─────────────────────────────────────────────
+  function renderPrimaryCta(fullWidth = true) {
+    if (isSelf) return null;
+
+    if (profile!.friendshipStatus === 'none') {
+      return (
+        <TouchableOpacity
+          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          onPress={sendRequest}
+          disabled={actionLoading}
+          activeOpacity={0.88}
+        >
+          {actionLoading ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={s.btnPrimaryText}>Add Friend</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+    if (isPendingReceived) {
+      return (
+        <TouchableOpacity
+          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          onPress={acceptRequest}
+          disabled={actionLoading}
+          activeOpacity={0.88}
+        >
+          {actionLoading ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={s.btnPrimaryText}>Accept Request</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+    if (isPendingSent) {
+      return (
+        <View style={[s.btnGhost, !fullWidth && { flex: 1 }]}>
+          <Text style={s.btnGhostText}>Request Sent</Text>
+        </View>
+      );
+    }
+    if (isAccepted) {
+      return (
+        <TouchableOpacity
+          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          onPress={openDm}
+          disabled={dmLoading}
+          activeOpacity={0.88}
+        >
+          {dmLoading ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={s.btnPrimaryText}>Message</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  }
+
+  // ── PREVIEW MODE — frosted bottom card over full-bleed photo ───────────────
+  if (mode === 'preview') {
+    const sheetPadBottom = Math.max(insets.bottom, 16) + 8;
+    const nameParts = (profile.displayName ?? 'User').trim().split(/\s+/);
+    const firstName = nameParts[0] ?? 'User';
+    const restName = nameParts.slice(1).join(' ');
+
+    const sheetInner = (
+      <View style={[s.previewSheetInner, { paddingBottom: sheetPadBottom }]}>
+        <View style={s.nameRow}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+              <View style={{ flexShrink: 1 }}>
+                <Text style={s.name}>{firstName}</Text>
+                {restName ? <Text style={s.name}>{restName}</Text> : null}
+              </View>
+              {isVerified && (
+                <Ionicons name="checkmark-circle" size={18} color="#A78BFA" style={{ marginTop: 10 }} />
+              )}
+            </View>
+            {profile.username ? (
+              <Text style={s.handle}>@{profile.username}</Text>
+            ) : null}
+          </View>
+          <TouchableOpacity onPress={() => setMode('detail')} hitSlop={10} activeOpacity={0.7}>
+            <Text style={s.seeProfile}>See profile</Text>
+          </TouchableOpacity>
+        </View>
+
+        {profile.bio ? (
+          <Text style={s.bio} numberOfLines={3}>
+            "{profile.bio}"
+          </Text>
+        ) : null}
+
+        <StatsRow items={stats} />
+
+        {!isSelf ? (
+          <View style={s.previewCtaWrap}>{renderPrimaryCta(true)}</View>
+        ) : null}
+      </View>
+    );
+
+    return (
+      <View style={s.root}>
+        <PhotoCarousel photos={allPhotos} initials={initials} />
+
+        <View style={[s.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity onPress={handleBack} hitSlop={12} style={s.headerBtn}>
+            <Ionicons name="arrow-back" size={20} color="#FFF" />
+          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity onPress={() => setShowShare(true)} hitSlop={12} style={s.headerBtn}>
+              <Ionicons name="share-outline" size={19} color="#FFF" />
+            </TouchableOpacity>
+            {!isSelf && (
+              <TouchableOpacity onPress={() => setShowBlockConfirm(true)} hitSlop={12} style={s.headerBtn}>
+                <Ionicons name="ellipsis-vertical" size={18} color="#FFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Frosted glass bottom sheet */}
+        <View style={s.previewSheetWrap} pointerEvents="box-none">
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 75 : 90}
+            tint="dark"
+            experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
+            style={s.previewSheet}
+          >
+            <View style={s.previewSheetTint}>{sheetInner}</View>
+          </BlurView>
+        </View>
+
+        {renderSheets()}
+      </View>
+    );
+  }
+
+  // ── DETAIL MODE (mock right screen) ────────────────────────────────────────
   return (
     <View style={s.root}>
-      {/* ── Floating header ── */}
-      <View style={[s.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={s.headerBtn}>
+      {allPhotos[0] ? (
+        <Image source={{ uri: allPhotos[0] }} style={StyleSheet.absoluteFillObject} blurRadius={28} resizeMode="cover" />
+      ) : (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#0A0A0A' }]} />
+      )}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+
+      <View style={[s.detailHeader, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={handleBack} hitSlop={12} style={s.headerBtn}>
           <Ionicons name="arrow-back" size={20} color="#FFF" />
         </TouchableOpacity>
         {profile.username ? (
           <Text style={s.headerHandle}>@{profile.username}</Text>
-        ) : <View />}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity onPress={() => setShowShare(true)} hitSlop={12} style={s.headerBtn}>
-            <Ionicons name="share-outline" size={19} color="#FFF" />
-          </TouchableOpacity>
-          {!isSelf && (
-            <TouchableOpacity onPress={handleMoreOptions} hitSlop={12} style={s.headerBtn}>
-              <Ionicons name="ellipsis-vertical" size={18} color="#FFF" />
-            </TouchableOpacity>
-          )}
-        </View>
+        ) : (
+          <View />
+        )}
+        <TouchableOpacity onPress={() => setShowShare(true)} hitSlop={12} style={s.headerBtn}>
+          <Ionicons name="share-outline" size={18} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: insets.bottom + (isSelf ? 40 : 120),
+          gap: 18,
+        }}
+      >
+        <GlassCard>
+          <View style={{ gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={s.detailName}>{profile.displayName ?? 'User'}</Text>
+              {isVerified && <Ionicons name="checkmark-circle" size={20} color="#A78BFA" />}
+            </View>
+            {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
+          </View>
 
-        {/* ── Full-screen photo with gradient + info overlay ── */}
-        <View style={{ height: PHOTO_H }}>
-          <PhotoCarousel avatarUrl={profile.avatarUrl} photos={profile.photos} initials={initials} />
+          {profile.bio ? (
+            <Text style={s.detailBio}>"{profile.bio}"</Text>
+          ) : null}
 
-          {/* Dark gradient from bottom */}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.93)']}
-            locations={[0.35, 0.65, 1]}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
+          <StatsRow items={stats} />
+
+          {hashTags.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.tagsRow}
+            >
+              {hashTags.map((tag) => (
+                <View key={tag} style={s.tagChip}>
+                  <Text style={s.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          <PhotoGallery photos={galleryPhotos} />
+        </GlassCard>
+
+        {quoteText ? (
+          <QuoteCard
+            text={quoteText}
+            name={profile.displayName ?? 'User'}
+            handle={profile.username}
+            avatarUrl={profile.avatarUrl}
+            initials={initials}
           />
+        ) : null}
 
-          {/* Info overlaid at bottom of photo */}
-          <View style={s.overlay}>
-            {/* Name + verified */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Text style={s.name}>{profile.displayName ?? 'User'}</Text>
-              {isVerified && (
-                <View style={s.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color="#FFF" />
-                  <Text style={s.verifiedText}>Verified</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Handle + age/gender */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-              {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
-              {(age || genderLabel) ? (
-                <Text style={s.handleMeta}>
-                  {[genderLabel, age ? `${age} yrs` : null].filter(Boolean).join(' · ')}
-                </Text>
-              ) : null}
-              {profile.city ? <Text style={s.handleMeta}>📍 {profile.city}</Text> : null}
-            </View>
-
-            {/* Bio */}
-            {profile.bio ? (
-              <Text style={s.bio} numberOfLines={2}>"{profile.bio}"</Text>
-            ) : null}
-
-            {/* Stats row */}
-            <View style={s.statsRow}>
-              {mutualCount !== null && mutualCount > 0 && (
-                <>
-                  <View style={s.statItem}>
-                    <Text style={s.statNum}>{mutualCount}</Text>
-                    <Text style={s.statLabel}>Mutuals</Text>
-                  </View>
-                  <View style={s.statDivider} />
-                </>
-              )}
-              {(profile.completedPingsCount ?? 0) > 0 && (
-                <>
-                  <View style={s.statItem}>
-                    <Text style={s.statNum}>{profile.completedPingsCount}</Text>
-                    <Text style={s.statLabel}>Pings</Text>
-                  </View>
-                  <View style={s.statDivider} />
-                </>
-              )}
-              {profile.averageRating !== null && profile.averageRating !== undefined && (profile.ratingCount ?? 0) > 0 ? (
-                <View style={s.statItem}>
-                  <StarDisplay value={profile.averageRating} count={profile.ratingCount!} />
-                  <Text style={s.statLabel}>Rating</Text>
-                </View>
-              ) : profile.trustRate !== undefined ? (
-                <View style={s.statItem}>
-                  <Text style={[s.statNum, { color: profile.trustRate > 70 ? '#22C55E' : profile.trustRate > 40 ? '#F59E0B' : '#9CA3AF' }]}>
-                    {profile.trustRate}%
-                  </Text>
-                  <Text style={s.statLabel}>Trust</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-        </View>
-
-        {/* ── Hashtag chips ── */}
-        {allTags.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.tagsRow}
-          >
-            {allTags.map((tag) => (
-              <View key={tag} style={s.tagChip}>
-                <Text style={s.tagText}>{tag}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* ── Additional meta row ── */}
-        {(profile.occupation || profile.institute || profile.instagramHandle) && (
-          <View style={s.metaRow}>
-            {profile.occupation && (
-              <View style={s.metaItem}>
-                <Text style={s.metaEmoji}>
-                  {profile.occupation === 'job' ? '👨‍💻' : profile.occupation === 'student' ? '🎓' : profile.occupation === 'founder' ? '🚀' : profile.occupation === 'business' ? '💼' : profile.occupation === 'freelancer' ? '🖥️' : '🌍'}
-                </Text>
-                <Text style={s.metaText}>
-                  {profile.occupation === 'job' ? 'Working' : profile.occupation === 'student' ? 'Student' : profile.occupation === 'founder' ? 'Founder' : profile.occupation === 'business' ? 'Business' : profile.occupation === 'freelancer' ? 'Freelancer' : 'Exploring'}
-                </Text>
-              </View>
-            )}
-            {profile.institute && (
-              <View style={s.metaItem}>
-                <Ionicons name="school-outline" size={13} color="#A78BFA" />
-                <Text style={s.metaText} numberOfLines={1}>{profile.institute}</Text>
-              </View>
-            )}
-            {profile.instagramHandle && (
-              <View style={s.metaItem}>
-                <MaterialCommunityIcons name="instagram" size={13} color="#E1306C" />
-                <Text style={[s.metaText, { color: '#E1306C' }]}>@{profile.instagramHandle}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ── Highlights ── */}
         <HighlightsSection userId={userId} isOwnProfile={isSelf} scheme={scheme} />
 
-        {/* ── Ping pitch / fun truth ── */}
-        {(profile.pingPitch || profile.funTruth) && (
-          <View style={s.quotesSection}>
-            {profile.pingPitch && (
-              <View style={s.pitchCard}>
-                <Text style={s.pitchQuote}>"</Text>
-                <Text style={s.pitchText}>{profile.pingPitch}</Text>
-              </View>
-            )}
-            {profile.funTruth && (
-              <View style={s.truthCard}>
-                <Text style={s.truthLabel}>Fun truth 😂</Text>
-                <Text style={s.truthText}>{profile.funTruth}</Text>
-              </View>
-            )}
-          </View>
+        {isAccepted && (
+          <TouchableOpacity style={s.removeFriendBtn} onPress={removeFriend} disabled={actionLoading} activeOpacity={0.85}>
+            <Text style={s.removeFriendText}>Remove friend</Text>
+          </TouchableOpacity>
         )}
-
-        {/* ── Recent Pings ── */}
-        {recentPings.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Recent Pings</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: Spacing.lg }}>
-              {recentPings.slice(0, 6).map((ping) => {
-                const cfg = TYPE_CFG[ping.type] ?? TYPE_CFG.default;
-                const isLive = ping.status === 'live' && new Date(ping.expiresAt) > new Date();
-                return (
-                  <View key={ping._id} style={[s.pingCard, { borderColor: `${cfg.color}30` }]}>
-                    <View style={[s.pingCardIcon, { backgroundColor: `${cfg.color}18` }]}>
-                      <MaterialCommunityIcons name={cfg.icon} size={18} color={cfg.color} />
-                    </View>
-                    <Text style={s.pingCardTitle} numberOfLines={2}>{ping.title}</Text>
-                    <Text style={s.pingCardMeta}>{ping.participants?.length ?? 0} joined</Text>
-                    {isLive && (
-                      <View style={s.liveDot}>
-                        <View style={[s.liveDotInner, { backgroundColor: cfg.color }]} />
-                        <Text style={[s.liveText, { color: cfg.color }]}>LIVE</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
       </ScrollView>
 
-      {/* ── Fixed action buttons at bottom ── */}
       {!isSelf && (
-        <View style={[s.bottomActions, { paddingBottom: insets.bottom + 12 }]}>
-          {/* Primary CTA */}
-          {profile.friendshipStatus === 'none' && (
-            <TouchableOpacity style={s.btnPrimary} onPress={sendRequest} disabled={actionLoading} activeOpacity={0.88}>
-              {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : (
-                <>
-                  <Ionicons name="person-add" size={17} color="#FFF" />
-                  <Text style={s.btnPrimaryText}>Add Friend</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-          {isPendingReceived && (
-            <TouchableOpacity style={s.btnPrimary} onPress={acceptRequest} disabled={actionLoading} activeOpacity={0.88}>
-              {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : (
-                <>
-                  <Ionicons name="checkmark-circle" size={17} color="#FFF" />
-                  <Text style={s.btnPrimaryText}>Accept Request</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-          {isPendingSent && (
-            <View style={[s.btnOutline, { opacity: 0.65 }]}>
-              <Ionicons name="time-outline" size={17} color="rgba(255,255,255,0.6)" />
-              <Text style={s.btnOutlineText}>Request Sent</Text>
-            </View>
-          )}
-          {isAccepted && (
+        <View style={[s.detailActions, { paddingBottom: insets.bottom + 14 }]}>
+          {isAccepted ? (
             <View style={s.btnRow}>
-              <TouchableOpacity style={[s.btnHalf, { backgroundColor: 'rgba(255,255,255,0.1)' }]} onPress={openDm} disabled={dmLoading} activeOpacity={0.85}>
-                {dmLoading ? <ActivityIndicator size="small" color="#FFF" /> : (
-                  <>
-                    <Ionicons name="chatbubble-outline" size={17} color="#FFF" />
-                    <Text style={s.btnHalfText}>Message</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={s.btnPrimary} onPress={() => setShowInvite(true)} activeOpacity={0.85}>
-                <Ionicons name="flash-outline" size={17} color="#FFF" />
-                <Text style={s.btnPrimaryText}>Invite to Ping</Text>
+              {renderPrimaryCta(false)}
+              <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={() => setShowInvite(true)} activeOpacity={0.85}>
+                <Ionicons name="flash-outline" size={16} color="#FFF" />
+                <Text style={s.btnSecondaryText}>Invite</Text>
               </TouchableOpacity>
             </View>
-          )}
-          {/* Secondary row for non-friends */}
-          {(profile.friendshipStatus === 'none' || isPendingSent) && (
-            <View style={s.btnRow}>
-              <TouchableOpacity style={[s.btnHalf, { backgroundColor: 'rgba(255,255,255,0.08)' }]} onPress={openDm} disabled={dmLoading} activeOpacity={0.85}>
-                {dmLoading ? <ActivityIndicator size="small" color="#FFF" /> : (
-                  <>
-                    <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.7)" />
-                    <Text style={[s.btnHalfText, { color: 'rgba(255,255,255,0.7)' }]}>Message</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.btnHalf, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: profile.isSaved ? 'rgba(251,146,60,0.5)' : 'rgba(255,255,255,0.15)' }]}
-                onPress={toggleSave} disabled={saveLoading} activeOpacity={0.85}
-              >
-                {saveLoading ? <ActivityIndicator size="small" color="#FFF" /> : (
-                  <>
-                    <Ionicons name={profile.isSaved ? 'bookmark' : 'bookmark-outline'} size={16} color={profile.isSaved ? '#FB923C' : 'rgba(255,255,255,0.7)'} />
-                    <Text style={[s.btnHalfText, { color: profile.isSaved ? '#FB923C' : 'rgba(255,255,255,0.7)' }]}>{profile.isSaved ? 'Saved' : 'Save'}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-          {/* Remove friend (accepted) */}
-          {isAccepted && (
-            <TouchableOpacity style={[s.btnOutline, { marginTop: -4 }]} onPress={removeFriend} disabled={actionLoading} activeOpacity={0.85}>
-              <Ionicons name="person-remove-outline" size={16} color="rgba(255,255,255,0.5)" />
-              <Text style={[s.btnOutlineText, { color: 'rgba(255,255,255,0.5)' }]}>Remove Friend</Text>
-            </TouchableOpacity>
+          ) : (
+            renderPrimaryCta(true)
           )}
         </View>
       )}
 
-      <InviteToPingSheet
-        visible={showInvite}
-        targetUserId={profile._id}
-        targetName={profile.displayName ?? 'them'}
-        onClose={() => setShowInvite(false)}
-      />
-
-      <ShareSheet
-        visible={showShare}
-        onClose={() => setShowShare(false)}
-        content={{
-          type: 'profile',
-          title: profile.displayName ?? 'Ping user',
-          subtitle: profile.username ? `@${profile.username}` : undefined,
-          emoji: '👤',
-          body: profile.bio ? profile.bio : `Check out ${profile.displayName ?? 'someone'} on Ping!`,
-        }}
-      />
-
-      <ConfirmSheet
-        visible={showRemoveFriendConfirm}
-        onClose={() => setShowRemoveFriendConfirm(false)}
-        title="Remove friend?"
-        subtitle={`Remove ${profile.displayName ?? 'this user'} from your friends?`}
-        confirmLabel="Remove"
-        cancelLabel="Cancel"
-        danger
-        onConfirm={() => { setShowRemoveFriendConfirm(false); doRemoveFriend(); }}
-        icon="person-remove-outline"
-      />
-
-      <ConfirmSheet
-        visible={showBlockConfirm}
-        onClose={() => setShowBlockConfirm(false)}
-        title={`Block ${profile.displayName ?? 'this user'}?`}
-        subtitle="They won't see your pings or contact you."
-        confirmLabel="Block"
-        cancelLabel="Cancel"
-        danger
-        onConfirm={() => { setShowBlockConfirm(false); doBlockUser(); }}
-        icon="ban-outline"
-      />
+      {renderSheets()}
     </View>
   );
+  function renderSheets() {
+    return (
+      <>
+        <InviteToPingSheet
+          visible={showInvite}
+          targetUserId={profile!._id}
+          targetName={profile!.displayName ?? 'them'}
+          onClose={() => setShowInvite(false)}
+        />
+
+        <ShareSheet
+          visible={showShare}
+          onClose={() => setShowShare(false)}
+          content={{
+            type: 'profile',
+            title: profile!.displayName ?? 'Ping user',
+            subtitle: profile!.username ? `@${profile!.username}` : undefined,
+            emoji: '👤',
+            body: profile!.bio ? profile!.bio : `Check out ${profile!.displayName ?? 'someone'} on Ping!`,
+          }}
+        />
+
+        <ConfirmSheet
+          visible={showRemoveFriendConfirm}
+          onClose={() => setShowRemoveFriendConfirm(false)}
+          title="Remove friend?"
+          subtitle={`Remove ${profile!.displayName ?? 'this user'} from your friends?`}
+          confirmLabel="Remove"
+          cancelLabel="Cancel"
+          danger
+          onConfirm={() => { setShowRemoveFriendConfirm(false); doRemoveFriend(); }}
+          icon="person-remove-outline"
+        />
+
+        <ConfirmSheet
+          visible={showBlockConfirm}
+          onClose={() => setShowBlockConfirm(false)}
+          title={`Block ${profile!.displayName ?? 'this user'}?`}
+          subtitle="They won't see your pings or contact you."
+          confirmLabel="Block"
+          cancelLabel="Cancel"
+          danger
+          onConfirm={() => { setShowBlockConfirm(false); doBlockUser(); }}
+          icon="ban-outline"
+        />
+      </>
+    );
+  }
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
 
-  // Floating header
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingBottom: 10,
+  },
+  detailHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.md, paddingBottom: 10,
   },
   headerBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   headerHandle: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
-  // Photo overlay info
-  overlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 22,
-    gap: 6,
+  previewSheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  name: { fontSize: 36, fontWeight: '800', color: '#FFF', letterSpacing: -0.5, lineHeight: 42 },
-  verifiedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#3B82F6', borderRadius: Radius.full,
-    paddingHorizontal: 8, paddingVertical: 3,
+  previewSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
   },
-  verifiedText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
-  handle: { color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '500' },
-  handleMeta: { color: 'rgba(255,255,255,0.45)', fontSize: 12 },
-  bio: { color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 19, fontStyle: 'italic', marginTop: 2 },
+  previewSheetTint: {
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  previewSheetInner: {
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    gap: 14,
+  },
+  previewCtaWrap: {
+    marginTop: 4,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  name: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -0.6,
+    lineHeight: 38,
+  },
+  detailName: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -0.5,
+    lineHeight: 36,
+  },
+  seeProfile: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  handle: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  bio: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    lineHeight: 21,
+    fontStyle: 'italic',
+  },
+  detailBio: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    lineHeight: 21,
+    fontStyle: 'italic',
+  },
 
-  // Stats row on photo
-  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 6 },
-  statItem: { alignItems: 'flex-start', gap: 1 },
-  statNum: { color: '#FFF', fontWeight: '800', fontSize: 18 },
-  statLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 },
-  statDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.15)' },
-
-  // Hashtag chips
-  tagsRow: { paddingHorizontal: Spacing.lg, paddingVertical: 14, gap: 7, flexDirection: 'row' },
+  tagsRow: { flexDirection: 'row', gap: 8 },
   tagChip: {
-    paddingHorizontal: 12, paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: Radius.full,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  tagText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  tagText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
 
-  // Meta row
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: Spacing.lg, paddingBottom: 8 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaEmoji: { fontSize: 13 },
-  metaText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '500' },
-
-  // Quotes
-  quotesSection: { paddingHorizontal: Spacing.lg, gap: 10, paddingVertical: 4 },
-  pitchCard: {
-    backgroundColor: 'rgba(139,92,246,0.1)', borderLeftWidth: 3,
-    borderLeftColor: Ping.purple, borderRadius: 8, padding: 14, gap: 4,
-  },
-  pitchQuote: { fontSize: 22, color: Ping.purpleLight, lineHeight: 20, fontWeight: '800' },
-  pitchText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontStyle: 'italic', lineHeight: 20 },
-  truthCard: {
-    backgroundColor: 'rgba(251,191,36,0.06)', borderRadius: 8,
-    borderWidth: 1, borderColor: 'rgba(251,191,36,0.2)', padding: 14, gap: 4,
-  },
-  truthLabel: { color: '#FBBF24', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  truthText: { color: 'rgba(229,216,138,0.85)', fontSize: 13, lineHeight: 20 },
-
-  // Section
-  section: { marginTop: Spacing.md },
-  sectionTitle: {
-    color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '700',
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    paddingHorizontal: Spacing.lg, marginBottom: 10,
-  },
-
-  // Ping cards
-  pingCard: {
-    width: 130, backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14, borderWidth: 1, padding: 12, gap: 8,
-  },
-  pingCardIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  pingCardTitle: { color: '#FFF', fontWeight: '600', fontSize: 12, lineHeight: 16 },
-  pingCardMeta: { color: 'rgba(255,255,255,0.4)', fontSize: 11 },
-  liveDot: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  liveDotInner: { width: 5, height: 5, borderRadius: 3 },
-  liveText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-
-  // Bottom actions
-  bottomActions: {
+  detailActions: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: 22,
     paddingTop: 12,
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
   btnRow: { flexDirection: 'row', gap: 8 },
   btnPrimary: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    height: 50, borderRadius: Radius.full,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnPrimaryText: { fontSize: 15, fontWeight: '700', color: '#000' },
-  btnOutline: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    height: 44, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+  btnPrimaryText: { fontSize: 16, fontWeight: '700', color: '#000', letterSpacing: -0.2 },
+  btnGhost: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnOutlineText: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
-  btnHalf: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    height: 50, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+  btnGhostText: { fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.65)' },
+  btnSecondary: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: 'rgba(124,58,237,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  btnHalfText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  btnSecondaryText: { fontSize: 13, fontWeight: '600', color: '#EDE9FE' },
+
+  removeFriendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+  },
+  removeFriendText: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '600' },
 });

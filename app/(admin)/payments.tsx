@@ -13,7 +13,7 @@ import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 
 const STATUS_COLOR: Record<string, string> = {
   paid: '#22C55E', created: '#3B82F6', failed: '#EF4444',
-  refunded: '#9490C0', attempted: '#F97316',
+  refunded: '#6B7280', attempted: '#F97316',
 };
 
 function fmt(minor: number) {
@@ -26,7 +26,7 @@ function fmtDate(iso: string) {
 }
 
 function PaymentRow({ item, onRefund }: { item: AdminPayment; onRefund: (p: AdminPayment) => void }) {
-  const color = STATUS_COLOR[item.status] ?? '#9490C0';
+  const color = STATUS_COLOR[item.status] ?? '#6B7280';
   return (
     <View style={s.row}>
       <View style={s.rowTop}>
@@ -142,7 +142,7 @@ export default function AdminPayments() {
           keyExtractor={p => p._id}
           renderItem={({ item }) => <PaymentRow item={item} onRefund={setRefundTarget} />}
           ItemSeparatorComponent={() => <View style={s.sep} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(filter, true)} tintColor={Ping.purpleLight} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(filter, true)} tintColor={Ping.purple} />}
           ListEmptyComponent={<Text style={s.empty}>No payments found</Text>}
           contentContainerStyle={{ paddingBottom: 100 }}
         />
@@ -164,47 +164,49 @@ export default function AdminPayments() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080815' },
+  root: { flex: 1, backgroundColor: '#F7F7F8' },
   headerBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(167,139,250,0.12)',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8E8ED',
   },
-  title: { ...Typography.h3, color: '#F1F0FF' },
-  count: { ...Typography.caption, color: '#9490C0' },
+  title: { ...Typography.h3, color: '#111827', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  count: { ...Typography.caption, color: '#6B7280', fontWeight: '600' },
   summaryBar: {
-    flexDirection: 'row', marginHorizontal: Spacing.lg, marginTop: Spacing.md,
-    backgroundColor: '#11112A', borderRadius: Radius.lg, borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.15)', overflow: 'hidden',
+    flexDirection: 'row', marginHorizontal: Spacing.lg, marginTop: Spacing.sm,
+    backgroundColor: '#FFFFFF', borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8E8ED', overflow: 'hidden',
   },
   summaryItem: { flex: 1, alignItems: 'center', paddingVertical: Spacing.md, gap: 2 },
-  summaryDivider: { width: 1, backgroundColor: 'rgba(167,139,250,0.15)' },
-  summaryValue: { ...Typography.h3, color: '#22C55E', fontSize: 20 },
-  summaryLabel: { ...Typography.caption, color: '#9490C0' },
+  summaryDivider: { width: StyleSheet.hairlineWidth, backgroundColor: '#E8E8ED' },
+  summaryValue: { ...Typography.h3, color: '#111827', fontSize: 20, fontWeight: '700' },
+  summaryLabel: { ...Typography.caption, color: '#6B7280' },
   filterRow: {
     flexDirection: 'row', paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm, gap: Spacing.sm,
+    paddingVertical: Spacing.sm, gap: 8, backgroundColor: '#FFFFFF',
   },
   chip: {
-    paddingHorizontal: Spacing.md, paddingVertical: 5, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: 'rgba(167,139,250,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full,
+    backgroundColor: '#F3F4F6',
   },
-  chipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-  chipText: { ...Typography.caption, color: '#9490C0', fontWeight: '600' },
+  chipActive: { backgroundColor: '#111827' },
+  chipText: { ...Typography.caption, color: '#6B7280', fontWeight: '600' },
   chipTextActive: { color: '#FFF' },
   row: {
-    paddingHorizontal: Spacing.lg, paddingVertical: 12, gap: 4,
+    paddingHorizontal: Spacing.lg, paddingVertical: 14, gap: 4,
+    backgroundColor: '#FFFFFF',
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  amount: { ...Typography.h3, color: '#F1F0FF', fontSize: 18 },
+  amount: { ...Typography.h3, color: '#111827', fontSize: 18, fontWeight: '700' },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm },
-  badgeText: { ...Typography.caption, fontWeight: '700' },
-  meta: { ...Typography.bodySm, color: '#9490C0' },
+  badgeText: { ...Typography.caption, fontWeight: '600' },
+  meta: { ...Typography.bodySm, color: '#6B7280' },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  date: { ...Typography.caption, color: '#5C5A80' },
+  date: { ...Typography.caption, color: '#9CA3AF' },
   refundBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  refundText: { ...Typography.caption, color: '#EF4444', fontWeight: '600' },
-  sep: { height: 1, backgroundColor: 'rgba(167,139,250,0.07)' },
-  empty: { ...Typography.bodySm, color: '#9490C0', textAlign: 'center', marginTop: 60 },
+  refundText: { ...Typography.caption, color: '#DC2626', fontWeight: '600' },
+  sep: { height: StyleSheet.hairlineWidth, backgroundColor: '#F0F0F3' },
+  empty: { ...Typography.bodySm, color: '#9CA3AF', textAlign: 'center', marginTop: 48 },
 });
