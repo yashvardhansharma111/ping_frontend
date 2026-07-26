@@ -14,7 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { activitiesApi, type PendingRating, type PendingRatingUser } from '@/lib/api';
-import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -29,13 +30,9 @@ const TYPE_ICON: Record<string, { icon: MCIName; color: string }> = {
   default: { icon: 'flash',             color: Ping.purpleLight },
 };
 
-function Stars({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function Stars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const scheme = useColorScheme() ?? 'dark';
+  const emptyColor = scheme === 'dark' ? '#4B4B6E' : '#C4C0D8';
   return (
     <View style={s.stars}>
       {[1, 2, 3, 4, 5].map((n) => (
@@ -43,7 +40,7 @@ function Stars({
           <Ionicons
             name={n <= value ? 'star' : 'star-outline'}
             size={28}
-            color={n <= value ? '#FBBF24' : '#4B4B6E'}
+            color={n <= value ? '#FBBF24' : emptyColor}
           />
         </TouchableOpacity>
       ))}
@@ -51,24 +48,14 @@ function Stars({
   );
 }
 
-function UserRow({
-  user,
-  score,
-  onScore,
-}: {
-  user: PendingRatingUser;
-  score: number;
-  onScore: (v: number) => void;
+function UserRow({ user, score, onScore, c }: {
+  user: PendingRatingUser; score: number;
+  onScore: (v: number) => void; c: (typeof Colors)['dark'];
 }) {
   const initials = (user.displayName ?? '?')
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
+    .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   return (
-    <View style={s.userRow}>
+    <View style={[s.userRow, { backgroundColor: c.card, borderColor: c.border }]}>
       <View style={s.userLeft}>
         {user.avatarUrl ? (
           <Image source={{ uri: user.avatarUrl }} style={s.avatar} />
@@ -78,9 +65,9 @@ function UserRow({
           </View>
         )}
         <View>
-          <Text style={s.userName}>{user.displayName ?? 'User'}</Text>
+          <Text style={[s.userName, { color: c.text }]}>{user.displayName ?? 'User'}</Text>
           {user.username ? (
-            <Text style={s.userHandle}>@{user.username}</Text>
+            <Text style={[s.userHandle, { color: c.textSecondary }]}>@{user.username}</Text>
           ) : null}
         </View>
       </View>
@@ -95,6 +82,8 @@ interface Props {
 }
 
 export default function RatePingModal({ pending, onDone }: Props) {
+  const scheme = useColorScheme() ?? 'dark';
+  const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const [scores, setScores] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -122,25 +111,29 @@ export default function RatePingModal({ pending, onDone }: Props) {
     <Modal visible transparent animationType="slide" onRequestClose={onDone}>
       <View style={s.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onDone} />
-        <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={[s.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + 20 }]}>
+
+          <View style={[s.handle, { backgroundColor: c.border }]} />
 
           {/* Header */}
-          <View style={s.handle} />
-          <View style={s.header}>
+          <View style={[s.header, { borderBottomColor: c.border }]}>
             <View style={[s.actIcon, { backgroundColor: `${cfg.color}20` }]}>
               <MaterialCommunityIcons name={cfg.icon} size={22} color={cfg.color} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.title}>Rate your ping</Text>
-              <Text style={s.actTitle} numberOfLines={1}>{pending.activity.title}</Text>
+              <Text style={[s.title, { color: c.text }]}>Rate your ping</Text>
+              <Text style={[s.actTitle, { color: c.textSecondary }]} numberOfLines={1}>
+                {pending.activity.title}
+              </Text>
             </View>
             <TouchableOpacity onPress={onDone} hitSlop={12}>
-              <Ionicons name="close" size={22} color="#9CA3AF" />
+              <Ionicons name="close" size={22} color={c.icon} />
             </TouchableOpacity>
           </View>
 
-          <Text style={s.subtitle}>
-            How was your experience with {pending.unrated.length === 1 ? 'this person' : 'these people'}?
+          <Text style={[s.subtitle, { color: c.textSecondary }]}>
+            How was your experience with{' '}
+            {pending.unrated.length === 1 ? 'this person' : 'these people'}?
           </Text>
 
           {/* Participant list */}
@@ -155,6 +148,7 @@ export default function RatePingModal({ pending, onDone }: Props) {
                 user={user}
                 score={scores[user._id] ?? 0}
                 onScore={(v) => setScores((prev) => ({ ...prev, [user._id]: v }))}
+                c={c}
               />
             ))}
           </ScrollView>
@@ -177,7 +171,7 @@ export default function RatePingModal({ pending, onDone }: Props) {
               )}
             </TouchableOpacity>
             <TouchableOpacity style={s.skipBtn} onPress={onDone} activeOpacity={0.7}>
-              <Text style={s.skipText}>Skip for now</Text>
+              <Text style={[s.skipText, { color: c.icon }]}>Skip for now</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -190,17 +184,20 @@ const s = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
-    backgroundColor: '#11112A',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 20,
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
     alignSelf: 'center', marginBottom: 12,
   },
   header: {
@@ -210,16 +207,14 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(167,139,250,0.12)',
   },
   actIcon: {
     width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
   },
-  title: { color: '#F1F0FF', fontSize: 16, fontWeight: '700' },
-  actTitle: { color: '#9490C0', fontSize: 13, marginTop: 1 },
+  title:    { fontSize: 16, fontWeight: '700' },
+  actTitle: { fontSize: 13, marginTop: 1 },
   subtitle: {
-    color: '#9490C0',
     fontSize: 13,
     paddingHorizontal: Spacing.lg,
     paddingTop: 12,
@@ -229,18 +224,18 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1A1A38',
     borderRadius: 14,
+    borderWidth: 1,
     padding: 14,
   },
-  userLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarFallback: { backgroundColor: `${Ping.purple}55`, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-  userName: { color: '#F1F0FF', fontWeight: '600', fontSize: 14 },
-  userHandle: { color: '#9490C0', fontSize: 12, marginTop: 1 },
-  stars: { flexDirection: 'row', gap: 4 },
-  actions: { gap: 10, paddingTop: 12 },
+  userLeft:      { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  avatar:        { width: 44, height: 44, borderRadius: 22 },
+  avatarFallback:{ backgroundColor: `${Ping.purple}55`, alignItems: 'center', justifyContent: 'center' },
+  avatarText:    { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  userName:      { fontWeight: '600', fontSize: 14 },
+  userHandle:    { fontSize: 12, marginTop: 1 },
+  stars:         { flexDirection: 'row', gap: 4 },
+  actions:       { gap: 10, paddingTop: 12 },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -249,14 +244,13 @@ const s = StyleSheet.create({
     height: 52,
     borderRadius: Radius.md,
     backgroundColor: Ping.purple,
-    shadowColor: Ping.purple, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5, shadowRadius: 10, elevation: 6,
+    shadowColor: Ping.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 6,
   },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-  skipBtn: {
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  skipText: { color: '#6B7280', fontSize: 14 },
+  skipBtn:    { height: 40, alignItems: 'center', justifyContent: 'center' },
+  skipText:   { fontSize: 14 },
 });

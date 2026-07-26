@@ -191,21 +191,27 @@ export default function ProfileScreen() {
             )}
 
             <View style={[styles.statsRow, { borderColor: c.border }]}>
-              {[
-                { label: 'Friends', value: friendCount !== null ? String(friendCount) : '—' },
-                { label: 'Pings', value: activityCount !== null ? String(activityCount) : '—' },
-              ].map((stat, i) => (
-                <View
-                  key={stat.label}
-                  style={[
-                    styles.statItem,
-                    i === 0 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: c.border },
-                  ]}
-                >
-                  <Text style={[styles.statValue, { color: c.text }]}>{stat.value}</Text>
-                  <Text style={[styles.statLabel, { color: c.textSecondary }]}>{stat.label}</Text>
-                </View>
-              ))}
+              <TouchableOpacity
+                style={[styles.statItem, { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: c.border }]}
+                onPress={() => router.push('/(tabs)/friends' as any)}
+                activeOpacity={0.65}
+              >
+                <Text style={[styles.statValue, { color: c.text }]}>
+                  {friendCount !== null ? String(friendCount) : '—'}
+                </Text>
+                <Text style={[styles.statLabel, { color: c.textSecondary }]}>Friends</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={() => router.push('/my-activity' as any)}
+                activeOpacity={0.65}
+              >
+                <Text style={[styles.statValue, { color: c.text }]}>
+                  {activityCount !== null ? String(activityCount) : '—'}
+                </Text>
+                <Text style={[styles.statLabel, { color: c.textSecondary }]}>Pings</Text>
+              </TouchableOpacity>
             </View>
 
             {hobbies.length > 0 && (

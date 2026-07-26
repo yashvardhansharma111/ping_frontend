@@ -102,8 +102,8 @@ export default function HighlightViewerModal({ highlight, visible, onClose }: Pr
         {/* Dark overlay */}
         <View style={sv.overlay} />
 
-        {/* Top: progress bars + close */}
-        <View style={[sv.topBar, { paddingTop: insets.top + 8 }]}>
+        {/* Top: progress bars + Instagram-style header */}
+        <View style={[sv.topBar, { paddingTop: insets.top + 10 }]}>
           <View style={sv.progressRow}>
             {Array.from({ length: total }).map((_, i) => (
               <View key={i} style={sv.progressTrack}>
@@ -120,9 +120,26 @@ export default function HighlightViewerModal({ highlight, visible, onClose }: Pr
               </View>
             ))}
           </View>
-          <TouchableOpacity onPress={onClose} style={sv.closeBtn} hitSlop={12}>
-            <Ionicons name="close" size={24} color="#FFF" />
-          </TouchableOpacity>
+
+          {/* Story identity row */}
+          <View style={sv.storyHeader}>
+            <View style={sv.storyLeft}>
+              <View style={sv.emojiCircle}>
+                {/^[a-z0-9-]+$/.test(highlight.emoji ?? '')
+                  ? <Ionicons name={highlight.emoji as any} size={20} color="#FFF" />
+                  : <Text style={{ fontSize: 20 }}>{highlight.emoji}</Text>}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={sv.storyTitle} numberOfLines={1}>{highlight.title}</Text>
+                <Text style={sv.storyMeta} numberOfLines={1}>
+                  {[dateStr, highlight.location, highlight.vibe].filter(Boolean).join('  ·  ')}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={sv.closeBtn} hitSlop={12}>
+              <Ionicons name="close" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Tap zones */}
@@ -131,36 +148,12 @@ export default function HighlightViewerModal({ highlight, visible, onClose }: Pr
           <TouchableOpacity style={sv.tapRight} activeOpacity={1} onPress={goNext} />
         </View>
 
-        {/* Bottom info */}
-        <View style={[sv.bottomInfo, { paddingBottom: insets.bottom + 24 }]}>
-          {/^[a-z0-9-]+$/.test(highlight.emoji ?? '')
-            ? <Ionicons name={highlight.emoji as any} size={28} color="#FFF" />
-            : <Text style={sv.emoji}>{highlight.emoji}</Text>}
-          <Text style={sv.title}>{highlight.title}</Text>
-          <View style={sv.metaRow}>
-            {highlight.location ? (
-              <View style={sv.metaChip}>
-                <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.7)" />
-                <Text style={sv.metaText}>{highlight.location}</Text>
-              </View>
-            ) : null}
-            {highlight.vibe ? (
-              <View style={sv.metaChip}>
-                <Ionicons name="sparkles-outline" size={12} color="rgba(255,255,255,0.7)" />
-                <Text style={sv.metaText}>{highlight.vibe}</Text>
-              </View>
-            ) : null}
-            {dateStr ? (
-              <View style={sv.metaChip}>
-                <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.7)" />
-                <Text style={sv.metaText}>{dateStr}</Text>
-              </View>
-            ) : null}
-          </View>
-          {images.length > 1 && (
+        {/* Bottom: only image count */}
+        {images.length > 1 && (
+          <View style={[sv.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
             <Text style={sv.imageCount}>{currentIndex + 1} / {images.length}</Text>
-          )}
-        </View>
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -169,60 +162,78 @@ export default function HighlightViewerModal({ highlight, visible, onClose }: Pr
 const sv = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   image: { position: 'absolute', width: W, height: H },
-  overlay: { position: 'absolute', width: W, height: H, backgroundColor: 'rgba(0,0,0,0.35)' },
+  overlay: { position: 'absolute', width: W, height: H, backgroundColor: 'rgba(0,0,0,0.28)' },
   topBar: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     paddingHorizontal: 12,
     gap: 10,
     zIndex: 10,
   },
   progressRow: { flexDirection: 'row', gap: 4, height: 3 },
   progressTrack: {
-    flex: 1,
-    height: 3,
+    flex: 1, height: 3,
     backgroundColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 2,
-    overflow: 'hidden',
+    borderRadius: 2, overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: '#FFF', borderRadius: 2 },
-  closeBtn: {
-    alignSelf: 'flex-end',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tapZones: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+
+  // Instagram-style story header
+  storyHeader: {
     flexDirection: 'row',
-    zIndex: 5,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  storyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
+  emojiCircle: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  storyTitle: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  storyMeta: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  tapZones: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    flexDirection: 'row', zIndex: 5,
   },
   tapLeft: { flex: 1 },
   tapRight: { flex: 1 },
-  bottomInfo: {
+
+  bottomBar: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    paddingTop: 60,
+    bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 20,
     zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    gap: 6,
+    alignItems: 'flex-end',
   },
-  emoji: { fontSize: 32 },
-  title: { ...Typography.h3, color: '#FFF', fontSize: 22, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '500' },
-  imageCount: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 4 },
+  imageCount: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
 });

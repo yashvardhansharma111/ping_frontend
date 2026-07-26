@@ -6,12 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Platform,
   ActivityIndicator,
   RefreshControl,
   Animated,
-  Modal,
-  ScrollView,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,25 +19,12 @@ import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   MagnifyingGlass,
-  Faders,
   MapPin,
   CheckCircle,
   Star,
   Sparkle,
   Lightning,
   X,
-  Coffee,
-  Smiley,
-  Leaf,
-  Buildings,
-  Barbell,
-  SoccerBall,
-  ForkKnife,
-  MusicNotes,
-  BookOpen,
-  SunHorizon,
-  GameController,
-  UsersThree,
 } from 'phosphor-react-native';
 
 type Filter = 'nearby' | 'joined' | 'mine';
@@ -51,44 +35,6 @@ const FILTERS: { key: Filter; label: string; Icon: typeof MapPin }[] = [
   { key: 'mine',   label: 'Mine',   Icon: Star },
 ];
 
-interface ActiveFilters {
-  distance: number | null;
-  vibe: string | null;
-  category: string | null;
-}
-
-const DEFAULT_FILTERS: ActiveFilters = { distance: null, vibe: null, category: null };
-
-const DISTANCE_OPTIONS = [
-  { label: '500 m', meters: 500 },
-  { label: '1 km',  meters: 1000 },
-  { label: '2 km',  meters: 2000 },
-  { label: '5 km',  meters: 5000 },
-];
-
-const VIBE_OPTIONS: { key: string; label: string; Icon: typeof Coffee }[] = [
-  { key: 'cozy',        label: 'Cozy',        Icon: Coffee },
-  { key: 'fun',         label: 'Fun',         Icon: Smiley },
-  { key: 'exciting',    label: 'Exciting',    Icon: Lightning },
-  { key: 'chill',       label: 'Chill',       Icon: Leaf },
-  { key: 'networking',  label: 'Networking',  Icon: Buildings },
-  { key: 'fitness',     label: 'Fitness',     Icon: Barbell },
-];
-
-const CATEGORY_OPTIONS: { key: string; label: string; Icon: typeof SoccerBall }[] = [
-  { key: 'sport',   label: 'Sport',   Icon: SoccerBall },
-  { key: 'food',    label: 'Food',    Icon: ForkKnife },
-  { key: 'music',   label: 'Music',   Icon: MusicNotes },
-  { key: 'study',   label: 'Study',   Icon: BookOpen },
-  { key: 'outdoor', label: 'Outdoor', Icon: SunHorizon },
-  { key: 'gaming',  label: 'Gaming',  Icon: GameController },
-  { key: 'meetup',  label: 'Meetup',  Icon: UsersThree },
-];
-
-function countActive(f: ActiveFilters): number {
-  return (f.distance !== null ? 1 : 0) + (f.vibe !== null ? 1 : 0) + (f.category !== null ? 1 : 0);
-}
-
 export default function ActivitiesScreen() {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
@@ -98,9 +44,6 @@ export default function ActivitiesScreen() {
   const [filter, setFilter] = useState<Filter>('nearby');
   const [allActivities, setAllActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(DEFAULT_FILTERS);
-  const [pendingFilters, setPendingFilters] = useState<ActiveFilters>(DEFAULT_FILTERS);
-  const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef<TextInput>(null);
@@ -119,13 +62,13 @@ export default function ActivitiesScreen() {
     }).start();
   }, []);
 
-  async function load(f: Filter = filter, filters: ActiveFilters = activeFilters) {
+  async function load(f: Filter = filter) {
     Animated.timing(listOpacity, { toValue: 0.4, duration: 120, useNativeDriver: true }).start();
     setLoading(true);
     try {
       let res: { activities: Activity[] };
       if (f === 'nearby') {
-        res = await activitiesApi.nearby(coords.latitude, coords.longitude, filters.distance ?? undefined);
+        res = await activitiesApi.nearby(coords.latitude, coords.longitude);
       } else if (f === 'joined') {
         res = await activitiesApi.joined();
       } else {
@@ -155,32 +98,12 @@ export default function ActivitiesScreen() {
     load(f);
   }
 
-  function openFilterSheet() {
-    setPendingFilters(activeFilters);
-    setShowFilterSheet(true);
-  }
-
-  function applyFilters() {
-    setActiveFilters(pendingFilters);
-    setShowFilterSheet(false);
-    load(filter, pendingFilters);
-  }
-
-  function clearAllFilters() {
-    setActiveFilters(DEFAULT_FILTERS);
-    load(filter, DEFAULT_FILTERS);
-  }
-
-  // Distance is sent to the API; vibe, category, and search are filtered client-side
   const q = searchQuery.trim().toLowerCase();
-  const displayedActivities = allActivities.filter((a) => {
-    if (activeFilters.vibe && a.vibe !== activeFilters.vibe) return false;
-    if (activeFilters.category && a.type !== activeFilters.category) return false;
-    if (q && !a.title.toLowerCase().includes(q) && !(a.description ?? '').toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const activeCount = countActive(activeFilters);
+  const displayedActivities = q
+    ? allActivities.filter((a) =>
+        a.title.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q)
+      )
+    : allActivities;
 
   const EMPTY_LABEL: Record<Filter, string> = {
     nearby:  'No pings near you right now',
@@ -192,7 +115,7 @@ export default function ActivitiesScreen() {
   const headerTranslateY = headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] });
 
   return (
-    <View style={[styles.root, { backgroundColor: c.background }]}>
+    <View style={[styles.root, { backgroundColor: c.background, paddingTop: insets.top }]}>
       {/* Header */}
       <Animated.View
         style={[
@@ -224,19 +147,6 @@ export default function ActivitiesScreen() {
             {searchOpen
               ? <X size={18} color={c.icon} weight="bold" />
               : <MagnifyingGlass size={18} color={c.icon} weight="bold" />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.headerBtn,
-              {
-                backgroundColor: activeCount > 0 ? `${Ping.purple}18` : c.surface,
-                borderColor: activeCount > 0 ? Ping.purple : c.border,
-              },
-            ]}
-            onPress={openFilterSheet}
-            activeOpacity={0.8}
-          >
-            <Faders size={18} color={activeCount > 0 ? Ping.purple : c.icon} weight="bold" />
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -289,53 +199,6 @@ export default function ActivitiesScreen() {
         })}
       </View>
 
-      {/* Active filter pills */}
-      {activeCount > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.activePillsRow}
-        >
-          {activeFilters.distance !== null && (
-            <TouchableOpacity
-              style={styles.activePill}
-              onPress={() => {
-                const f = { ...activeFilters, distance: null };
-                setActiveFilters(f);
-                load(filter, f);
-              }}
-            >
-              <Text style={[styles.activePillText, { color: c.tint }]}>
-                {DISTANCE_OPTIONS.find(d => d.meters === activeFilters.distance)?.label ?? 'Distance'}
-              </Text>
-              <X size={12} color={c.tint} weight="bold" />
-            </TouchableOpacity>
-          )}
-          {activeFilters.vibe !== null && (
-            <TouchableOpacity
-              style={styles.activePill}
-              onPress={() => setActiveFilters((prev) => ({ ...prev, vibe: null }))}
-            >
-              <Text style={[styles.activePillText, { color: c.tint }]}>
-                {VIBE_OPTIONS.find(v => v.key === activeFilters.vibe)?.label ?? activeFilters.vibe}
-              </Text>
-              <X size={12} color={c.tint} weight="bold" />
-            </TouchableOpacity>
-          )}
-          {activeFilters.category !== null && (
-            <TouchableOpacity
-              style={styles.activePill}
-              onPress={() => setActiveFilters((prev) => ({ ...prev, category: null }))}
-            >
-              <Text style={[styles.activePillText, { color: c.tint }]}>
-                {CATEGORY_OPTIONS.find(cat => cat.key === activeFilters.category)?.label ?? activeFilters.category}
-              </Text>
-              <X size={12} color={c.tint} weight="bold" />
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      )}
-
       <Animated.View style={{ flex: 1, opacity: listOpacity }}>
         <FlatList
           data={displayedActivities}
@@ -361,13 +224,8 @@ export default function ActivitiesScreen() {
                 </View>
                 <Text style={[styles.emptyTitle, { color: c.text }]}>Nothing here</Text>
                 <Text style={[styles.emptyText, { color: c.textSecondary }]}>
-                  {activeCount > 0 ? 'No pings match your filters' : EMPTY_LABEL[filter]}
+                  {q ? 'No pings match your search' : EMPTY_LABEL[filter]}
                 </Text>
-                {activeCount > 0 && (
-                  <TouchableOpacity style={styles.clearFiltersBtn} onPress={clearAllFilters}>
-                    <Text style={[styles.clearFiltersText, { color: c.tint }]}>Clear filters</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )
           }
@@ -375,121 +233,6 @@ export default function ActivitiesScreen() {
         />
       </Animated.View>
 
-      {/* ── Filter Bottom Sheet ───────────────────────────────────────────── */}
-      <Modal
-        visible={showFilterSheet}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowFilterSheet(false)}
-      >
-        <View style={fs.overlay}>
-          <TouchableOpacity style={fs.backdrop} activeOpacity={1} onPress={() => setShowFilterSheet(false)} />
-          <View style={[fs.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + Spacing.md }]}>
-            <View style={[fs.handle, { backgroundColor: c.border }]} />
-
-            <View style={[fs.sheetHeader, { borderBottomColor: c.border }]}>
-              <Text style={[fs.sheetTitle, { color: c.text }]}>Filter Pings</Text>
-              <TouchableOpacity onPress={() => setPendingFilters(DEFAULT_FILTERS)}>
-                <Text style={fs.resetText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={fs.sheetBody}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Distance — only meaningful for nearby mode */}
-              {filter === 'nearby' && (
-                <>
-                  <Text style={[fs.sectionLabel, { color: c.textSecondary }]}>Distance</Text>
-                  <View style={fs.optionRow}>
-                    {DISTANCE_OPTIONS.map((d) => {
-                      const active = pendingFilters.distance === d.meters;
-                      return (
-                        <TouchableOpacity
-                          key={d.label}
-                          style={[
-                            fs.optionChip,
-                            { borderColor: c.border, backgroundColor: c.card },
-                            active && fs.optionChipActive,
-                          ]}
-                          onPress={() => setPendingFilters((p) => ({ ...p, distance: active ? null : d.meters }))}
-                          activeOpacity={0.75}
-                        >
-                          <Text style={[fs.optionChipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
-                            {d.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {/* Vibe */}
-              <Text style={[fs.sectionLabel, { color: c.textSecondary }]}>Vibe</Text>
-              <View style={fs.optionWrap}>
-                {VIBE_OPTIONS.map((v) => {
-                  const active = pendingFilters.vibe === v.key;
-                  return (
-                    <TouchableOpacity
-                      key={v.key}
-                      style={[
-                        fs.optionChip,
-                        { borderColor: c.border, backgroundColor: c.card },
-                        active && fs.optionChipActive,
-                      ]}
-                      onPress={() => setPendingFilters((p) => ({ ...p, vibe: active ? null : v.key }))}
-                      activeOpacity={0.75}
-                    >
-                      <v.Icon size={13} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
-                      <Text style={[fs.optionChipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
-                        {v.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Category */}
-              <Text style={[fs.sectionLabel, { color: c.textSecondary }]}>Category</Text>
-              <View style={fs.optionWrap}>
-                {CATEGORY_OPTIONS.map((cat) => {
-                  const active = pendingFilters.category === cat.key;
-                  return (
-                    <TouchableOpacity
-                      key={cat.key}
-                      style={[
-                        fs.optionChip,
-                        { borderColor: c.border, backgroundColor: c.card },
-                        active && fs.optionChipActive,
-                      ]}
-                      onPress={() => setPendingFilters((p) => ({ ...p, category: active ? null : cat.key }))}
-                      activeOpacity={0.75}
-                    >
-                      <cat.Icon size={13} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
-                      <Text style={[fs.optionChipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
-                        {cat.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <View style={[fs.applyWrap, { borderTopColor: c.border }]}>
-              <TouchableOpacity style={fs.applyBtn} onPress={applyFilters} activeOpacity={0.85}>
-                <Text style={fs.applyBtnText}>Apply Filters</Text>
-                {countActive(pendingFilters) > 0 && (
-                  <View style={fs.applyBadge}>
-                    <Text style={fs.applyBadgeText}>{countActive(pendingFilters)}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -501,12 +244,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
-    paddingBottom: Spacing.md,
+    paddingTop: 8,
+    paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { ...Typography.h2, fontSize: 26 },
+  title: { ...Typography.h2, fontSize: 28 },
   subtitle: { ...Typography.caption, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
   filterBtn: {
@@ -556,24 +299,6 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
   chipLabel: { ...Typography.bodySm, fontWeight: '600', fontSize: 13 },
-  activePillsRow: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.xs,
-    flexDirection: 'row',
-  },
-  activePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
-    backgroundColor: `${Ping.purple}22`,
-    borderWidth: 1,
-    borderColor: `${Ping.purple}44`,
-  },
-  activePillText: { fontSize: 12, color: Ping.purpleLight, fontWeight: '600' },
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 130, gap: 12 },
   center: { paddingTop: 80, alignItems: 'center' },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.sm },
@@ -587,96 +312,4 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { ...Typography.bodyMed, fontSize: 17 },
   emptyText: { ...Typography.bodySm, textAlign: 'center' },
-  clearFiltersBtn: {
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
-    backgroundColor: `${Ping.purple}22`,
-    borderWidth: 1,
-    borderColor: `${Ping.purple}44`,
-  },
-  clearFiltersText: { color: Ping.purpleLight, fontWeight: '600', fontSize: 13 },
-});
-
-const fs = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: {
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingTop: Spacing.sm,
-    maxHeight: '80%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: Spacing.sm,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  sheetTitle: { ...Typography.h3 },
-  resetText: { color: Ping.purpleLight, fontSize: 14, fontWeight: '600' },
-  sheetBody: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.lg,
-  },
-  sectionLabel: {
-    ...Typography.caption,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  optionRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  optionWrap: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  optionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-  },
-  optionChipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-  optionChipLabel: { fontSize: 13, fontWeight: '600' },
-  applyWrap: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  applyBtn: {
-    backgroundColor: Ping.purple,
-    borderRadius: Radius.md,
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  applyBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-  applyBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  applyBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
 });

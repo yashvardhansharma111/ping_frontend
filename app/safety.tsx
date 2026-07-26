@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import ScreenHeader from '@/components/ScreenHeader';
+import AppAvatar from '@/components/AppAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -156,22 +158,38 @@ export default function SafetyScreen() {
     setSendingSos(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to send your position in the SOS.' }); return; }
+      if (status !== 'granted') {
+        Toast.show({ type: 'error', text1: 'Location required', text2: 'Enable location to send your position in the SOS.' });
+        return;
+      }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const { latitude, longitude } = loc.coords;
       const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
-      const message = `🚨 PING SAFETY ALERT\nI may need help. My current location:\n${mapsLink}`;
-      if (contacts.length === 0) { await Share.share({ message }); return; }
-      const first = contacts[0];
-      const encoded = encodeURIComponent(message);
-      const smsUrl = Platform.OS === 'ios' ? `sms:${first.phone}&body=${encoded}` : `sms:${first.phone}?body=${encoded}`;
-      const canOpen = await Linking.canOpenURL(smsUrl);
-      if (canOpen) {
-        await Linking.openURL(smsUrl);
-        if (contacts.length > 1) Toast.show({ type: 'info', text1: 'SOS sent', text2: `Message opened for ${first.name}. Also share with other trusted contacts if needed.` });
-      } else { await Share.share({ message }); }
-    } catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send SOS.' }); }
-    finally { setSendingSos(false); }
+      const baseMsg = `🚨 PING SAFETY ALERT\nI may need help. My current location:\n${mapsLink}`;
+
+      if (contacts.length === 0) {
+        await Share.share({ message: baseMsg });
+        return;
+      }
+
+      if (contacts.length === 1) {
+        // Single contact — try to open SMS directly (pre-filled)
+        const ct = contacts[0];
+        const encoded = encodeURIComponent(baseMsg);
+        const smsUrl = Platform.OS === 'ios' ? `sms:${ct.phone}&body=${encoded}` : `sms:${ct.phone}?body=${encoded}`;
+        const canOpen = await Linking.canOpenURL(smsUrl);
+        if (canOpen) { await Linking.openURL(smsUrl); return; }
+      }
+
+      // Multiple contacts or SMS unavailable — include all contact numbers in the share message
+      const contactLines = contacts.map((ct) => `• ${ct.name}: ${ct.phone}`).join('\n');
+      const fullMsg = `${baseMsg}\n\nAlert these contacts:\n${contactLines}`;
+      await Share.share({ message: fullMsg });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send SOS.' });
+    } finally {
+      setSendingSos(false);
+    }
   }
 
   async function shareLocation() {
@@ -200,13 +218,7 @@ export default function SafetyScreen() {
   return (
     <>
       <View style={[styles.root, { backgroundColor: c.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: c.border }]}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={c.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: c.text }]}>Safety & Account</Text>
-          <View style={{ width: 46 }} />
-        </View>
+        <ScreenHeader title="Safety & Account" onBack={() => router.back()} paddingTop={insets.top + 8} />
 
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
           <Text style={[styles.sectionTitle, { color: c.text }]}>Safety tools</Text>
@@ -222,12 +234,20 @@ export default function SafetyScreen() {
           </View>
 
           <TouchableOpacity style={[styles.prefBanner, { backgroundColor: `${Ping.purple}18`, borderColor: `${Ping.purple}44` }]} onPress={() => setShowAddContact(true)} activeOpacity={0.8}>
-            <View style={[styles.prefIcon, { backgroundColor: `${Ping.purple}33` }]}>
-              <Ionicons name="shield-checkmark" size={22} color={Ping.purpleLight} />
+            <View style={[styles.prefIcon, { backgroundColor: contacts.length > 0 ? `${Ping.purple}44` : `${Ping.purple}33` }]}>
+              <Ionicons name={contacts.length > 0 ? 'shield-checkmark' : 'shield-half-outline'} size={22} color={Ping.purpleLight} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.prefTitle, { color: c.text }]}>Set up safety preferences</Text>
-              <Text style={[styles.prefSub, { color: c.textSecondary }]}>Add trusted contacts for SOS alerts</Text>
+              <Text style={[styles.prefTitle, { color: c.text }]}>
+                {contacts.length > 0
+                  ? `${contacts.length} trusted contact${contacts.length > 1 ? 's' : ''} saved`
+                  : 'Set up safety preferences'}
+              </Text>
+              <Text style={[styles.prefSub, { color: c.textSecondary }]}>
+                {contacts.length > 0
+                  ? 'Used for SOS alerts · Tap to add more'
+                  : 'Add contacts who receive your SOS location'}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={c.textSecondary} />
           </TouchableOpacity>
@@ -236,9 +256,7 @@ export default function SafetyScreen() {
             <View style={styles.contactsList}>
               {contacts.map((ct) => (
                 <View key={ct.id} style={[styles.contactRow, { backgroundColor: c.card, borderColor: c.border }]}>
-                  <View style={[styles.contactAvatar, { backgroundColor: `${Ping.purple}33` }]}>
-                    <Text style={[styles.contactInitial, { color: Ping.purpleLight }]}>{ct.name[0].toUpperCase()}</Text>
-                  </View>
+                  <AppAvatar name={ct.name} size={36} />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.contactName, { color: c.text }]}>{ct.name}</Text>
                     <Text style={[styles.contactPhone, { color: c.textSecondary }]}>{ct.phone}</Text>
@@ -341,13 +359,6 @@ export default function SafetyScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md, paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...Typography.h3 },
   content: { padding: Spacing.lg, gap: Spacing.md },
   sectionTitle: { ...Typography.bodyMed, fontSize: 18, fontWeight: '700', marginTop: Spacing.xs },
   toolsGrid: { gap: Spacing.sm },
@@ -358,8 +369,6 @@ const styles = StyleSheet.create({
   prefSub: { ...Typography.caption, marginTop: 2 },
   contactsList: { gap: Spacing.xs, marginTop: -Spacing.xs },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
-  contactAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  contactInitial: { ...Typography.bodyMed, fontWeight: '700' },
   contactName: { ...Typography.bodyMed, fontSize: 14 },
   contactPhone: { ...Typography.caption, marginTop: 1 },
   dangerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: Radius.md, borderWidth: 1.5, height: 52, marginTop: Spacing.xs },

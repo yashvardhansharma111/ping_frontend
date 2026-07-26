@@ -12,6 +12,7 @@ import {
   Pressable,
   Image,
 } from 'react-native';
+import AppAvatar from '@/components/AppAvatar';
 import Reanimated, {
   useAnimatedKeyboard,
   useAnimatedStyle,
@@ -129,6 +130,13 @@ const MessageBubble = memo(function MessageBubble({
 
   return (
     <View style={[styles.bubbleRow, isMine ? styles.rowMine : styles.rowTheirs]}>
+      {!isMine && (
+        <AppAvatar
+          uri={sender?.avatarUrl}
+          name={senderName}
+          size={28}
+        />
+      )}
       <View
         style={[
           styles.bubble,
@@ -278,6 +286,10 @@ export default function ChatRoomScreen() {
     (pingType && TYPE_ICONS[pingType]) ? TYPE_ICONS[pingType] : 'flash';
   const roomTitle = getRoomTitle(room, user?._id, title);
   const subtitle = getRoomSubtitle(room);
+  const dmOtherParticipant = room?.kind === 'dm'
+    ? room.participantIds.find((p) => p._id !== user?._id)
+    : null;
+  const dmOtherAvatar = dmOtherParticipant?.avatarUrl ?? null;
 
   const mergeServerMessages = useCallback((server: ChatMessage[]) => {
     setMessages((prev) => {
@@ -468,13 +480,14 @@ export default function ChatRoomScreen() {
             if (isGroup) router.push(`/chat/${roomId}/settings` as any);
           }}
         >
-          {room?.avatarUrl ? (
-            <Image source={{ uri: room.avatarUrl }} style={styles.headerAvatarImg} />
-          ) : (
-            <View style={[styles.headerAvatar, { backgroundColor: `${typeColor}33` }]}>
-              <Ionicons name={room?.kind === 'dm' ? 'person' : typeIcon} size={14} color={typeColor} />
-            </View>
-          )}
+          <AppAvatar
+            uri={dmOtherAvatar || room?.avatarUrl}
+            name={dmOtherParticipant?.displayName || dmOtherParticipant?.username}
+            icon={room?.kind === 'dm' ? 'person' : typeIcon}
+            size={36}
+            bg={`${typeColor}33`}
+            tint={typeColor}
+          />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.headerTitle, { color: c.text }]} numberOfLines={1}>
               {roomTitle}
@@ -646,18 +659,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerAvatarImg: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
   headerMid: {
     flex: 1,
     minWidth: 0,
@@ -704,7 +705,10 @@ const styles = StyleSheet.create({
   sepLabel: { ...Typography.caption, fontSize: 11, fontWeight: '600' },
   bubbleRow: {
     marginVertical: 2,
-    maxWidth: '82%',
+    maxWidth: '88%',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
   },
   rowMine: { alignSelf: 'flex-end' },
   rowTheirs: { alignSelf: 'flex-start' },
@@ -807,7 +811,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 48,
     gap: 10,
-    transform: [{ scaleY: -1 }], // counteract inverted list flip
   },
   emptyText: { ...Typography.bodySm, textAlign: 'center' },
   activityCard: {
@@ -820,7 +823,6 @@ const styles = StyleSheet.create({
     paddingLeft: 14,
     gap: 6,
     overflow: 'hidden',
-    transform: [{ scaleY: -1 }],
   },
   activityAccent: {
     position: 'absolute',

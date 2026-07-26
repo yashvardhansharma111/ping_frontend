@@ -1,12 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
+  PanResponder,
 } from 'react-native';
+import AppAvatar from '@/components/AppAvatar';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,19 +53,24 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
   const baseMeta = KIND_META[room.kind] ?? KIND_META.activity;
   const meta = { ...baseMeta, tint: room.kind === 'activity' ? c.tint : baseMeta.tint };
 
+  const dmOther = room.kind === 'dm' ? room.participantIds.find((p) => p._id !== myId) : null;
+  const avatarUrl = dmOther?.avatarUrl || room.avatarUrl;
+  const dmName = dmOther?.displayName || dmOther?.username;
+
   return (
     <TouchableOpacity
       style={[styles.row, { borderBottomColor: c.border }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {room.avatarUrl ? (
-        <Image source={{ uri: room.avatarUrl }} style={styles.avatarImg} />
-      ) : (
-        <View style={[styles.avatar, { backgroundColor: meta.bg }]}>
-          <Ionicons name={meta.icon} size={20} color={meta.tint} />
-        </View>
-      )}
+      <AppAvatar
+        uri={avatarUrl}
+        name={room.kind === 'dm' ? dmName : undefined}
+        icon={meta.icon}
+        size={50}
+        bg={meta.bg}
+        tint={meta.tint}
+      />
 
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
@@ -88,6 +94,26 @@ export default function ChatListScreen() {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
+
+  // Keep a ref so the PanResponder callback always reads the latest filter
+  const filterRef = useRef<Filter>('all');
+  filterRef.current = filter;
+
+  const swipePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5,
+      onPanResponderRelease: (_, { dx }) => {
+        const TABS_KEYS: Filter[] = ['all', 'activity', 'dm'];
+        const idx = TABS_KEYS.indexOf(filterRef.current);
+        if (dx < -50 && idx < TABS_KEYS.length - 1) {
+          setFilter(TABS_KEYS[idx + 1]);
+        } else if (dx > 50 && idx > 0) {
+          setFilter(TABS_KEYS[idx - 1]);
+        }
+      },
+    })
+  ).current;
 
   async function load() {
     try {
@@ -147,32 +173,34 @@ export default function ChatListScreen() {
         </View>
       </View>
 
-      {loading ? (
-        <SkeletonList count={5} variant="chat" />
-      ) : filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}22` }]}>
-            <Ionicons name="chatbubbles" size={40} color={c.tint} />
+      <View style={{ flex: 1 }} {...swipePan.panHandlers}>
+        {loading ? (
+          <SkeletonList count={5} variant="chat" />
+        ) : filtered.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}22` }]}>
+              <Ionicons name="chatbubbles" size={40} color={c.tint} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: c.text }]}>No chats yet</Text>
+            <Text style={[styles.emptySub, { color: c.textSecondary }]}>
+              Join an activity to start chatting with others
+            </Text>
           </View>
-          <Text style={[styles.emptyTitle, { color: c.text }]}>No chats yet</Text>
-          <Text style={[styles.emptySub, { color: c.textSecondary }]}>
-            Join an activity to start chatting with others
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(r) => r._id}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
-          renderItem={({ item }) => (
-            <RoomRow
-              room={item}
-              myId={user?._id}
-              onPress={() => router.push(`/chat/${item._id}`)}
-            />
-          )}
-        />
-      )}
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(r) => r._id}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+            renderItem={({ item }) => (
+              <RoomRow
+                room={item}
+                myId={user?._id}
+                onPress={() => router.push(`/chat/${item._id}`)}
+              />
+            )}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -212,18 +240,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImg: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
   },
   rowMain: { flex: 1 },
   rowTop: {

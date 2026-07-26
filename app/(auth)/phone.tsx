@@ -54,9 +54,9 @@ export default function PhoneScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={{ flex: 1, minHeight: insets.top + 24 }} />
+      <View style={{ flex: 1, minHeight: insets.top + 24, backgroundColor: BG }} />
 
       <View style={styles.textBlock}>
         <Text style={[
@@ -136,7 +136,7 @@ export default function PhoneScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: WHITE,
   },
   textBlock: {
     paddingHorizontal: 28,

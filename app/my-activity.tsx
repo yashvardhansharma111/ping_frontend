@@ -277,7 +277,7 @@ export default function MyActivityScreen() {
       </View>
 
       {/* Tab bar */}
-      <View style={[s.tabBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+      <View style={[s.tabBar, { backgroundColor: c.background, borderBottomColor: c.border }]}>
         <View style={s.tabRow}>
           {TABS.map(({ key, label, icon }, idx) => {
             const active = tab === key;

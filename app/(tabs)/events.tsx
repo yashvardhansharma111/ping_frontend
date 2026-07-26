@@ -306,7 +306,7 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
       justifyContent: 'space-between',
       paddingHorizontal: Spacing.lg,
       paddingTop: 8,
-      paddingBottom: 12,
+      paddingBottom: 14,
     },
     kicker: {
       color: c.textSecondary,
@@ -317,9 +317,9 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
     },
     title: {
       color: c.text,
-      fontSize: 34,
+      fontSize: 28,
       fontWeight: '800',
-      letterSpacing: -0.8,
+      letterSpacing: -0.5,
       marginTop: 2,
     },
     livePill: {

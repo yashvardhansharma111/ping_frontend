@@ -182,9 +182,29 @@ function CompletionBar({
     prevPct.current = pct;
   }, [pct, pulse]);
 
-  if (pct >= 100 && !expanded) return null;
+  const color = pct >= 100 ? Ping.green : pct >= 80 ? Ping.green : pct >= 50 ? Ping.orange : Ping.purpleLight;
 
-  const color = pct >= 80 ? Ping.green : pct >= 50 ? Ping.orange : Ping.purpleLight;
+  if (pct >= 100) {
+    return (
+      <View style={[cb.wrap, { backgroundColor: c.surface, borderColor: `${Ping.green}55` }]}>
+        <View style={cb.row}>
+          <Ionicons name="shield-checkmark" size={20} color={Ping.green} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[cb.label, { color: c.text }]}>100% · Profile looking sharp</Text>
+            <Text style={[cb.hint, { color: c.textSecondary }]}>
+              You unlocked the full vibe — go explore.
+            </Text>
+          </View>
+          <View style={[cb.badge, { backgroundColor: `${Ping.green}22` }]}>
+            <Text style={[cb.badgeText, { color: Ping.green }]}>{items.length}/{items.length}</Text>
+          </View>
+        </View>
+        <View style={[cb.track, { backgroundColor: c.border, marginTop: 10 }]}>
+          <View style={[cb.fill, { width: '100%', backgroundColor: Ping.green }]} />
+        </View>
+      </View>
+    );
+  }
   const fillWidth = fillAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ['0%', '100%'],
@@ -868,14 +888,7 @@ export default function EditProfileScreen() {
         >
           <CompletionBar items={completionItems} c={c} onJump={jumpToCompletion} />
 
-          {/* Photos — always visible card */}
-          <PhotosSection
-            c={c}
-            highlighted={highlightSection === 'photos'}
-            onLayout={rememberY('photos')}
-          />
-
-          {/* ── Basic Info ── */}
+          {/* ── Basic Info — first thing after the bar ── */}
           <AccordionSection
             sectionKey="basic" openSection={openSection} onToggle={toggle}
             icon="person-outline" iconColor={Ping.purpleLight}
@@ -890,6 +903,13 @@ export default function EditProfileScreen() {
             <Field label="Username" value={username} onChangeText={setUsername} placeholder="letters, numbers, _ and ." autoCapitalize="none" c={c} />
             <Field label="Bio" value={bio} onChangeText={setBio} placeholder="Say something. Don't just write 'hey'." multiline c={c} />
           </AccordionSection>
+
+          {/* Photos — below basic info */}
+          <PhotosSection
+            c={c}
+            highlighted={highlightSection === 'photos'}
+            onLayout={rememberY('photos')}
+          />
 
           {/* ── Personal Details ── */}
           <AccordionSection

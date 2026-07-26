@@ -11,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   Platform,
+  PanResponder,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
@@ -32,6 +33,23 @@ const PHOTO_H = SCREEN_H;
 const THUMB = 92;
 const GALLERY_GAP = 12;
 
+
+const OCCUPATION_LABELS: Record<string, string> = {
+  job: 'Working', student: 'Student', founder: 'Founder',
+  business: 'Business', freelancer: 'Freelancer', exploring: 'Exploring',
+};
+
+const TRAIT_LABELS: Record<string, string> = {
+  night_owl: 'Night owl', early_bird: 'Early bird',
+  planner: 'Planner', spontaneous: 'Spontaneous',
+  street_food: 'Street food', balanced: 'Balanced eater', cafe_aesthetic: 'Café aesthetic',
+  always_early: 'Always early', on_time: 'On time', fashionably_late: 'Fashionably late',
+  nearby: 'Nearby only', up_to_5km: 'Up to 5 km', travel_for_good_plans: 'Travels for plans',
+  weekends_only: 'Weekends', evenings_mostly: 'Evenings', random_anytime: 'Anytime',
+  just_hanging: 'Just hanging', activity_partner: 'Activity partner',
+  trying_new_places: 'Explorer', networking: 'Networking',
+  introvert: 'Introvert', extrovert: 'Extrovert', ambivert: 'Ambivert',
+};
 
 const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
   sport:   { icon: 'dumbbell',          color: '#7C3AED' },
@@ -539,27 +557,46 @@ export default function UserProfileScreen() {
   const interestTags = [
     ...(profile.hobbies ?? []),
     ...(profile.favoriteActivities ?? []),
-  ].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 8);
+    ...(profile.vibePreferences ?? []),
+  ].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 12);
 
   const hashTags = interestTags.map((t) => (t.startsWith('#') ? t : `#${t.replace(/\s+/g, '').toLowerCase()}`));
 
   const galleryPhotos = (profile.photos?.length ? profile.photos : allPhotos).filter(Boolean) as string[];
 
-  const quoteText = profile.pingPitch || profile.funTruth || profile.bio || null;
+  const pingPitchText = profile.pingPitch || null;
+  const funTruthText = (profile.funTruth && profile.funTruth !== profile.pingPitch) ? profile.funTruth : null;
 
-  // Always three stats like the mock for visual balance
+  const age = profile.dob
+    ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null;
+
+  const infoItems = [
+    age ? `${age} yrs` : null,
+    profile.city,
+    profile.occupation ? OCCUPATION_LABELS[profile.occupation] : null,
+    profile.institute,
+  ].filter(Boolean) as string[];
+
+  const traitChips = [
+    profile.sleepType, profile.spontaneity, profile.foodPersonality,
+    profile.timeRespect, profile.distanceTolerance, profile.availabilityPattern,
+    profile.intentSync, profile.socialPreference,
+  ]
+    .filter(Boolean)
+    .map((t) => TRAIT_LABELS[t as string] ?? (t as string));
+
+  const socialLinks = [
+    profile.instagramHandle ? { icon: 'logo-instagram' as const, label: 'Instagram', handle: profile.instagramHandle } : null,
+    profile.linkedinHandle  ? { icon: 'logo-linkedin' as const,  label: 'LinkedIn',  handle: profile.linkedinHandle  } : null,
+    profile.spotifyHandle   ? { icon: 'musical-notes-outline' as const, label: 'Spotify', handle: profile.spotifyHandle } : null,
+  ].filter(Boolean) as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; handle: string }[];
+
+  // Stats
   const stats = [
-    {
-      value: mutualCount !== null ? String(mutualCount) : '—',
-      label: 'Mutuals',
-    },
-    {
-      value: String(profile.completedPingsCount ?? 0),
-      label: 'Pings',
-    },
-    profile.averageRating != null && (profile.ratingCount ?? 0) > 0
-      ? { value: profile.averageRating.toFixed(1), label: 'Rating' }
-      : { value: `${profile.trustRate ?? 100}%`, label: 'Trust' },
+    { value: mutualCount !== null ? String(mutualCount) : '—', label: 'Mutuals' },
+    { value: String(profile.completedPingsCount ?? 0), label: 'Pings' },
+    { value: `${profile.trustRate ?? 100}%`, label: 'Trust' },
   ];
 
   // ── Primary CTA label / action ─────────────────────────────────────────────
@@ -629,28 +666,31 @@ export default function UserProfileScreen() {
     const sheetPadBottom = Math.max(insets.bottom, 16) + 8;
     const nameParts = (profile.displayName ?? 'User').trim().split(/\s+/);
     const firstName = nameParts[0] ?? 'User';
-    const restName = nameParts.slice(1).join(' ');
+    const lastInitial = nameParts.length > 1 ? ` ${nameParts[nameParts.length - 1][0]}.` : '';
+    const shortName = `${firstName}${lastInitial}`;
+
+    const cardSwipePan = PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dy, dx }) => dy < -8 && Math.abs(dy) > Math.abs(dx),
+      onPanResponderRelease: (_, { dy }) => { if (dy < -40) setMode('detail'); },
+    });
 
     const sheetInner = (
       <View style={[s.previewSheetInner, { paddingBottom: sheetPadBottom }]}>
+        {/* Swipe pill indicator */}
+        <View style={s.swipePill} />
+
         <View style={s.nameRow}>
-          <View style={{ flex: 1, paddingRight: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-              <View style={{ flexShrink: 1 }}>
-                <Text style={s.name}>{firstName}</Text>
-                {restName ? <Text style={s.name}>{restName}</Text> : null}
-              </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              <Text style={s.name} numberOfLines={1}>{shortName}</Text>
               {isVerified && (
-                <Ionicons name="checkmark-circle" size={18} color="#A78BFA" style={{ marginTop: 10 }} />
+                <Ionicons name="checkmark-circle" size={18} color="#A78BFA" />
               )}
             </View>
             {profile.username ? (
               <Text style={s.handle}>@{profile.username}</Text>
             ) : null}
           </View>
-          <TouchableOpacity onPress={() => setMode('detail')} hitSlop={10} activeOpacity={0.7}>
-            <Text style={s.seeProfile}>See profile</Text>
-          </TouchableOpacity>
         </View>
 
         {profile.bio ? (
@@ -687,7 +727,7 @@ export default function UserProfileScreen() {
           </View>
         </View>
 
-        {/* Frosted glass bottom sheet */}
+        {/* Frosted glass bottom sheet — swipe up to expand */}
         <View style={s.previewSheetWrap} pointerEvents="box-none">
           <BlurView
             intensity={Platform.OS === 'ios' ? 75 : 90}
@@ -695,7 +735,9 @@ export default function UserProfileScreen() {
             experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
             style={s.previewSheet}
           >
-            <View style={s.previewSheetTint}>{sheetInner}</View>
+            <View style={s.previewSheetTint} {...cardSwipePan.panHandlers}>
+              {sheetInner}
+            </View>
           </BlurView>
         </View>
 
@@ -744,6 +786,9 @@ export default function UserProfileScreen() {
               {isVerified && <Ionicons name="checkmark-circle" size={20} color="#A78BFA" />}
             </View>
             {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
+            {infoItems.length > 0 && (
+              <Text style={s.infoLine}>{infoItems.join('  ·  ')}</Text>
+            )}
           </View>
 
           {profile.bio ? (
@@ -766,18 +811,50 @@ export default function UserProfileScreen() {
             </ScrollView>
           )}
 
+          {traitChips.length > 0 && (
+            <View style={s.traitsWrap}>
+              {traitChips.map((trait) => (
+                <View key={trait} style={s.traitChip}>
+                  <Text style={s.traitText}>{trait}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           <PhotoGallery photos={galleryPhotos} />
         </GlassCard>
 
-        {quoteText ? (
+        {pingPitchText ? (
           <QuoteCard
-            text={quoteText}
+            text={pingPitchText}
             name={profile.displayName ?? 'User'}
             handle={profile.username}
             avatarUrl={profile.avatarUrl}
             initials={initials}
           />
         ) : null}
+
+        {funTruthText ? (
+          <QuoteCard
+            text={funTruthText}
+            name={profile.displayName ?? 'User'}
+            handle={profile.username}
+            avatarUrl={profile.avatarUrl}
+            initials={initials}
+          />
+        ) : null}
+
+        {socialLinks.length > 0 && (
+          <View style={s.socialCard}>
+            <Text style={s.socialTitle}>Socials</Text>
+            {socialLinks.map((link) => (
+              <View key={link.label} style={s.socialRow}>
+                <Ionicons name={link.icon} size={18} color="rgba(255,255,255,0.55)" />
+                <Text style={s.socialHandle}>{link.handle}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <HighlightsSection userId={userId} isOwnProfile={isSelf} scheme={scheme} />
 
@@ -894,23 +971,31 @@ const s = StyleSheet.create({
   },
   previewSheetInner: {
     paddingHorizontal: 22,
-    paddingTop: 22,
+    paddingTop: 12,
     gap: 14,
+  },
+  swipePill: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginBottom: 4,
   },
   previewCtaWrap: {
     marginTop: 4,
   },
   nameRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   name: {
     fontSize: 34,
     fontWeight: '800',
     color: '#FFF',
     letterSpacing: -0.6,
-    lineHeight: 38,
+    lineHeight: 40,
+    flexShrink: 1,
   },
   detailName: {
     fontSize: 30,
@@ -918,12 +1003,6 @@ const s = StyleSheet.create({
     color: '#FFF',
     letterSpacing: -0.5,
     lineHeight: 36,
-  },
-  seeProfile: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 6,
   },
   handle: {
     color: 'rgba(255,255,255,0.55)',
@@ -944,6 +1023,12 @@ const s = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  infoLine: {
+    color: 'rgba(255,255,255,0.48)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 3,
+  },
   tagsRow: { flexDirection: 'row', gap: 8 },
   tagChip: {
     paddingHorizontal: 14,
@@ -952,6 +1037,44 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   tagText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
+  traitsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  traitChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(167,139,250,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.22)',
+  },
+  traitText: { color: 'rgba(167,139,250,0.9)', fontSize: 11.5, fontWeight: '600' },
+  socialCard: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 22,
+    padding: 20,
+    gap: 12,
+  },
+  socialTitle: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  socialHandle: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
 
   detailActions: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

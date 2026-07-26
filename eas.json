@@ -23,7 +23,7 @@
     "production": {
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app"

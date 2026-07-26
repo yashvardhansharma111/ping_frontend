@@ -17,6 +17,7 @@ import {
   type AppStateStatus,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Map as MapLibreMap, Camera, Marker, type MapRef, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -143,29 +144,29 @@ function PopupCard({
 
         {/* ── Banner ── */}
         <View style={pc.banner}>
-          {bannerUri ? (
-            <Image source={{ uri: bannerUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          {activity.imageUrl ? (
+            <Image source={{ uri: activity.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
-            // Gradient-style fallback: type color tinted background + decorative icon
             <>
               <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? '#1C1C30' : '#F3F0FF' }]} />
               <View style={[StyleSheet.absoluteFill, { backgroundColor: cfg.color, opacity: 0.09 }]} />
-              {/* Big watermark icon */}
               <MaterialCommunityIcons
                 name={cfg.icon}
                 size={120}
                 color={cfg.color}
                 style={{ opacity: 0.10, position: 'absolute', right: -16, bottom: -20 }}
               />
-              {/* Centred icon ring */}
-              <View style={[pc.bannerIconRing, { backgroundColor: `${cfg.color}20`, borderColor: `${cfg.color}45` }]}>
-                <MaterialCommunityIcons name={cfg.icon} size={38} color={cfg.color} />
-              </View>
+              {creatorAvatar ? (
+                <Image source={{ uri: creatorAvatar }} style={pc.bannerAvatar} resizeMode="cover" />
+              ) : (
+                <View style={[pc.bannerAvatarFallback, { backgroundColor: `${cfg.color}28`, borderColor: `${cfg.color}55` }]}>
+                  <Text style={[pc.bannerAvatarInitial, { color: cfg.color }]}>
+                    {creatorName[0]?.toUpperCase() ?? '?'}
+                  </Text>
+                </View>
+              )}
             </>
           )}
-
-          {/* Bottom scrim so badges read over photos */}
-          <View style={pc.bannerScrim} />
 
           {/* Close — top right */}
           <TouchableOpacity
@@ -181,22 +182,22 @@ function PopupCard({
             {isLive && <View style={pc.liveDot} />}
             <Text style={[pc.timeBadgeText, isLive && pc.timeBadgeTextLive]}>{timeLabel}</Text>
           </View>
-
-          {/* Type pill — bottom left */}
-          <View style={[pc.typePill, { backgroundColor: `${cfg.color}EE` }]}>
-            <MaterialCommunityIcons name={cfg.icon} size={11} color="#FFF" />
-            <Text style={pc.typePillText}>{cfg.label}</Text>
-          </View>
-
-          {/* Spots count — bottom right over scrim */}
-          <View style={pc.spotsBadge}>
-            <Ionicons name="people" size={10} color="rgba(255,255,255,0.9)" />
-            <Text style={pc.spotsBadgeText}>{spotsLabel}</Text>
-          </View>
         </View>
 
         {/* ── Body ── */}
         <View style={pc.body}>
+          {/* Type chip + spots row */}
+          <View style={pc.typeRow}>
+            <View style={[pc.typeChip, { backgroundColor: `${cfg.color}18`, borderColor: `${cfg.color}45` }]}>
+              <MaterialCommunityIcons name={cfg.icon} size={11} color={cfg.color} />
+              <Text style={[pc.typeChipText, { color: cfg.color }]}>{cfg.label}</Text>
+            </View>
+            <View style={pc.spotsInline}>
+              <Ionicons name="people" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
+              <Text style={pc.statText}>{spotsLabel}</Text>
+            </View>
+          </View>
+
           {/* Title */}
           <Text style={pc.title} numberOfLines={2}>{activity.title}</Text>
 
@@ -215,11 +216,6 @@ function PopupCard({
             <View style={pc.statItem}>
               <Ionicons name="time-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
               <Text style={pc.statText}>{durationLabel}</Text>
-            </View>
-            <View style={pc.statSep} />
-            <View style={pc.statItem}>
-              <Ionicons name="people-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
-              <Text style={pc.statText}>{joined} going</Text>
             </View>
             {activity.vibe ? (
               <>
@@ -287,21 +283,47 @@ function makePcStyles(isDark: boolean) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    bannerIconRing: {
-      width: 68,
-      height: 68,
-      borderRadius: 34,
-      borderWidth: 1.5,
+    bannerAvatar: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      borderWidth: 3,
+      borderColor: 'rgba(255,255,255,0.75)',
+    },
+    bannerAvatarFallback: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      borderWidth: 2.5,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    bannerScrim: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 60,
-      backgroundColor: 'rgba(0,0,0,0.28)',
+    bannerAvatarInitial: {
+      fontSize: 30,
+      fontWeight: '800',
+    },
+    typeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    typeChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
+      borderWidth: 1,
+    },
+    typeChipText: {
+      fontSize: 10.5,
+      fontWeight: '700',
+    },
+    spotsInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     closeBtn: {
       position: 'absolute',
@@ -330,8 +352,8 @@ function makePcStyles(isDark: boolean) {
       paddingVertical: 4,
     },
     timeBadgeLive: {
-      backgroundColor: 'rgba(239,68,68,0.28)',
-      borderColor: 'rgba(239,68,68,0.65)',
+      backgroundColor: '#DC2626',
+      borderColor: 'rgba(255,255,255,0.35)',
     },
     liveDot: {
       width: 6,
@@ -346,35 +368,6 @@ function makePcStyles(isDark: boolean) {
       letterSpacing: 0.2,
     },
     timeBadgeTextLive: { color: '#FCA5A5' },
-    typePill: {
-      position: 'absolute',
-      bottom: 10,
-      left: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 20,
-    },
-    typePillText: {
-      color: '#FFF',
-      fontSize: 10.5,
-      fontWeight: '700',
-    },
-    spotsBadge: {
-      position: 'absolute',
-      bottom: 10,
-      right: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    spotsBadgeText: {
-      color: 'rgba(255,255,255,0.9)',
-      fontSize: 10.5,
-      fontWeight: '700',
-    },
 
     // ── Body ──────────────────────────────────────────────────────────────
     body: {
@@ -902,6 +895,7 @@ export default function MapScreen() {
   const [draftDistance, setDraftDistance] = useState(0);
   const [draftVibe, setDraftVibe] = useState('');
   const [draftTime, setDraftTime] = useState('');
+  const [draftType, setDraftType] = useState('');
   const distanceFilterRef = useRef(0);
   const [myActivePing, setMyActivePing] = useState<Activity | null>(null);
   const [mapPois, setMapPois] = useState<MapPoi[]>([]);
@@ -1024,6 +1018,7 @@ export default function MapScreen() {
     setDraftDistance(distanceFilter);
     setDraftVibe(vibeFilter);
     setDraftTime(timeFilter);
+    setDraftType(typeFilter);
     setShowFilterPanel(true);
   }
 
@@ -1033,6 +1028,7 @@ export default function MapScreen() {
     setDistanceFilter(draftDistance);
     setVibeFilter(draftVibe);
     setTimeFilter(draftTime);
+    setTypeFilter(draftType);
     setShowFilterPanel(false);
     if (distanceChanged) loadNearby(true);
   }
@@ -1046,6 +1042,7 @@ export default function MapScreen() {
     setDraftDistance(0);
     setDraftVibe('');
     setDraftTime('');
+    setDraftType('');
     setShowFilterPanel(false);
     loadNearby(true);
   }
@@ -1217,8 +1214,9 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFillObject}
         mapStyle={STYLE_URL}
         onPress={() => {
-          if (mapLocked || suppressMapTapRef.current) return;
-          console.log('[Map] background tapped → clearSelection');
+          if (suppressMapTapRef.current) return;
+          if (selected) { setSelected(null); return; }
+          if (sheetActivity) return;
           clearSelection();
         }}
         onDidFinishLoadingMap={() => {
@@ -1409,15 +1407,31 @@ export default function MapScreen() {
         </Animated.View>
       )}
 
+      {/* ── Top gradient scrim (map → chips smooth blend) ── */}
+      <LinearGradient
+        colors={
+          isDark
+            ? ['rgba(8,8,21,0.98)', 'rgba(8,8,21,0.72)', 'rgba(8,8,21,0.18)', 'transparent']
+            : ['rgba(232,232,232,0.98)', 'rgba(232,232,232,0.72)', 'rgba(232,232,232,0.18)', 'transparent']
+        }
+        locations={[0, 0.42, 0.74, 1]}
+        style={styles.topScrim}
+        pointerEvents="none"
+      />
+
       {/* ── Top bar ── */}
       <View style={styles.topBar} pointerEvents="box-none">
-        {/* Left: greeting */}
-        <View style={styles.greetChip}>
+        {/* Left: greeting — tap to go to profile */}
+        <TouchableOpacity
+          style={styles.greetChip}
+          onPress={() => router.push('/(tabs)/profile' as any)}
+          activeOpacity={0.8}
+        >
           <Image source={require('../../assets/images/icon.png')} style={styles.greetIcon} />
           <Text style={styles.greetText}>
             {user?.displayName?.split(' ')[0] ?? 'Hey'}
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {/* Right: count + search + chat */}
         <View style={styles.topRight}>
@@ -1450,94 +1464,51 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* Filter chips row */}
-      <View style={styles.filterRow} pointerEvents="box-none">
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
+      {/* ── Filter toggle pill ── */}
+      <View style={styles.filterToggleRow} pointerEvents="box-none">
+        <TouchableOpacity
+          style={[
+            styles.filterToggleBtn,
+            (activeFilterCount > 0 || typeFilter || showFilterPanel) && styles.filterToggleBtnActive,
+          ]}
+          onPress={openFilterPanel}
+          activeOpacity={0.8}
         >
+          <Ionicons
+            name="options-outline"
+            size={15}
+            color={(activeFilterCount > 0 || typeFilter)
+              ? (isDark ? Ping.purpleLight : Ping.purple)
+              : (isDark ? '#C0BCDB' : '#5C5670')}
+          />
+          <Text style={[
+            styles.filterToggleText,
+            (activeFilterCount > 0 || typeFilter) && { color: isDark ? Ping.purpleLight : Ping.purple, fontWeight: '700' },
+          ]}>
+            {typeFilter
+              ? (FILTER_TYPES.find(f => f.key === typeFilter)?.label ?? 'Filter')
+              : 'Filter'}
+            {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+          </Text>
+          {(activeFilterCount > 0 || !!typeFilter) && (
+            <View style={styles.filterActiveDot} />
+          )}
+        </TouchableOpacity>
+
+        {(activeFilterCount > 0 || !!typeFilter) && (
           <TouchableOpacity
-            style={[styles.filterChip, (activeFilterCount > 0 || showFilterPanel) && styles.filterChipActiveExtra]}
-            onPress={openFilterPanel}
-            activeOpacity={0.8}
+            style={styles.filterClearPill}
+            onPress={clearAllFilters}
+            activeOpacity={0.75}
           >
-            <Ionicons name="options-outline" size={14} color={activeFilterCount > 0 ? Ping.purple : (isDark ? '#9CA3AF' : '#6B6080')} />
-            <Text style={[styles.filterChipText, activeFilterCount > 0 && { color: isDark ? Ping.purpleLight : Ping.purple }]}>
-              Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
-            </Text>
+            <Ionicons name="close" size={13} color={isDark ? '#EBD8FF' : '#6545D9'} />
           </TouchableOpacity>
-
-          {FILTER_TYPES.map(({ key, label, icon, color }) => {
-            const active = typeFilter === key;
-            return (
-              <TouchableOpacity
-                key={key || 'all'}
-                style={[
-                  styles.filterChip,
-                  active && {
-                    backgroundColor: isDark ? `${color}28` : `${color}18`,
-                    borderColor: color,
-                  },
-                ]}
-                onPress={() => setTypeFilter(key)}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons
-                  name={icon}
-                  size={13}
-                  color={active ? color : (isDark ? '#A8A4C0' : '#5C5670')}
-                />
-                <Text style={[styles.filterChipText, active && { color, fontWeight: '700' }]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {activeFilterCount > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.activeFilterScroll}
-          >
-            {distanceFilter ? (
-              <TouchableOpacity
-                style={styles.activePill}
-                onPress={() => {
-                  distanceFilterRef.current = 0;
-                  setDistanceFilter(0);
-                  loadNearby(true);
-                }}
-              >
-                <Ionicons name="navigate-outline" size={12} color={Ping.purple} />
-                <Text style={styles.activePillText}>{distanceLabel}</Text>
-                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
-              </TouchableOpacity>
-            ) : null}
-            {vibeFilter ? (
-              <TouchableOpacity style={styles.activePill} onPress={() => setVibeFilter('')}>
-                <Text style={styles.activePillText}>{vibeLabel}</Text>
-                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
-              </TouchableOpacity>
-            ) : null}
-            {timeFilter ? (
-              <TouchableOpacity style={styles.activePill} onPress={() => setTimeFilter('')}>
-                <Text style={styles.activePillText}>{timeLabel}</Text>
-                <Ionicons name="close" size={12} color={isDark ? '#EBD8FF' : '#6545D9'} />
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity style={styles.activePillClear} onPress={clearAllFilters}>
-              <Text style={styles.activePillClearText}>Clear</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        ) : null}
+        )}
       </View>
 
       {/* Events banner — horizontal pill strip below filter chips */}
       {nearbyEvents.length > 0 && (
-        <View style={[styles.eventsBannerRow, { top: Platform.OS === 'ios' ? (activeFilterCount > 0 ? 178 : 138) : (activeFilterCount > 0 ? 160 : 120) }]} pointerEvents="box-none">
+        <View style={[styles.eventsBannerRow, { top: Platform.OS === 'ios' ? 155 : 135 }]} pointerEvents="box-none">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1587,6 +1558,29 @@ export default function MapScreen() {
                   <Ionicons name="close" size={16} color={isDark ? '#EBD8FF' : '#6B6080'} />
                 </TouchableOpacity>
               </View>
+            </View>
+
+            <Text style={styles.filterPanelLabel}>Type</Text>
+            <View style={styles.filterPanelRow}>
+              {FILTER_TYPES.map(({ key, label, icon, color }) => {
+                const chipColor = key ? color : (isDark ? Ping.purpleLight : Ping.purple);
+                const active = draftType === key;
+                return (
+                  <TouchableOpacity
+                    key={key || 'all'}
+                    style={[styles.fpChip, active && { backgroundColor: `${chipColor}22`, borderColor: chipColor }]}
+                    onPress={() => setDraftType(key)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons
+                      name={icon}
+                      size={12}
+                      color={active ? chipColor : (isDark ? '#6B6B9A' : '#8B8499')}
+                    />
+                    <Text style={[styles.fpChipText, active && { color: chipColor, fontWeight: '700' }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <Text style={styles.filterPanelLabel}>Distance</Text>
@@ -1869,6 +1863,16 @@ function makeStyles(isDark: boolean) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: isDark ? '#1a1a2e' : '#E8E8E8' },
 
+    // ── Top gradient scrim ────────────────────────────────────────────────────
+    topScrim: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: Platform.OS === 'ios' ? 175 : 155,
+      zIndex: 8,
+    },
+
     // ── Top bar ──────────────────────────────────────────────────────────────
     topBar: {
       position: 'absolute',
@@ -1961,39 +1965,61 @@ function makeStyles(isDark: boolean) {
       elevation: 6,
     },
 
-    // ── Filter chips ──────────────────────────────────────────────────────────
-    filterRow: {
+    // ── Filter toggle pill ────────────────────────────────────────────────────
+    filterToggleRow: {
       position: 'absolute',
       top: Platform.OS === 'ios' ? 108 : 90,
-      left: 0,
-      right: 0,
+      left: Spacing.md,
       zIndex: 9,
-    },
-    filterScroll: {
-      paddingHorizontal: Spacing.md,
-      gap: 7,
-    },
-    filterChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 13,
-      paddingVertical: 8,
-      borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(12,12,24,0.88)' : 'rgba(255,255,255,0.94)',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.28 : 0.08,
-      shadowRadius: 6,
-      elevation: 3,
+      gap: 8,
     },
-    filterChipText: {
-      fontSize: 12,
+    filterToggleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: Radius.full,
+      backgroundColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.96)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(187,146,255,0.22)' : 'rgba(143,99,244,0.18)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.28,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    filterToggleBtnActive: {
+      borderColor: isDark ? Ping.purpleLight : Ping.purple,
+      backgroundColor: isDark ? 'rgba(124,58,237,0.2)' : 'rgba(124,58,237,0.08)',
+    },
+    filterToggleText: {
+      fontSize: 13,
       fontWeight: '600',
-      color: isDark ? '#A8A4C0' : '#5C5670',
-      letterSpacing: 0.1,
+      color: isDark ? '#C0BCDB' : '#5C5670',
+    },
+    filterActiveDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: isDark ? Ping.purpleLight : Ping.purple,
+    },
+    filterClearPill: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.96)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.25)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 5,
     },
 
     // ── Events banner ─────────────────────────────────────────────────────────
@@ -2228,50 +2254,6 @@ function makeStyles(isDark: boolean) {
     },
 
     // ── Filter panel ──────────────────────────────────────────────────────────
-    filterChipActiveExtra: {
-      backgroundColor: isDark ? 'rgba(143,99,244,0.22)' : 'rgba(143,99,244,0.12)',
-      borderColor: isDark ? 'rgba(187,146,255,0.5)' : 'rgba(143,99,244,0.4)',
-    },
-    activeFilterScroll: {
-      paddingHorizontal: Spacing.md,
-      paddingTop: 8,
-      gap: 6,
-    },
-    activePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingLeft: 10,
-      paddingRight: 8,
-      paddingVertical: 6,
-      borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(18,18,32,0.92)' : 'rgba(255,255,255,0.95)',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(187,146,255,0.35)' : 'rgba(143,99,244,0.22)',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: isDark ? 0.25 : 0.06,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    activePillText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: isDark ? '#D4C8FF' : '#6545D9',
-    },
-    activePillClear: {
-      paddingHorizontal: 11,
-      paddingVertical: 6,
-      borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-    },
-    activePillClearText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: isDark ? '#A8A4C0' : '#6B6080',
-    },
     filterBackdrop: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0,0,0,0.28)',

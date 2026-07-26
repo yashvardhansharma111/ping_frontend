@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  ScrollView, ActivityIndicator, Image,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { highlightsApi, uploadApi, type Highlight } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import DraggableSheet from '@/components/DraggableSheet';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -194,39 +195,31 @@ export default function CreateHighlightModal({
   const handleColor   = scheme === 'dark' ? 'rgba(167,139,250,0.3)'  : 'rgba(124,58,237,0.2)';
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        style={cm.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <DraggableSheet
+      visible={visible}
+      onClose={handleClose}
+      sheetColor={c.surface}
+      borderColor={borderColor}
+      handleColor={handleColor}
+    >
+      {/* Header */}
+      <View style={[cm.header, { borderBottomColor: subBorder }]}>
+        <View style={[cm.headerIconWrap, { backgroundColor: `${activePreset.color}18` }]}>
+          <Ionicons name={selectedIcon} size={18} color={activePreset.color} />
+        </View>
+        <Text style={[cm.headerTitle, { color: c.text }]}>
+          {isEditing ? 'Edit Highlight' : 'New Highlight'}
+        </Text>
+        <TouchableOpacity onPress={handleClose} hitSlop={10}>
+          <Ionicons name="close" size={22} color={c.icon} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={cm.body}
       >
-        <TouchableOpacity style={cm.backdrop} activeOpacity={1} onPress={handleClose} />
-
-        <View style={[cm.sheet, {
-          backgroundColor: c.surface,
-          borderColor,
-        }, { paddingBottom: insets.bottom + Spacing.md }]}>
-
-          {/* Handle */}
-          <View style={[cm.handle, { backgroundColor: handleColor }]} />
-
-          {/* Header */}
-          <View style={[cm.header, { borderBottomColor: subBorder }]}>
-            <View style={[cm.headerIconWrap, { backgroundColor: `${activePreset.color}18` }]}>
-              <Ionicons name={selectedIcon} size={18} color={activePreset.color} />
-            </View>
-            <Text style={[cm.headerTitle, { color: c.text }]}>
-              {isEditing ? 'Edit Highlight' : 'New Highlight'}
-            </Text>
-            <TouchableOpacity onPress={handleClose} hitSlop={10}>
-              <Ionicons name="close" size={22} color={c.icon} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={cm.body}
-          >
             {/* Icon picker */}
             <View style={cm.section}>
               <Text style={[cm.label, { color: c.textSecondary }]}>Icon</Text>
@@ -359,50 +352,35 @@ export default function CreateHighlightModal({
                 })}
               </View>
             </View>
-          </ScrollView>
+      </ScrollView>
 
-          {/* Save button */}
-          <View style={[cm.footer, { borderTopColor: subBorder }]}>
-            <TouchableOpacity
-              style={[cm.saveBtn, saving && cm.saveBtnDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-              activeOpacity={0.85}
-            >
-              {saving ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name={selectedIcon} size={18} color="#FFF" />
-                  <Text style={cm.saveBtnText}>
-                    {isEditing ? 'Update Highlight' : 'Save Highlight'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      {/* Save button */}
+      <View style={[cm.footer, { borderTopColor: subBorder, paddingBottom: insets.bottom + Spacing.md }]}>
+        <TouchableOpacity
+          style={[cm.saveBtn, saving && cm.saveBtnDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.85}
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <>
+              <Ionicons name={selectedIcon} size={18} color="#FFF" />
+              <Text style={cm.saveBtnText}>
+                {isEditing ? 'Update Highlight' : 'Save Highlight'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </DraggableSheet>
   );
 }
 
 const CELL_SIZE = 80;
 
 const cm = StyleSheet.create({
-  overlay:  { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    maxHeight: '90%',
-  },
-  handle: {
-    width: 36, height: 4, borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: Spacing.sm, marginBottom: Spacing.xs,
-  },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,

@@ -6,18 +6,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
-  ScrollView,
   Platform,
   ActivityIndicator,
   Animated,
   Modal,
   Keyboard,
-  Image,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts, Pacifico_400Regular } from '@expo-google-fonts/pacifico';
 import { authApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,52 +25,36 @@ import { Ping, Spacing, Gradients } from '@/constants/theme';
 const OTP_LENGTH      = 6;
 const RESEND_COOLDOWN = 30;
 
-// Light premium palette — Ping design system
-const BG     = '#FFFFFF';
+const BG     = Ping.soft;       // #F3ECFF
+const WHITE  = '#FFFFFF';
 const TEXT   = '#111111';
 const MUTED  = '#6F6866';
-const DIM    = '#A6A6B0';
-const BORDER = 'rgba(143,99,244,0.18)';
+const BORDER = '#E6E1DA';
 const PURPLE = Ping.purple;
 
 export default function OtpScreen() {
   const { phone, debugCode } = useLocalSearchParams<{ phone: string; debugCode: string }>();
   const insets = useSafeAreaInsets();
-  const [digits, setDigits]     = useState<string[]>(Array(OTP_LENGTH).fill(''));
-  const [loading, setLoading]   = useState(false);
-  const [resendSecs, setResend] = useState(RESEND_COOLDOWN);
+  const [digits, setDigits]       = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [loading, setLoading]     = useState(false);
+  const [resendSecs, setResend]   = useState(RESEND_COOLDOWN);
   const [showSafety, setShowSafety] = useState(false);
   const pendingRoute = useRef<'/(admin)' | '/(auth)/setup' | '/(tabs)'>('/(tabs)');
   const inputs       = useRef<(TextInput | null)[]>([]);
   const router       = useRouter();
   const { login }    = useAuthStore();
+  const [fontsLoaded] = useFonts({ Pacifico_400Regular });
 
-  // Per-box spring anims
-  const boxAnims = useRef(Array.from({ length: OTP_LENGTH }, () => new Animated.Value(1))).current;
-
-  // Screen entrance
-  const slideAnim = useRef(new Animated.Value(28)).current;
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-
-  // Safety modal anims
+  const boxAnims    = useRef(Array.from({ length: OTP_LENGTH }, () => new Animated.Value(1))).current;
   const safetyScale = useRef(new Animated.Value(0.88)).current;
   const safetyOp    = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 360, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  // Countdown
   useEffect(() => {
     if (resendSecs <= 0) return;
     const t = setTimeout(() => setResend((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [resendSecs]);
 
-  // Auto-fill debug code and dismiss keyboard so verify button is visible
   useEffect(() => {
     if (debugCode && debugCode.length === OTP_LENGTH) {
       setDigits(debugCode.split(''));
@@ -153,54 +136,53 @@ export default function OtpScreen() {
     }
   }
 
-  const filled = digits.filter(Boolean).length;
+  const filled      = digits.filter(Boolean).length;
   const maskedPhone = phone ? `${phone.slice(0, 3)} *** *** ${phone.slice(-2)}` : '';
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
-        bounces={false}
-      >
-      <Animated.View style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-
-        {/* Back */}
+      {/* Lavender top spacer */}
+      <View style={[styles.topSpacer, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={20} color={TEXT} />
         </TouchableOpacity>
+      </View>
 
-        {/* Brand icon */}
-        <Image
-          source={require('../../assets/images/icon.png')}
-          style={styles.brandIcon}
-          resizeMode="contain"
-        />
+      {/* Text block */}
+      <View style={styles.textBlock}>
+        <Text style={[
+          styles.appName,
+          fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+        ]}>
+          Ping
+        </Text>
+        <Text style={styles.headline}>
+          Look at your phone{'\n'}for once.
+        </Text>
+        <Text style={styles.subtitle}>
+          A 6-digit code is waiting in your messages.{' '}
+          <Text style={styles.phoneHighlight}>{maskedPhone}</Text>
+        </Text>
+        {debugCode ? (
+          <View style={styles.debugBadge}>
+            <Ionicons name="construct-outline" size={11} color={Ping.orange} />
+            <Text style={styles.debugText}>Dev code: {debugCode}</Text>
+          </View>
+        ) : null}
+      </View>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Look at your phone{'\n'}for once.</Text>
-          <Text style={styles.subtitle}>
-            A 6-digit code is sitting in your messages.{'\n'}
-            Waiting for you.{' '}
-            <Text style={styles.phoneHighlight}>{maskedPhone}</Text>
-          </Text>
-          {debugCode ? (
-            <View style={styles.debugBadge}>
-              <Ionicons name="construct-outline" size={11} color={Ping.orange} />
-              <Text style={styles.debugText}>Dev code: {debugCode}</Text>
-            </View>
-          ) : null}
-        </View>
+      {/* Card */}
+      <View style={[styles.card, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={styles.pill} />
+
+        <Text style={styles.cardTitle}>Enter the 6-digit code</Text>
 
         {/* OTP boxes */}
         <View style={styles.boxRow}>
           {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-            // Outer View owns the flex layout — scale never displaces siblings
             <View key={i} style={styles.boxWrap}>
               <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boxAnims[i] }] }]}>
                 <TextInput
@@ -235,7 +217,7 @@ export default function OtpScreen() {
           >
             {loading
               ? <ActivityIndicator color="#FFF" />
-              : <Text style={styles.btnText}>Yep, that's it</Text>}
+              : <Text style={styles.btnText}>Verify code</Text>}
           </LinearGradient>
         </TouchableOpacity>
 
@@ -243,22 +225,19 @@ export default function OtpScreen() {
         <TouchableOpacity style={styles.resendRow} onPress={resend} disabled={resendSecs > 0}>
           {resendSecs > 0 ? (
             <Text style={styles.resendWait}>
-              Still nothing? Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
+              Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
             </Text>
           ) : (
-            <Text style={styles.resendActive}>Try again (it's free)</Text>
+            <Text style={styles.resendActive}>Resend code</Text>
           )}
         </TouchableOpacity>
+      </View>
 
-      </Animated.View>
-      </ScrollView>
-
-      {/* ── Safety / welcome modal ── */}
+      {/* Safety / welcome modal */}
       <Modal visible={showSafety} transparent animationType="none" statusBarTranslucent>
         <View style={styles.overlay}>
           <Animated.View style={[styles.safetyCard, { opacity: safetyOp, transform: [{ scale: safetyScale }] }]}>
 
-            {/* Check circle */}
             <View style={styles.checkCircle}>
               <Ionicons name="shield-checkmark" size={34} color="#FFF" />
             </View>
@@ -295,43 +274,43 @@ export default function OtpScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: WHITE,
   },
-  inner: {
+  topSpacer: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 20,
-    paddingBottom: 32,
-    gap: 28,
+    backgroundColor: BG,
+    paddingHorizontal: 28,
   },
-
-  // Back button
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Ping.soft,
+    backgroundColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  brandIcon: {
-    width: 72,
-    height: 72,
+  textBlock: {
+    paddingHorizontal: 28,
+    paddingBottom: 24,
+    gap: 10,
   },
-
-  // Header
-  header: { gap: 8 },
-  title: {
-    fontSize: 26,
+  appName: {
+    fontSize: 52,
+    color: Ping.purpleDim,
+  },
+  headline: {
+    fontSize: 30,
     fontWeight: '800',
     color: TEXT,
-    letterSpacing: -0.6,
+    lineHeight: 38,
+    letterSpacing: -0.5,
+    marginTop: 4,
   },
   subtitle: {
     fontSize: 14,
     color: MUTED,
     lineHeight: 21,
+    maxWidth: 300,
   },
   phoneHighlight: {
     color: PURPLE,
@@ -353,8 +332,35 @@ const styles = StyleSheet.create({
     color: Ping.orange,
     fontWeight: '600',
   },
-
-  // OTP boxes
+  card: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    gap: 14,
+    borderTopWidth: 1,
+    borderColor: Ping.lavender,
+    shadowColor: Ping.purpleDim,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  pill: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Ping.lavender,
+    marginBottom: 6,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT,
+    letterSpacing: -0.3,
+  },
   boxRow: {
     flexDirection: 'row',
     gap: 8,
@@ -375,26 +381,22 @@ const styles = StyleSheet.create({
     borderColor: PURPLE,
     color: Ping.purpleDim,
   },
-
-  // Button
   btn: {
-    height: 56,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
   },
   btnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: WHITE,
     letterSpacing: 0.2,
   },
-
-  // Resend
   resendRow: { alignItems: 'center' },
   resendWait: { fontSize: 14, color: MUTED },
   resendActive: { fontSize: 14, color: PURPLE, fontWeight: '700' },
 
-  // ── Safety modal ──────────────────────────────────────────────────────────────
+  // Safety modal
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(28,16,64,0.55)',
@@ -404,7 +406,7 @@ const styles = StyleSheet.create({
   },
   safetyCard: {
     width: '100%',
-    backgroundColor: BG,
+    backgroundColor: WHITE,
     borderRadius: 32,
     padding: 32,
     alignItems: 'center',
@@ -489,7 +491,7 @@ const styles = StyleSheet.create({
   safetyBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: WHITE,
     letterSpacing: 0.4,
   },
 });
