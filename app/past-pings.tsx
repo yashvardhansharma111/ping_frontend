@@ -3,30 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   FlatList,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { activitiesApi, type Activity } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-
-const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
-  sport:   { icon: 'dumbbell',          color: '#EF4444' },
-  food:    { icon: 'food-fork-drink',   color: '#F97316' },
-  music:   { icon: 'music',             color: '#8B5CF6' },
-  study:   { icon: 'book-open-variant', color: '#3B82F6' },
-  outdoor: { icon: 'walk',              color: '#10B981' },
-  gaming:  { icon: 'gamepad-variant',   color: '#EC4899' },
-  meetup:  { icon: 'account-group',     color: '#7C3AED' },
-  default: { icon: 'flash',             color: Ping.purpleLight },
-};
+import ScreenHeader from '@/components/ScreenHeader';
+import { EmptyState, AppButton } from '@/components/ui';
+import { activityTypeMeta } from '@/constants/activityTypes';
 
 const PAGE_SIZE = 10;
 
@@ -50,7 +38,7 @@ export default function PastPingsScreen() {
   const hasMore = shownCount < all.length;
 
   function renderItem({ item: a }: { item: Activity }) {
-    const cfg = TYPE_CFG[a.type] ?? TYPE_CFG.default;
+    const cfg = activityTypeMeta(a.type);
     const when = new Date(a.expiresAt).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric',
     });
@@ -79,13 +67,11 @@ export default function PastPingsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={c.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: c.text }]}>Past Pings</Text>
-        <View style={{ width: 46 }} />
-      </View>
+      <ScreenHeader
+        title="Past Pings"
+        onBack={() => router.back()}
+        paddingTop={insets.top + 8}
+      />
 
       {loading ? (
         <ActivityIndicator color={Ping.purpleLight} style={{ marginTop: 60 }} />
@@ -94,24 +80,25 @@ export default function PastPingsScreen() {
           data={shown}
           keyExtractor={(item) => item._id}
           renderItem={renderItem}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }, all.length === 0 && { flex: 1 }]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="flash-outline" size={40} color={c.icon} />
-              <Text style={[styles.emptyText, { color: c.textSecondary }]}>No past pings yet</Text>
-            </View>
+            <EmptyState
+              icon="flash-outline"
+              title="No past pings yet"
+              subtitle="Pings you join or create will show up here after they end"
+            />
           }
           ListFooterComponent={
             hasMore ? (
-              <TouchableOpacity
-                style={[styles.loadMoreBtn, { borderColor: c.border }]}
+              <AppButton
+                label="Load more"
+                variant="secondary"
+                size="sm"
+                iconRight="chevron-down"
                 onPress={() => setShownCount((n) => n + PAGE_SIZE)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.loadMoreText, { color: Ping.purpleLight }]}>Load more</Text>
-                <Ionicons name="chevron-down" size={16} color={Ping.purpleLight} />
-              </TouchableOpacity>
+                style={{ marginHorizontal: Spacing.md, marginTop: 12 }}
+              />
             ) : null
           }
         />
@@ -135,23 +122,5 @@ const row = StyleSheet.create({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md, paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: {
-    width: 46, height: 46, borderRadius: 23,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { ...Typography.h3 },
   list: { paddingTop: 12 },
-  empty: { alignItems: 'center', gap: 10, paddingTop: 80 },
-  emptyText: { ...Typography.bodyMed },
-  loadMoreBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    marginHorizontal: Spacing.md, marginTop: 12, marginBottom: 8,
-    height: 44, borderRadius: Radius.md, borderWidth: 1.5,
-  },
-  loadMoreText: { ...Typography.bodySm, fontWeight: '700' },
 });

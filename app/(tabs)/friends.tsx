@@ -12,8 +12,6 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Animated,
-  Dimensions,
-  Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -28,6 +26,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAuthStore from '@/lib/stores/authStore';
 import SuccessToast from '@/components/SuccessToast';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import AppAvatar from '@/components/AppAvatar';
+import { EmptyState } from '@/components/ui';
 
 type Tab = 'received' | 'sent' | 'friends';
 
@@ -38,38 +38,6 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 const TABS: Tab[] = ['received', 'sent', 'friends'];
-
-// ── Avatar helper ─────────────────────────────────────────────────────────────
-function Avatar({ user, size = 52 }: { user: Pick<User, 'displayName' | 'phone' | 'avatarUrl'>; size?: number }) {
-  const initials = ((user.displayName ?? user.phone ?? '?'))
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-  if (user.avatarUrl) {
-    return (
-      <Image
-        source={{ uri: user.avatarUrl }}
-        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `${Ping.purple}33` }}
-      />
-    );
-  }
-  return (
-    <View style={[av.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[av.text, { fontSize: size * 0.34 }]}>{initials}</Text>
-    </View>
-  );
-}
-
-const av = StyleSheet.create({
-  wrap: {
-    backgroundColor: `${Ping.purple}55`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: { color: '#FFF', fontWeight: '700' },
-});
 
 // ── Add Friend Modal ──────────────────────────────────────────────────────────
 function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClose: () => void; onSent: () => void }) {
@@ -174,7 +142,7 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
                 const isLoading = sending === u._id;
                 return (
                   <View key={u._id} style={[m.resultRow, { borderBottomColor: c.border }]}>
-                    <Avatar user={u} size={44} />
+                    <AppAvatar uri={u.avatarUrl} name={u.displayName || u.phone} size={44} />
                     <View style={{ flex: 1 }}>
                       <Text style={[m.resultName, { color: c.text }]} numberOfLines={1}>
                         {u.displayName ?? 'User'}
@@ -288,8 +256,6 @@ const m = StyleSheet.create({
   hintText: { ...Typography.caption, flex: 1 },
 });
 
-const SCREEN_W = Dimensions.get('window').width;
-
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function FriendsScreen() {
   const scheme = useColorScheme() ?? 'dark';
@@ -317,10 +283,6 @@ export default function FriendsScreen() {
     onConfirm: () => {},
   });
 
-  const tabW = (SCREEN_W - Spacing.lg * 2) / 3;
-
-  // Sliding tab underline — value 0..3 maps to tab positions
-  const tabIndicator = useRef(new Animated.Value(0)).current;
   const headerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -331,11 +293,6 @@ export default function FriendsScreen() {
 
   function switchTab(t: Tab) {
     setTab(t);
-    const idx = TABS.indexOf(t);
-    Animated.spring(tabIndicator, {
-      toValue: idx,
-      damping: 18, stiffness: 280, mass: 0.8, useNativeDriver: true,
-    }).start();
     Haptics.selectionAsync();
   }
 
@@ -426,7 +383,7 @@ export default function FriendsScreen() {
           onPress={() => router.push(`/user/${u._id}`)}
           activeOpacity={0.85}
         >
-          <Avatar user={u} size={52} />
+          <AppAvatar uri={u.avatarUrl} name={u.displayName || u.phone} size={52} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
@@ -473,7 +430,7 @@ export default function FriendsScreen() {
           onPress={() => router.push(`/user/${u._id}`)}
           activeOpacity={0.85}
         >
-          <Avatar user={u} size={52} />
+          <AppAvatar uri={u.avatarUrl} name={u.displayName || u.phone} size={52} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
@@ -516,7 +473,7 @@ export default function FriendsScreen() {
           onPress={() => router.push(`/user/${u._id}`)}
           activeOpacity={0.8}
         >
-          <Avatar user={u} size={56} />
+          <AppAvatar uri={u.avatarUrl} name={u.displayName || u.phone} size={56} />
           <View style={styles.info}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>
               {u.displayName ?? 'User'}
@@ -595,7 +552,6 @@ export default function FriendsScreen() {
       >
         <View>
           <View style={styles.titleRow}>
-            <Image source={require('../../assets/images/icon.png')} style={styles.headerIcon} />
             <Text style={[styles.title, { color: c.text }]}>Friends</Text>
           </View>
           <Text style={[styles.titleSub, { color: c.textSecondary }]}>
@@ -613,53 +569,33 @@ export default function FriendsScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 4-tab bar with sliding indicator */}
-      <View style={[styles.tabBar, { borderBottomColor: c.border }]}>
+      {/* Filter pills */}
+      <View style={styles.filterRow}>
         {TABS.map((t) => {
           const isActive = tab === t;
           const badge = t === 'received' && received.length > 0 ? received.length : null;
           return (
             <TouchableOpacity
               key={t}
-              style={[styles.tabItem, { width: tabW }]}
+              style={[
+                styles.chip,
+                { borderColor: c.border, backgroundColor: c.surface },
+                isActive && styles.chipActive,
+              ]}
               onPress={() => switchTab(t)}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
-              <View style={styles.tabLabelRow}>
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: isActive ? c.tint : c.textSecondary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {TAB_LABELS[t]}
-                </Text>
-                {badge !== null && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
-                  </View>
-                )}
-              </View>
+              <Text style={[styles.chipLabel, { color: c.textSecondary }, isActive && styles.chipLabelActive]}>
+                {TAB_LABELS[t]}
+              </Text>
+              {badge !== null && (
+                <View style={[styles.chipBadge, isActive ? styles.chipBadgeActive : { backgroundColor: Ping.purple }]}>
+                  <Text style={styles.chipBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
-
-        {/* Sliding underline pill */}
-        <Animated.View
-          style={[
-            styles.tabUnderline,
-            { backgroundColor: Ping.purple, width: tabW },
-            {
-              transform: [{
-                translateX: tabIndicator.interpolate({
-                  inputRange: [0, 1, 2],
-                  outputRange: [0, tabW, tabW * 2],
-                }),
-              }],
-            },
-          ]}
-        />
       </View>
 
       {loading ? (
@@ -671,25 +607,13 @@ export default function FriendsScreen() {
           contentContainerStyle={[styles.list, currentData.length === 0 && { flex: 1 }]}
           renderItem={({ item, index }) => renderMap[tab]({ item, index })}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}18` }]}>
-                <Ionicons name={EMPTY[tab].icon} size={36} color={c.tint} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: c.text }]}>{EMPTY[tab].title}</Text>
-              <Text style={[styles.emptySub, { color: c.textSecondary }]}>{EMPTY[tab].sub}</Text>
-              {(tab === 'friends' || tab === 'received') && (
-                <TouchableOpacity
-                  style={styles.emptyAddBtn}
-                  onPress={() => setShowAdd(true)}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="person-add" size={16} color="#FFF" />
-                  <Text style={styles.emptyAddText}>
-                    {tab === 'friends' ? 'Add friends' : 'Find people'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <EmptyState
+              icon={EMPTY[tab].icon}
+              title={EMPTY[tab].title}
+              subtitle={EMPTY[tab].sub}
+              actionLabel={tab === 'friends' || tab === 'received' ? (tab === 'friends' ? 'Add friends' : 'Find people') : undefined}
+              onAction={tab === 'friends' || tab === 'received' ? () => setShowAdd(true) : undefined}
+            />
           }
         />
       )}
@@ -742,8 +666,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIcon: { width: 28, height: 28 },
-  title: { ...Typography.h2, fontSize: 26 },
+  title: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5 },
   titleSub: { ...Typography.caption, marginTop: 2 },
   addBtn: {
     width: 42,
@@ -757,31 +680,27 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  tabBar: {
+  filterRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    marginHorizontal: Spacing.lg,
-    position: 'relative',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
   },
-  tabItem: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  tabLabelRow: {
+  chip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1,
   },
-  tabLabel: { ...Typography.bodySm, fontSize: 12.5, fontWeight: '600' },
-  tabUnderline: {
-    position: 'absolute',
-    bottom: -1,
-    left: 0,
-    height: 2,
-    borderRadius: 1,
-  },
-  badge: {
-    backgroundColor: Ping.purple,
+  chipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
+  chipLabel: { ...Typography.bodySm, fontWeight: '600', fontSize: 13 },
+  chipLabelActive: { color: '#FFF' },
+  chipBadge: {
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -789,7 +708,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: {
+  chipBadgeActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
+  chipBadgeText: {
     color: '#FFF',
     fontSize: 10,
     fontWeight: '700',
@@ -873,33 +793,4 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   cancelBtnText: { ...Typography.caption, fontSize: 12, fontWeight: '600' },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: 80,
-  },
-  emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xs,
-  },
-  emptyTitle: { ...Typography.bodyMed, fontSize: 18 },
-  emptySub: { ...Typography.bodySm, textAlign: 'center' },
-  emptyAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Ping.purple,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    borderRadius: Radius.full,
-    marginTop: Spacing.sm,
-  },
-  emptyAddText: { ...Typography.bodySm, color: '#FFF', fontWeight: '700' },
 });

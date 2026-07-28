@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import useThemeStore, { type SchemePreference } from '@/lib/stores/themeStore';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Ping, Spacing, Radius, Typography, Shadow } from '@/constants/theme';
+import ScreenHeader from '@/components/ScreenHeader';
+import { SectionLabel } from '@/components/ui';
 
 const OPTIONS: {
   key: SchemePreference;
@@ -57,17 +59,14 @@ export default function AppearanceScreen() {
 
   return (
     <View style={[s.root, { backgroundColor: c.background }]}>
-      {/* Header */}
-      <View style={[s.header, { paddingTop: insets.top + 8, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={c.text} />
-        </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: c.text }]}>Appearance</Text>
-        <View style={{ width: 46 }} />
-      </View>
+      <ScreenHeader
+        title="Appearance"
+        onBack={() => router.back()}
+        paddingTop={insets.top + 8}
+      />
 
       <View style={[s.content, { paddingBottom: insets.bottom + 40 }]}>
-        <Text style={[s.sectionLabel, { color: c.textSecondary }]}>THEME</Text>
+        <SectionLabel>THEME</SectionLabel>
 
         <View style={[s.card, { backgroundColor: c.surface, borderColor: c.border }, Shadow.sm]}>
           {OPTIONS.map(({ key, label, icon, desc }, i) => {
@@ -112,20 +111,7 @@ export default function AppearanceScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md, paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...Typography.h3 },
   content: { padding: Spacing.lg, gap: Spacing.md },
-  sectionLabel: {
-    ...Typography.caption,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    fontWeight: '700',
-  },
   card: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   row: {
     flexDirection: 'row', alignItems: 'center',

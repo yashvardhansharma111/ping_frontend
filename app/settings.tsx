@@ -6,6 +6,7 @@ import ConfirmSheet from '@/components/ConfirmSheet';
 import ScreenHeader from '@/components/ScreenHeader';
 import AppAvatar from '@/components/AppAvatar';
 import UIRow, { UICard } from '@/components/UIRow';
+import { SectionLabel } from '@/components/ui';
 import useAuthStore from '@/lib/stores/authStore';
 import { authApi } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
@@ -55,9 +56,10 @@ export default function SettingsScreen() {
 
         {/* ── Account ── */}
         <View style={styles.group}>
-          <Text style={[styles.groupLabel, { color: c.textSecondary }]}>Account</Text>
+          <SectionLabel>Account</SectionLabel>
           <UICard>
             <UIRow icon="person-outline" label="Edit Profile" onPress={() => router.push('/edit-profile' as any)} separator />
+            <UIRow icon="diamond-outline" label="Ping Plus" onPress={() => router.push('/subscription' as any)} iconColor={Ping.purple} separator />
             <UIRow icon="flash-outline" label="My Activity" onPress={() => router.push('/my-activity' as any)} separator />
             <UIRow icon="megaphone-outline" label="My Ads" onPress={() => router.push('/ads')} />
           </UICard>
@@ -65,7 +67,7 @@ export default function SettingsScreen() {
 
         {/* ── Preferences ── */}
         <View style={styles.group}>
-          <Text style={[styles.groupLabel, { color: c.textSecondary }]}>Preferences</Text>
+          <SectionLabel>Preferences</SectionLabel>
           <UICard>
             <UIRow icon="color-palette-outline" label="Appearance" onPress={() => router.push('/appearance' as any)} separator />
             <UIRow icon="eye-outline" label="Privacy & Location" onPress={() => router.push('/privacy' as any)} separator />
@@ -75,7 +77,7 @@ export default function SettingsScreen() {
 
         {/* ── Safety ── */}
         <View style={styles.group}>
-          <Text style={[styles.groupLabel, { color: c.textSecondary }]}>Safety</Text>
+          <SectionLabel>Safety</SectionLabel>
           <UICard>
             <UIRow
               icon={
@@ -102,7 +104,7 @@ export default function SettingsScreen() {
 
         {/* ── Legal & About ── */}
         <View style={styles.group}>
-          <Text style={[styles.groupLabel, { color: c.textSecondary }]}>Legal & About</Text>
+          <SectionLabel>Legal & About</SectionLabel>
           <UICard>
             <UIRow icon="document-text-outline" label="Privacy Policy" onPress={() => Linking.openURL('https://pingapp.in/privacy').catch(() => {})} external separator />
             <UIRow icon="clipboard-outline" label="Terms of Service" onPress={() => Linking.openURL('https://pingapp.in/terms').catch(() => {})} external separator />
@@ -169,6 +171,5 @@ const styles = StyleSheet.create({
   editChipText: { ...Typography.caption, fontWeight: '700', fontSize: 12 },
 
   group: { gap: 8 },
-  groupLabel: { ...Typography.label, marginLeft: 4 },
   version: { ...Typography.caption, textAlign: 'center', marginTop: Spacing.xs },
 });

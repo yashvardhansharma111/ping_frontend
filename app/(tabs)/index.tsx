@@ -9,7 +9,6 @@ import {
   Animated,
   Dimensions,
   AppState,
-  ScrollView,
   TextInput,
   Image,
   FlatList,
@@ -25,7 +24,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocation } from '@/hooks/useLocation';
-import { activitiesApi, /*adsApi,*/ usersApi, chatApi, eventsApi, friendsApi, type Activity, /*type Ad,*/ type User, type PingEvent } from '@/lib/api';
+import { activitiesApi, /*adsApi,*/ usersApi, chatApi, friendsApi, type Activity, /*type Ad,*/ type User } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -177,11 +176,8 @@ function PopupCard({
             <Ionicons name="close" size={14} color="#FFF" />
           </TouchableOpacity>
 
-          {/* LIVE / time badge — top left */}
-          <View style={[pc.timeBadge, isLive && pc.timeBadgeLive]}>
-            {isLive && <View style={pc.liveDot} />}
-            <Text style={[pc.timeBadgeText, isLive && pc.timeBadgeTextLive]}>{timeLabel}</Text>
-          </View>
+          {/* live-only green dot — top left */}
+          {isLive && <View style={pc.liveDotBanner} />}
         </View>
 
         {/* ── Body ── */}
@@ -198,8 +194,11 @@ function PopupCard({
             </View>
           </View>
 
-          {/* Title */}
-          <Text style={pc.title} numberOfLines={2}>{activity.title}</Text>
+          {/* Title + time */}
+          <View style={pc.titleRow}>
+            <Text style={[pc.title, { flex: 1 }]} numberOfLines={1}>{activity.title}</Text>
+            <Text style={pc.timeInline}>{timeLabel}</Text>
+          </View>
 
           {/* Location row */}
           {(activity.placeName || distText) && (
@@ -337,37 +336,29 @@ function makePcStyles(isDark: boolean) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    timeBadge: {
+    liveDotBanner: {
       position: 'absolute',
-      top: 10,
-      left: 10,
+      top: 12,
+      left: 12,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: '#22C55E',
+      borderWidth: 1.5,
+      borderColor: 'rgba(255,255,255,0.6)',
+      zIndex: 20,
+    },
+    titleRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 5,
-      backgroundColor: 'rgba(0,0,0,0.42)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.18)',
-      borderRadius: 20,
-      paddingHorizontal: 9,
-      paddingVertical: 4,
+      gap: 8,
     },
-    timeBadgeLive: {
-      backgroundColor: '#DC2626',
-      borderColor: 'rgba(255,255,255,0.35)',
-    },
-    liveDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#EF4444',
-    },
-    timeBadgeText: {
-      color: '#E5E7EB',
+    timeInline: {
       fontSize: 10.5,
       fontWeight: '700',
-      letterSpacing: 0.2,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      flexShrink: 0,
     },
-    timeBadgeTextLive: { color: '#FCA5A5' },
 
     // ── Body ──────────────────────────────────────────────────────────────
     body: {
@@ -838,8 +829,9 @@ function makeSoStyles(isDark: boolean) {
   });
 }
 
-// OpenFreeMap Liberty — beautiful OSM vector tiles, completely free, no API key
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+// Map tile styles — free, no API key required
+const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/liberty';
+const STYLE_DARK  = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const DEFAULT_CENTER: [number, number] = [78.9629, 20.5937]; // India center [lng, lat] — only shown before GPS fix
 const DEFAULT_ZOOM = 5; // zoomed out so it's clearly "loading", not a specific city
 
@@ -885,7 +877,6 @@ export default function MapScreen() {
   const [loaded, setLoaded] = useState(false);
   const [lastLoad, setLastLoad] = useState<Date | null>(null);
   const [showDebug, setShowDebug] = useState(false);
-  const [nearbyEvents, setNearbyEvents] = useState<PingEvent[]>([]);
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [vibeFilter, setVibeFilter] = useState<string>('');
   const [distanceFilter, setDistanceFilter] = useState<number>(0);
@@ -906,6 +897,31 @@ export default function MapScreen() {
   const so = useMemo(() => makeSoStyles(isDark), [isDark]);
   const styles = useMemo(() => makeStyles(isDark), [isDark]);
 
+  // Fetch dark map style once and boost all label layers to full-white with strong halo
+  const [darkStyle, setDarkStyle] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    fetch(STYLE_DARK)
+      .then((r) => r.json())
+      .then((json: any) => {
+        json.layers = json.layers.map((layer: any) => {
+          if (layer.type === 'symbol' && layer.layout?.['text-field']) {
+            return {
+              ...layer,
+              paint: {
+                ...(layer.paint ?? {}),
+                'text-color': '#FFFFFF',
+                'text-halo-color': 'rgba(0,0,0,0.88)',
+                'text-halo-width': 2,
+              },
+            };
+          }
+          return layer;
+        });
+        setDarkStyle(JSON.stringify(json));
+      })
+      .catch(() => {}); // fall back to URL if fetch fails
+  }, []);
+
   useEffect(() => {
     console.log(`[Location] granted=${granted} loading=${locLoading} lat=${coords.latitude.toFixed(5)} lng=${coords.longitude.toFixed(5)}`);
     // Wait for map to be ready — onDidFinishLoadingMap handles the initial fly if GPS arrives first
@@ -922,7 +938,7 @@ export default function MapScreen() {
       console.log(`[Map] Flying to ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)} (moved ${distMoved < Infinity ? distMoved.toFixed(0) + 'm' : 'first fix'})`);
       cameraRef.current?.flyTo({
         center: [coords.longitude, coords.latitude],
-        zoom: 16,
+        zoom: 13,
         duration: 900,
       });
     }
@@ -1098,10 +1114,6 @@ export default function MapScreen() {
     fetchMapPois(coords.latitude, coords.longitude)
       .then((pois) => setMapPois(pois))
       .catch(() => setMapPois([]));
-    // Load nearby events for the banner (non-blocking, best-effort)
-    eventsApi.list({ lat: coords.latitude, lng: coords.longitude, radius: 5000 })
-      .then((data) => setNearbyEvents(data.slice(0, 8)))
-      .catch(() => {});
     pollRef.current = setInterval(() => loadNearby(true), 30_000);
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -1146,7 +1158,7 @@ export default function MapScreen() {
   function recenter() {
     cameraRef.current?.flyTo({
       center: [coords.longitude, coords.latitude],
-      zoom: 16,
+      zoom: 13,
       duration: 600,
     });
   }
@@ -1212,7 +1224,7 @@ export default function MapScreen() {
       <MapLibreMap
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapStyle={STYLE_URL}
+        mapStyle={isDark ? (darkStyle ?? STYLE_DARK) : STYLE_LIGHT}
         onPress={() => {
           if (suppressMapTapRef.current) return;
           if (selected) { setSelected(null); return; }
@@ -1433,7 +1445,7 @@ export default function MapScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Right: count + search + chat */}
+        {/* Right: count + filter + search + chat */}
         <View style={styles.topRight}>
           <View style={styles.countChip}>
             {refreshing ? (
@@ -1455,6 +1467,26 @@ export default function MapScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={[
+              styles.iconChip,
+              (activeFilterCount > 0 || !!typeFilter) && styles.iconChipActive,
+            ]}
+            onPress={openFilterPanel}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={(activeFilterCount > 0 || !!typeFilter)
+                ? (isDark ? Ping.purpleLight : Ping.purple)
+                : (isDark ? '#F1F0FF' : '#1C1040')}
+            />
+            {(activeFilterCount > 0 || !!typeFilter) && (
+              <View style={styles.filterDot} />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.iconChip}
             onPress={() => router.push('/chat')}
             activeOpacity={0.8}
@@ -1463,76 +1495,6 @@ export default function MapScreen() {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* ── Filter toggle pill ── */}
-      <View style={styles.filterToggleRow} pointerEvents="box-none">
-        <TouchableOpacity
-          style={[
-            styles.filterToggleBtn,
-            (activeFilterCount > 0 || typeFilter || showFilterPanel) && styles.filterToggleBtnActive,
-          ]}
-          onPress={openFilterPanel}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="options-outline"
-            size={15}
-            color={(activeFilterCount > 0 || typeFilter)
-              ? (isDark ? Ping.purpleLight : Ping.purple)
-              : (isDark ? '#C0BCDB' : '#5C5670')}
-          />
-          <Text style={[
-            styles.filterToggleText,
-            (activeFilterCount > 0 || typeFilter) && { color: isDark ? Ping.purpleLight : Ping.purple, fontWeight: '700' },
-          ]}>
-            {typeFilter
-              ? (FILTER_TYPES.find(f => f.key === typeFilter)?.label ?? 'Filter')
-              : 'Filter'}
-            {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
-          </Text>
-          {(activeFilterCount > 0 || !!typeFilter) && (
-            <View style={styles.filterActiveDot} />
-          )}
-        </TouchableOpacity>
-
-        {(activeFilterCount > 0 || !!typeFilter) && (
-          <TouchableOpacity
-            style={styles.filterClearPill}
-            onPress={clearAllFilters}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="close" size={13} color={isDark ? '#EBD8FF' : '#6545D9'} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Events banner — horizontal pill strip below filter chips */}
-      {nearbyEvents.length > 0 && (
-        <View style={[styles.eventsBannerRow, { top: Platform.OS === 'ios' ? 155 : 135 }]} pointerEvents="box-none">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.eventsBannerScroll}
-            pointerEvents="box-none"
-          >
-            {nearbyEvents.map((ev) => (
-              <TouchableOpacity
-                key={ev._id}
-                style={styles.eventsPill}
-                onPress={() => router.push('/(tabs)/events')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.eventsPillEmoji}>
-                  {ev.category === 'event' ? '🎟️' : '☕'}
-                </Text>
-                <Text style={styles.eventsPillText} numberOfLines={1}>
-                  {ev.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
 
       {/* Advanced filter panel — floating card */}
       {showFilterPanel && (
@@ -1965,99 +1927,20 @@ function makeStyles(isDark: boolean) {
       elevation: 6,
     },
 
-    // ── Filter toggle pill ────────────────────────────────────────────────────
-    filterToggleRow: {
-      position: 'absolute',
-      top: Platform.OS === 'ios' ? 108 : 90,
-      left: Spacing.md,
-      zIndex: 9,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    filterToggleBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 7,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.96)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(187,146,255,0.22)' : 'rgba(143,99,244,0.18)',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.28,
-      shadowRadius: 8,
-      elevation: 6,
-    },
-    filterToggleBtnActive: {
+    iconChipActive: {
       borderColor: isDark ? Ping.purpleLight : Ping.purple,
-      backgroundColor: isDark ? 'rgba(124,58,237,0.2)' : 'rgba(124,58,237,0.08)',
+      backgroundColor: isDark ? 'rgba(124,58,237,0.22)' : 'rgba(124,58,237,0.1)',
     },
-    filterToggleText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: isDark ? '#C0BCDB' : '#5C5670',
-    },
-    filterActiveDot: {
+    filterDot: {
+      position: 'absolute',
+      top: 9,
+      right: 9,
       width: 6,
       height: 6,
       borderRadius: 3,
       backgroundColor: isDark ? Ping.purpleLight : Ping.purple,
-    },
-    filterClearPill: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.96)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.25)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 5,
-    },
-
-    // ── Events banner ─────────────────────────────────────────────────────────
-    eventsBannerRow: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      zIndex: 8,
-    },
-    eventsBannerScroll: {
-      paddingHorizontal: Spacing.md,
-      gap: 7,
-    },
-    eventsPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 13,
-      paddingVertical: 6,
-      borderRadius: 20,
-      backgroundColor: isDark ? 'rgba(12,12,28,0.88)' : 'rgba(255,255,255,0.95)',
-      borderWidth: 1,
-      borderColor: 'rgba(187,146,255,0.3)',
-      maxWidth: 180,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.22,
-      shadowRadius: 4,
-      elevation: 4,
-    },
-    eventsPillEmoji: {
-      fontSize: 13,
-    },
-    eventsPillText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: isDark ? '#F1F0FF' : '#1A1730',
-      flexShrink: 1,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.9)',
     },
 
     // ── Attribution ───────────────────────────────────────────────────────────
@@ -2079,11 +1962,11 @@ function makeStyles(isDark: boolean) {
       elevation: 24,
       paddingHorizontal: Spacing.md,
       paddingTop: 6,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: isDark ? '#13131F' : '#FFFFFF',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(0,0,0,0.12)',
+      borderColor: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(0,0,0,0.12)',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: 0.15,
@@ -2098,7 +1981,7 @@ function makeStyles(isDark: boolean) {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: 'rgba(0,0,0,0.15)',
+      backgroundColor: isDark ? 'rgba(167,139,250,0.25)' : 'rgba(0,0,0,0.15)',
     },
 
     // ── Floating buttons ──────────────────────────────────────────────────────

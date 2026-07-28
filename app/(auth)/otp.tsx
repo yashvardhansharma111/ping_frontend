@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   ActivityIndicator,
   Animated,
@@ -21,23 +22,22 @@ import { authApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ping, Spacing, Gradients } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const OTP_LENGTH      = 6;
 const RESEND_COOLDOWN = 30;
-
-const BG     = Ping.soft;       // #F3ECFF
-const WHITE  = '#FFFFFF';
-const TEXT   = '#111111';
-const MUTED  = '#6F6866';
-const BORDER = '#E6E1DA';
 const PURPLE = Ping.purple;
 
 export default function OtpScreen() {
   const { phone, debugCode } = useLocalSearchParams<{ phone: string; debugCode: string }>();
-  const insets = useSafeAreaInsets();
-  const [digits, setDigits]       = useState<string[]>(Array(OTP_LENGTH).fill(''));
-  const [loading, setLoading]     = useState(false);
-  const [resendSecs, setResend]   = useState(RESEND_COOLDOWN);
+  const insets  = useSafeAreaInsets();
+  const scheme  = useColorScheme() ?? 'light';
+  const isDark  = scheme === 'dark';
+  const s       = useMemo(() => makeStyles(isDark), [isDark]);
+
+  const [digits, setDigits]         = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [loading, setLoading]       = useState(false);
+  const [resendSecs, setResend]     = useState(RESEND_COOLDOWN);
   const [showSafety, setShowSafety] = useState(false);
   const pendingRoute = useRef<'/(admin)' | '/(auth)/setup' | '/(tabs)'>('/(tabs)');
   const inputs       = useRef<(TextInput | null)[]>([]);
@@ -51,7 +51,7 @@ export default function OtpScreen() {
 
   useEffect(() => {
     if (resendSecs <= 0) return;
-    const t = setTimeout(() => setResend((s) => s - 1), 1000);
+    const t = setTimeout(() => setResend((sec) => sec - 1), 1000);
     return () => clearTimeout(t);
   }, [resendSecs]);
 
@@ -138,132 +138,139 @@ export default function OtpScreen() {
 
   const filled      = digits.filter(Boolean).length;
   const maskedPhone = phone ? `${phone.slice(0, 3)} *** *** ${phone.slice(-2)}` : '';
+  const textColor   = isDark ? '#F1F0FF' : '#111111';
+  const mutedColor  = isDark ? '#9490C0' : '#6F6866';
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={s.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Lavender top spacer */}
-      <View style={[styles.topSpacer, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="arrow-back" size={20} color={TEXT} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Text block */}
-      <View style={styles.textBlock}>
-        <Text style={[
-          styles.appName,
-          fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
-        ]}>
-          Ping
-        </Text>
-        <Text style={styles.headline}>
-          Look at your phone{'\n'}for once.
-        </Text>
-        <Text style={styles.subtitle}>
-          A 6-digit code is waiting in your messages.{' '}
-          <Text style={styles.phoneHighlight}>{maskedPhone}</Text>
-        </Text>
-        {debugCode ? (
-          <View style={styles.debugBadge}>
-            <Ionicons name="construct-outline" size={11} color={Ping.orange} />
-            <Text style={styles.debugText}>Dev code: {debugCode}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Card */}
-      <View style={[styles.card, { paddingBottom: insets.bottom + 20 }]}>
-        <View style={styles.pill} />
-
-        <Text style={styles.cardTitle}>Enter the 6-digit code</Text>
-
-        {/* OTP boxes */}
-        <View style={styles.boxRow}>
-          {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-            <View key={i} style={styles.boxWrap}>
-              <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boxAnims[i] }] }]}>
-                <TextInput
-                  ref={(el) => { inputs.current[i] = el; }}
-                  style={[styles.box, digits[i] ? styles.boxFilled : null]}
-                  value={digits[i]}
-                  onChangeText={(v) => handleDigit(i, v)}
-                  onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') handleBackspace(i); }}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  textAlign="center"
-                  autoFocus={i === 0}
-                  selectionColor={PURPLE}
-                />
-              </Animated.View>
-            </View>
-          ))}
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Top spacer */}
+        <View style={[s.topSpacer, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="arrow-back" size={20} color={textColor} />
+          </TouchableOpacity>
         </View>
 
-        {/* Verify button */}
-        <TouchableOpacity
-          onPress={() => { Keyboard.dismiss(); verifyOtp(); }}
-          disabled={filled < OTP_LENGTH || loading}
-          activeOpacity={0.88}
-          style={{ borderRadius: 9999, overflow: 'hidden', opacity: filled < OTP_LENGTH ? 0.45 : 1 }}
-        >
-          <LinearGradient
-            colors={[...Gradients.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.btn}
-          >
-            {loading
-              ? <ActivityIndicator color="#FFF" />
-              : <Text style={styles.btnText}>Verify code</Text>}
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* Text block */}
+        <View style={s.textBlock}>
+          <Text style={[
+            s.appName,
+            fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+          ]}>
+            Ping
+          </Text>
+          <Text style={s.headline}>
+            Look at your phone{'\n'}for once.
+          </Text>
+          <Text style={s.subtitle}>
+            A 6-digit code is waiting in your messages.{' '}
+            <Text style={s.phoneHighlight}>{maskedPhone}</Text>
+          </Text>
+          {debugCode ? (
+            <View style={s.debugBadge}>
+              <Ionicons name="construct-outline" size={11} color={Ping.orange} />
+              <Text style={s.debugText}>Dev code: {debugCode}</Text>
+            </View>
+          ) : null}
+        </View>
 
-        {/* Resend */}
-        <TouchableOpacity style={styles.resendRow} onPress={resend} disabled={resendSecs > 0}>
-          {resendSecs > 0 ? (
-            <Text style={styles.resendWait}>
-              Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
-            </Text>
-          ) : (
-            <Text style={styles.resendActive}>Resend code</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+        {/* Card */}
+        <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={s.pill} />
+
+          <Text style={s.cardTitle}>Enter the 6-digit code</Text>
+
+          {/* OTP boxes */}
+          <View style={s.boxRow}>
+            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+              <View key={i} style={s.boxWrap}>
+                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boxAnims[i] }] }]}>
+                  <TextInput
+                    ref={(el) => { inputs.current[i] = el; }}
+                    style={[s.box, digits[i] ? s.boxFilled : null]}
+                    value={digits[i]}
+                    onChangeText={(v) => handleDigit(i, v)}
+                    onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') handleBackspace(i); }}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    textAlign="center"
+                    autoFocus={i === 0}
+                    selectionColor={PURPLE}
+                  />
+                </Animated.View>
+              </View>
+            ))}
+          </View>
+
+          {/* Verify button */}
+          <TouchableOpacity
+            onPress={() => { Keyboard.dismiss(); verifyOtp(); }}
+            disabled={filled < OTP_LENGTH || loading}
+            activeOpacity={0.88}
+            style={{ borderRadius: 9999, overflow: 'hidden', opacity: filled < OTP_LENGTH ? 0.45 : 1 }}
+          >
+            <LinearGradient
+              colors={[...Gradients.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.btn}
+            >
+              {loading
+                ? <ActivityIndicator color="#FFF" />
+                : <Text style={s.btnText}>Verify code</Text>}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Resend */}
+          <TouchableOpacity style={s.resendRow} onPress={resend} disabled={resendSecs > 0}>
+            {resendSecs > 0 ? (
+              <Text style={s.resendWait}>
+                Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
+              </Text>
+            ) : (
+              <Text style={s.resendActive}>Resend code</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
       {/* Safety / welcome modal */}
       <Modal visible={showSafety} transparent animationType="none" statusBarTranslucent>
-        <View style={styles.overlay}>
-          <Animated.View style={[styles.safetyCard, { opacity: safetyOp, transform: [{ scale: safetyScale }] }]}>
-
-            <View style={styles.checkCircle}>
+        <View style={s.overlay}>
+          <Animated.View style={[s.safetyCard, { opacity: safetyOp, transform: [{ scale: safetyScale }] }]}>
+            <View style={s.checkCircle}>
               <Ionicons name="shield-checkmark" size={34} color="#FFF" />
             </View>
 
-            <Text style={styles.safetyTitle}>You made it.</Text>
-            <Text style={styles.safetySub}>We keep your stuff private. You're welcome.</Text>
+            <Text style={s.safetyTitle}>You made it.</Text>
+            <Text style={s.safetySub}>We keep your stuff private. You're welcome.</Text>
 
-            <View style={styles.trustList}>
+            <View style={s.trustList}>
               {[
                 { icon: 'lock-closed-outline' as const, text: 'Your number is encrypted and never shared' },
                 { icon: 'eye-off-outline' as const,     text: 'Your profile is only visible to people you allow' },
                 { icon: 'people-outline' as const,      text: 'Meet verified, real people only' },
-              ].map((item, i) => (
-                <View key={i} style={styles.trustItem}>
-                  <View style={styles.trustIconWrap}>
+              ].map((item, idx) => (
+                <View key={idx} style={s.trustItem}>
+                  <View style={s.trustIconWrap}>
                     <Ionicons name={item.icon} size={16} color={PURPLE} />
                   </View>
-                  <Text style={styles.trustItemText}>{item.text}</Text>
+                  <Text style={s.trustItemText}>{item.text}</Text>
                 </View>
               ))}
             </View>
 
-            <TouchableOpacity style={styles.safetyBtn} onPress={dismissSafety} activeOpacity={0.88}>
-              <Text style={styles.safetyBtnText}>Let's go  →</Text>
+            <TouchableOpacity style={s.safetyBtn} onPress={dismissSafety} activeOpacity={0.88}>
+              <Text style={s.safetyBtnText}>Let's go  →</Text>
             </TouchableOpacity>
-
           </Animated.View>
         </View>
       </Modal>
@@ -271,227 +278,136 @@ export default function OtpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: WHITE,
-  },
-  topSpacer: {
-    flex: 1,
-    backgroundColor: BG,
-    paddingHorizontal: 28,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textBlock: {
-    paddingHorizontal: 28,
-    paddingBottom: 24,
-    gap: 10,
-  },
-  appName: {
-    fontSize: 52,
-    color: Ping.purpleDim,
-  },
-  headline: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: TEXT,
-    lineHeight: 38,
-    letterSpacing: -0.5,
-    marginTop: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: MUTED,
-    lineHeight: 21,
-    maxWidth: 300,
-  },
-  phoneHighlight: {
-    color: PURPLE,
-    fontWeight: '700',
-  },
-  debugBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(249,115,22,0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  debugText: {
-    fontSize: 11,
-    color: Ping.orange,
-    fontWeight: '600',
-  },
-  card: {
-    backgroundColor: WHITE,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 28,
-    paddingTop: 16,
-    gap: 14,
-    borderTopWidth: 1,
-    borderColor: Ping.lavender,
-    shadowColor: Ping.purpleDim,
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  pill: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Ping.lavender,
-    marginBottom: 6,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT,
-    letterSpacing: -0.3,
-  },
-  boxRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  boxWrap: { flex: 1, height: 58 },
-  box: {
-    flex: 1,
-    borderRadius: 14,
-    backgroundColor: Ping.soft,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    fontSize: 24,
-    fontWeight: '800',
-    color: TEXT,
-  },
-  boxFilled: {
-    backgroundColor: 'rgba(187,146,255,0.16)',
-    borderColor: PURPLE,
-    color: Ping.purpleDim,
-  },
-  btn: {
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: WHITE,
-    letterSpacing: 0.2,
-  },
-  resendRow: { alignItems: 'center' },
-  resendWait: { fontSize: 14, color: MUTED },
-  resendActive: { fontSize: 14, color: PURPLE, fontWeight: '700' },
+function makeStyles(isDark: boolean) {
+  const bg      = isDark ? '#0F0F12' : '#FFFFFF';
+  const surface = isDark ? '#1A1A24' : '#FFFFFF';
+  const text    = isDark ? '#F1F0FF' : '#111111';
+  const muted   = isDark ? '#9490C0' : '#6F6866';
+  const border  = isDark ? 'rgba(167,139,250,0.18)' : '#E6E1DA';
+  const inputBg = isDark ? 'rgba(255,255,255,0.05)' : Ping.soft;
 
-  // Safety modal
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(28,16,64,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.lg,
-  },
-  safetyCard: {
-    width: '100%',
-    backgroundColor: WHITE,
-    borderRadius: 32,
-    padding: 32,
-    alignItems: 'center',
-    gap: 16,
-    shadowColor: '#1C1040',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
-    shadowRadius: 32,
-    elevation: 20,
-  },
-  checkCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: PURPLE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: PURPLE,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 8,
-    marginBottom: 4,
-  },
-  safetyTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: TEXT,
-    letterSpacing: -0.6,
-  },
-  safetySub: {
-    fontSize: 14,
-    color: MUTED,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: -4,
-  },
-  trustList: {
-    width: '100%',
-    gap: 10,
-    marginTop: 4,
-  },
-  trustItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#F7F5FF',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.08)',
-  },
-  trustIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(124,58,237,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trustItemText: {
-    flex: 1,
-    fontSize: 13,
-    color: TEXT,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  safetyBtn: {
-    backgroundColor: PURPLE,
-    borderRadius: 9999,
-    height: 54,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-    shadowColor: PURPLE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.26,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  safetyBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: WHITE,
-    letterSpacing: 0.4,
-  },
-});
+  return StyleSheet.create({
+    root:  { flex: 1, backgroundColor: bg },
+    scroll: { flexGrow: 1 },
+    topSpacer: { flex: 1, paddingHorizontal: 28 },
+    backBtn: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    textBlock: { paddingHorizontal: 28, paddingBottom: 24, gap: 10 },
+    appName: { fontSize: 52, color: Ping.purpleDim },
+    headline: {
+      fontSize: 30, fontWeight: '800', color: text,
+      lineHeight: 38, letterSpacing: -0.5, marginTop: 4,
+    },
+    subtitle: { fontSize: 14, color: muted, lineHeight: 21, maxWidth: 300 },
+    phoneHighlight: { color: PURPLE, fontWeight: '700' },
+    debugBadge: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(249,115,22,0.1)',
+      paddingHorizontal: 10, paddingVertical: 4,
+      borderRadius: 8, marginTop: 4,
+    },
+    debugText: { fontSize: 11, color: Ping.orange, fontWeight: '600' },
+    card: {
+      backgroundColor: surface,
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      paddingHorizontal: 28,
+      paddingTop: 16,
+      gap: 14,
+      borderTopWidth: 1,
+      borderColor: isDark ? 'rgba(167,139,250,0.14)' : Ping.lavender,
+      shadowColor: Ping.purpleDim,
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: isDark ? 0.3 : 0.1,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    pill: {
+      alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(167,139,250,0.35)' : Ping.lavender,
+      marginBottom: 6,
+    },
+    cardTitle: { fontSize: 18, fontWeight: '700', color: text, letterSpacing: -0.3 },
+    boxRow:  { flexDirection: 'row', gap: 8 },
+    boxWrap: { flex: 1, height: 58 },
+    box: {
+      flex: 1, borderRadius: 14,
+      backgroundColor: inputBg,
+      borderWidth: 1.5, borderColor: border,
+      fontSize: 24, fontWeight: '800', color: text,
+    },
+    boxFilled: {
+      backgroundColor: 'rgba(187,146,255,0.16)',
+      borderColor: PURPLE,
+      color: Ping.purpleDim,
+    },
+    btn: { height: 54, alignItems: 'center', justifyContent: 'center' },
+    btnText: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: 0.2 },
+    resendRow:    { alignItems: 'center' },
+    resendWait:   { fontSize: 14, color: muted },
+    resendActive: { fontSize: 14, color: PURPLE, fontWeight: '700' },
+
+    // Safety modal
+    overlay: {
+      flex: 1,
+      backgroundColor: isDark ? 'rgba(0,0,0,0.75)' : 'rgba(28,16,64,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: Spacing.lg,
+    },
+    safetyCard: {
+      width: '100%',
+      backgroundColor: surface,
+      borderRadius: 32,
+      padding: 32,
+      alignItems: 'center',
+      gap: 16,
+      borderWidth: isDark ? 1 : 0,
+      borderColor: 'rgba(167,139,250,0.14)',
+      shadowColor: isDark ? PURPLE : '#1C1040',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: isDark ? 0.25 : 0.14,
+      shadowRadius: 32,
+      elevation: 20,
+    },
+    checkCircle: {
+      width: 76, height: 76, borderRadius: 38,
+      backgroundColor: PURPLE,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: PURPLE,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.28, shadowRadius: 16, elevation: 8,
+      marginBottom: 4,
+    },
+    safetyTitle: { fontSize: 26, fontWeight: '800', color: text, letterSpacing: -0.6 },
+    safetySub:   { fontSize: 14, color: muted, textAlign: 'center', lineHeight: 20, marginTop: -4 },
+    trustList:   { width: '100%', gap: 10, marginTop: 4 },
+    trustItem: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : '#F7F5FF',
+      borderRadius: 14, padding: 12,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(124,58,237,0.18)' : 'rgba(124,58,237,0.08)',
+    },
+    trustIconWrap: {
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: 'rgba(124,58,237,0.1)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    trustItemText: { flex: 1, fontSize: 13, color: text, lineHeight: 18, fontWeight: '500' },
+    safetyBtn: {
+      backgroundColor: PURPLE, borderRadius: 9999,
+      height: 54, width: '100%',
+      alignItems: 'center', justifyContent: 'center',
+      marginTop: 4,
+      shadowColor: PURPLE,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.26, shadowRadius: 14, elevation: 6,
+    },
+    safetyBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: 0.4 },
+  });
+}

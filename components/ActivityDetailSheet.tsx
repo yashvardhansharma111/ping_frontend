@@ -170,6 +170,8 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 
   const [joining, setJoining] = useState(false);
   const [joinToast, setJoinToast] = useState(false);
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false);
+  const [soloAcked, setSoloAcked] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [leavingQuietly, setLeavingQuietly] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -506,9 +508,13 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
           activeOpacity={0.75}
         >
           <View style={[styles.creatorAvatar, { backgroundColor: `${Ping.purple}44` }]}>
-            <Text style={styles.creatorInitial}>
-              {a.creator.displayName[0].toUpperCase()}
-            </Text>
+            {a.creator.avatarUrl ? (
+              <Image source={{ uri: a.creator.avatarUrl }} style={styles.creatorAvatarImg} />
+            ) : (
+              <Text style={styles.creatorInitial}>
+                {a.creator.displayName[0].toUpperCase()}
+              </Text>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.creatorName, { color: c.text }]}>{a.creator.displayName}</Text>
@@ -648,21 +654,35 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       <View style={styles.actionsGrid}>
         {/* Not joined yet */}
         {!isJoined && !isCreator && (
-          <TouchableOpacity
-            style={[styles.btnPrimary, isExpired && styles.btnDisabled]}
-            onPress={handleJoin}
-            disabled={joining || isExpired}
-            activeOpacity={0.85}
-          >
-            {joining ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="add-circle" size={18} color="#FFF" />
-                <Text style={styles.btnPrimaryText}>{isExpired ? 'Ping Ended' : 'Join Ping'}</Text>
-              </>
+          <>
+            <TouchableOpacity
+              style={[styles.btnPrimary, isExpired && styles.btnDisabled]}
+              onPress={() => setShowJoinConfirm(true)}
+              disabled={joining || isExpired}
+              activeOpacity={0.85}
+            >
+              {joining ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="add-circle" size={18} color="#FFF" />
+                  <Text style={styles.btnPrimaryText}>{isExpired ? 'Ping Ended' : 'Join Ping'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {!isExpired && (
+              <View style={styles.safetyNotice}>
+                <Ionicons name="shield-checkmark" size={15} color="#F59E0B" style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={styles.safetyNoticeTitle}>1 registration = 1 person only</Text>
+                  <Text style={styles.safetyNoticeBody}>
+                    Bringing uninvited guests is a violation of Ping's community guidelines. If we detect attendance fraud — extra people joining under one registration — your account will be permanently suspended without appeal.
+                  </Text>
+                </View>
+              </View>
             )}
-          </TouchableOpacity>
+          </>
         )}
 
         {/* Joined actions */}
@@ -899,7 +919,10 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
           { label: 'Felt unsafe',           reason: 'unsafe' },
           { label: 'Spam',                  reason: 'spam' },
           { label: 'Fake activity',         reason: 'fake' },
-        ] as const).map(({ label, reason }) => (
+          ...((isJoined || isCreator) && new Date(a.startsAt) <= new Date()
+            ? [{ label: 'Attendance fraud — extra people showed up', reason: 'attendance_fraud' }]
+            : []),
+        ] as { label: string; reason: string }[]).map(({ label, reason }) => (
           <TouchableOpacity
             key={reason}
             style={rpt.option}
@@ -916,6 +939,68 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
         ))}
         <TouchableOpacity style={rpt.cancelBtn} onPress={() => setShowReport(false)} activeOpacity={0.8}>
           <Text style={rpt.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+
+    {/* Join confirmation — solo acknowledgement */}
+    <Modal
+      visible={showJoinConfirm}
+      transparent
+      animationType="slide"
+      onRequestClose={() => { setShowJoinConfirm(false); setSoloAcked(false); }}
+      statusBarTranslucent
+    >
+      <TouchableOpacity
+        style={rpt.backdrop}
+        activeOpacity={1}
+        onPress={() => { setShowJoinConfirm(false); setSoloAcked(false); }}
+      />
+      <View style={rpt.sheet}>
+        <View style={rpt.handle} />
+        <View style={[rpt.iconWrap, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+          <Ionicons name="warning" size={22} color="#F59E0B" />
+        </View>
+        <Text style={rpt.title}>Before you join</Text>
+
+        {/* Checkbox row */}
+        <TouchableOpacity
+          style={jc.checkRow}
+          activeOpacity={0.75}
+          onPress={() => setSoloAcked((v) => !v)}
+        >
+          <View style={[jc.checkbox, soloAcked && jc.checkboxChecked]}>
+            {soloAcked && <Ionicons name="checkmark" size={14} color="#FFF" />}
+          </View>
+          <Text style={jc.checkLabel}>
+            I confirm I will attend this ping alone. I will not bring any uninvited guests.
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={jc.warningBody}>
+          Bringing extra people is a violation of Ping's community guidelines and may result in permanent account suspension.
+        </Text>
+
+        {/* Buttons */}
+        <TouchableOpacity
+          style={[rpt.cancelBtn, { marginTop: 12 }]}
+          onPress={() => { setShowJoinConfirm(false); setSoloAcked(false); }}
+          activeOpacity={0.8}
+        >
+          <Text style={rpt.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[jc.confirmBtn, !soloAcked && jc.confirmBtnDisabled]}
+          disabled={!soloAcked}
+          activeOpacity={0.85}
+          onPress={() => {
+            setShowJoinConfirm(false);
+            setSoloAcked(false);
+            handleJoin();
+          }}
+        >
+          <Text style={jc.confirmBtnText}>Confirm &amp; Join</Text>
         </TouchableOpacity>
       </View>
     </Modal>
@@ -1069,7 +1154,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  creatorAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   creatorInitial: { color: '#FFF', fontWeight: '700', fontSize: 14 },
   creatorName: { ...Typography.bodyMed, fontSize: 14 },
   creatorLabel: { ...Typography.caption, marginTop: 1 },
@@ -1130,6 +1217,27 @@ const styles = StyleSheet.create({
   },
   soloText: { ...Typography.bodySm, flex: 1, lineHeight: 18 },
   actionsGrid: { gap: Spacing.sm },
+  safetyNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(245,158,11,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.22)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  safetyNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#F59E0B',
+    letterSpacing: 0.1,
+  },
+  safetyNoticeBody: {
+    fontSize: 11.5,
+    color: 'rgba(245,158,11,0.75)',
+    lineHeight: 17,
+  },
   btnPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1273,5 +1381,74 @@ const rpt = StyleSheet.create({
     color: 'rgba(241,240,255,0.6)',
     fontSize: 15,
     fontWeight: '600',
+  },
+});
+
+// ── Join confirm modal styles ─────────────────────────────────────────────────
+
+const jc = StyleSheet.create({
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(167,139,250,0.1)',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(167,139,250,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: Ping.purple,
+    borderColor: Ping.purple,
+  },
+  checkLabel: {
+    flex: 1,
+    color: '#F1F0FF',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  warningBody: {
+    color: 'rgba(245,158,11,0.8)',
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.sm,
+    marginTop: 12,
+  },
+  confirmBtn: {
+    marginTop: 8,
+    width: '100%',
+    height: 50,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  confirmBtnDisabled: {
+    backgroundColor: '#3A3A5C',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  confirmBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

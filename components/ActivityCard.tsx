@@ -154,6 +154,53 @@ function initials(name?: string) {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
 }
 
+// ── Scrolling ticker for long creator names ───────────────────────────────────
+
+function TickerText({ text, color, style }: { text: string; color: string; style?: any }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const containerW = useRef(0);
+  const naturalW = useRef(0);
+  const started = useRef(false);
+
+  function tryStart() {
+    if (started.current || containerW.current === 0 || naturalW.current === 0) return;
+    const overflow = naturalW.current - containerW.current;
+    if (overflow <= 2) return;
+    started.current = true;
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(1200),
+        Animated.timing(translateX, {
+          toValue: -overflow,
+          duration: Math.max(overflow * 30, 1400),
+          useNativeDriver: true,
+        }),
+        Animated.delay(800),
+        Animated.timing(translateX, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    ).start();
+  }
+
+  return (
+    <View
+      style={{ maxWidth: 110, flexShrink: 1, overflow: 'hidden' }}
+      onLayout={(e) => { containerW.current = e.nativeEvent.layout.width; tryStart(); }}
+    >
+      {/* Absolutely-positioned ghost text — measures natural (unconstrained) width */}
+      <Text
+        style={[style, { position: 'absolute', opacity: 0 }]}
+        numberOfLines={1}
+        onLayout={(e) => { naturalW.current = e.nativeEvent.layout.width; tryStart(); }}
+      >
+        {text}
+      </Text>
+      <Animated.Text style={[style, { color, transform: [{ translateX }] }]} numberOfLines={1}>
+        {text}
+      </Animated.Text>
+    </View>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -301,30 +348,24 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
         <View style={styles.main}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, { color: ink }]} numberOfLines={1}>{a.title}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-              <Text style={[styles.statusText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
-            </View>
-            {isJoined ? (
-              <View style={[styles.checkWrap, { backgroundColor: mist }]}>
-                <CheckCircle size={16} color={accent} weight="fill" />
-              </View>
+            {timeStatus === 'live' && <View style={styles.liveDot} />}
+            {a.creator?.displayName ? (
+              <TickerText
+                text={`by ${a.creator.displayName}`}
+                color={muted}
+                style={styles.creatorInline}
+              />
             ) : null}
           </View>
 
           <View style={styles.meta}>
             <CalendarBlank size={12} color={muted} weight="bold" />
             <Text style={[styles.metaText, { color: muted }]}>
-              {timeStatus === 'live' ? 'Live now' : formatDateShort(a.startsAt)}
+              {formatDateShort(a.startsAt)}
               {'  ·  '}
               {count}{a.maxParticipants ? `/${a.maxParticipants}` : ''}
             </Text>
           </View>
-
-          {a.creator?.displayName ? (
-            <Text style={[styles.creator, { color: muted }]} numberOfLines={1}>
-              by {a.creator.displayName}
-            </Text>
-          ) : null}
         </View>
       </View>
 
@@ -490,22 +531,15 @@ const styles = StyleSheet.create({
     flex: 1,
     letterSpacing: -0.2,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
   },
-  statusText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  checkWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
+  creatorInline: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   meta: {
     flexDirection: 'row',
@@ -513,10 +547,6 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   metaText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  creator: {
     fontSize: 12,
     fontWeight: '500',
   },

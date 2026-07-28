@@ -80,17 +80,22 @@ function EventPosterCard({
 
   const scale = scrollX.interpolate({
     inputRange,
-    outputRange: [0.86, 1, 0.86],
+    outputRange: [0.78, 1, 0.78],
     extrapolate: 'clamp',
   });
   const opacity = scrollX.interpolate({
     inputRange,
-    outputRange: [0.45, 1, 0.45],
+    outputRange: [0.55, 1, 0.55],
+    extrapolate: 'clamp',
+  });
+  const translateY = scrollX.interpolate({
+    inputRange,
+    outputRange: [28, 0, 28],
     extrapolate: 'clamp',
   });
 
   return (
-    <Animated.View style={[card.wrap, { transform: [{ scale }], opacity }]}>
+    <Animated.View style={[card.wrap, { transform: [{ scale }, { translateY }], opacity }]}>
       <View style={[card.inner, !isDark && card.innerLight]}>
         <View style={card.imageArea}>
           {item.imageUrl ? (
@@ -308,18 +313,16 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
       paddingTop: 8,
       paddingBottom: 14,
     },
-    kicker: {
-      color: c.textSecondary,
-      fontSize: 12,
-      fontWeight: '600',
-      letterSpacing: 1.2,
-      textTransform: 'uppercase',
-    },
     title: {
       color: c.text,
       fontSize: 28,
-      fontWeight: '800',
+      fontWeight: '700',
       letterSpacing: -0.5,
+    },
+    subtitle: {
+      color: c.textSecondary,
+      fontSize: 12,
+      fontWeight: '400',
       marginTop: 2,
     },
     livePill: {
@@ -348,20 +351,23 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
     filters: {
       flexDirection: 'row',
       paddingHorizontal: Spacing.lg,
+      paddingTop: 8,
+      paddingBottom: 12,
       gap: 8,
-      marginBottom: 8,
     },
     chip: {
-      paddingHorizontal: 16,
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
       paddingVertical: 8,
       borderRadius: Radius.full,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : c.surface,
+      backgroundColor: c.surface,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : c.border,
+      borderColor: c.border,
     },
     chipOn: {
-      backgroundColor: isDark ? 'rgba(167,139,250,0.18)' : 'rgba(124,58,237,0.1)',
-      borderColor: isDark ? 'rgba(167,139,250,0.45)' : 'rgba(124,58,237,0.35)',
+      backgroundColor: Ping.purple,
+      borderColor: Ping.purple,
     },
     chipText: {
       color: c.textSecondary,
@@ -369,7 +375,7 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
       fontWeight: '600',
     },
     chipTextOn: {
-      color: isDark ? '#E9E5FF' : Ping.purple,
+      color: '#FFF',
     },
     center: {
       flex: 1,
@@ -384,6 +390,7 @@ function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
     carouselBlock: {
       flex: 1,
       justifyContent: 'center',
+      paddingTop: 12,
       paddingBottom: 100,
     },
     meta: {
@@ -479,9 +486,17 @@ export default function EventsScreen() {
     ]).start();
   }, [activeIndex]);
 
+  // Pad data so adjacent cards always peek on both sides
+  const padded = useMemo(() => {
+    if (events.length === 0) return [];
+    if (events.length === 1) return [events[0], events[0], events[0]];
+    if (events.length === 2) return [events[0], events[1], events[0], events[1]];
+    return events;
+  }, [events]);
+
   function onMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
-    const clamped = Math.max(0, Math.min(events.length - 1, idx));
+    const clamped = Math.max(0, Math.min(padded.length - 1, idx));
     if (clamped !== activeIndex) {
       setActiveIndex(clamped);
       Haptics.selectionAsync();
@@ -498,7 +513,9 @@ export default function EventsScreen() {
     });
   }
 
-  const active = events[activeIndex];
+  // Map padded index back to real event index for meta + dots
+  const realIndex = events.length ? activeIndex % events.length : 0;
+  const active = events[realIndex];
   const metaIcon = c.textSecondary;
 
   return (
@@ -507,8 +524,8 @@ export default function EventsScreen() {
 
       <View style={scr.header}>
         <View>
-          <Text style={scr.kicker}>Discover</Text>
           <Text style={scr.title}>Events</Text>
+          <Text style={scr.subtitle}>Discover what's on near you</Text>
         </View>
         <View style={scr.livePill}>
           <View style={scr.liveDot} />
@@ -543,8 +560,10 @@ export default function EventsScreen() {
         <View style={scr.carouselBlock}>
           <Animated.FlatList
             ref={listRef as any}
-            data={events}
-            keyExtractor={(e) => e._id}
+            data={padded}
+            keyExtractor={(_, idx) => `card-${idx}`}
+            initialScrollIndex={events.length === 1 ? 1 : 0}
+            getItemLayout={(_, index) => ({ length: CARD_W, offset: CARD_W * index, index })}
             horizontal
             showsHorizontalScrollIndicator={false}
             snapToInterval={CARD_W}
@@ -601,7 +620,7 @@ export default function EventsScreen() {
             ) : null}
           </Animated.View>
 
-          <Dots count={Math.min(events.length, 8)} active={Math.min(activeIndex, 7)} isDark={isDark} />
+          <Dots count={Math.min(events.length, 8)} active={Math.min(realIndex, 7)} isDark={isDark} />
         </View>
       )}
     </View>

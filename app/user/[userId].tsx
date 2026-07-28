@@ -12,9 +12,12 @@ import {
   FlatList,
   Platform,
   PanResponder,
+  Animated,
+  Linking,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import PaywallModal from '@/components/PaywallModal';
 import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,9 +95,14 @@ function PhotoCarousel({
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
         renderItem={({ item }) => (
-          <Image source={{ uri: item }} style={[pc.photo, { height }]} resizeMode="cover" />
+          <View style={[pc.photoWrap, { height }]}>
+            {/* Blurred fill — same photo scaled to cover the slot */}
+            <Image source={{ uri: item }} style={StyleSheet.absoluteFillObject} resizeMode="cover" blurRadius={22} />
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
+            {/* Crisp photo on top */}
+            <Image source={{ uri: item }} style={pc.photoContain} resizeMode="contain" />
+          </View>
         )}
-        keyExtractor={(_, i) => String(i)}
       />
       {photos.length > 1 && (
         <View style={pc.dots}>
@@ -109,7 +117,9 @@ function PhotoCarousel({
 
 const pc = StyleSheet.create({
   wrap: { width: SCREEN_W },
+  photoWrap: { width: SCREEN_W, overflow: 'hidden' },
   photo: { width: SCREEN_W },
+  photoContain: { width: SCREEN_W, flex: 1 },
   single: { width: SCREEN_W, alignItems: 'center', justifyContent: 'center' },
   initials: { fontSize: 80, fontWeight: '800', color: '#FFF' },
   dots: {
@@ -124,6 +134,31 @@ const pc = StyleSheet.create({
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
   dotActive: { backgroundColor: '#FFF', width: 16 },
 });
+
+// ── Swipe-up hint (blinking) ─────────────────────────────────────────────────
+
+function SwipeHint() {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.2, duration: 650, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1,   duration: 650, useNativeDriver: true }),
+        Animated.delay(300),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ alignSelf: 'center', alignItems: 'center', gap: 2, opacity }}>
+      <Ionicons name="chevron-up" size={14} color="rgba(255,255,255,0.7)" />
+      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>
+        Swipe up · Full profile
+      </Text>
+    </Animated.View>
+  );
+}
 
 // ── Glass card (detail) ──────────────────────────────────────────────────────
 
@@ -156,6 +191,32 @@ const glass = StyleSheet.create({
     backgroundColor: Platform.OS === 'ios' ? 'rgba(0,0,0,0.32)' : 'transparent',
   },
 });
+
+// ── Social icon button ───────────────────────────────────────────────────────
+
+type SocialItem = { label: string; color: string; url: string | null };
+
+function SocialBtn({ link }: { link: SocialItem }) {
+  const active = !!link.url;
+  return (
+    <TouchableOpacity
+      onPress={active ? () => Linking.openURL(link.url!) : undefined}
+      style={[gal.socialBtn, !active && { opacity: 0.22 }]}
+      activeOpacity={active ? 0.75 : 1}
+      disabled={!active}
+    >
+      {link.label === 'Snapchat' ? (
+        <MaterialCommunityIcons name="snapchat" size={20} color={link.color} />
+      ) : link.label === 'Instagram' ? (
+        <Ionicons name="logo-instagram" size={20} color={link.color} />
+      ) : link.label === 'LinkedIn' ? (
+        <Ionicons name="logo-linkedin" size={20} color={link.color} />
+      ) : (
+        <Ionicons name="musical-notes-outline" size={20} color={link.color} />
+      )}
+    </TouchableOpacity>
+  );
+}
 
 // ── Thumbnail gallery with arrow controls ────────────────────────────────────
 
@@ -219,7 +280,7 @@ const gal = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  navRow: { flexDirection: 'row', gap: 10 },
+  navRow: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
   navBtn: {
     width: 40,
     height: 40,
@@ -229,6 +290,16 @@ const gal = StyleSheet.create({
     justifyContent: 'center',
   },
   navBtnDisabled: { opacity: 0.35 },
+  navDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.18)', marginHorizontal: 4 },
+  socialRow: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  socialBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 // ── Quote / testimonial card ─────────────────────────────────────────────────
@@ -430,6 +501,7 @@ export default function UserProfileScreen() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [dmLoading, setDmLoading] = useState(false);
   const [mutualCount, setMutualCount] = useState<number | null>(null);
+  const [dmPaywall, setDmPaywall] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
@@ -491,8 +563,13 @@ export default function UserProfileScreen() {
     try {
       const { room } = await chatApi.openDm(profile._id);
       router.push(`/chat/${room._id}` as any);
-    } catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not open chat.' }); }
-    finally { setDmLoading(false); }
+    } catch (e: any) {
+      if (String(e.code || '').includes('upgrade_required')) {
+        setDmPaywall(true);
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not open chat.' });
+      }
+    } finally { setDmLoading(false); }
   }
 
   async function toggleSave() {
@@ -586,11 +663,12 @@ export default function UserProfileScreen() {
     .filter(Boolean)
     .map((t) => TRAIT_LABELS[t as string] ?? (t as string));
 
-  const socialLinks = [
-    profile.instagramHandle ? { icon: 'logo-instagram' as const, label: 'Instagram', handle: profile.instagramHandle } : null,
-    profile.linkedinHandle  ? { icon: 'logo-linkedin' as const,  label: 'LinkedIn',  handle: profile.linkedinHandle  } : null,
-    profile.spotifyHandle   ? { icon: 'musical-notes-outline' as const, label: 'Spotify', handle: profile.spotifyHandle } : null,
-  ].filter(Boolean) as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; handle: string }[];
+  const socialLinks: SocialItem[] = [
+    { label: 'Instagram', color: '#E1306C', url: profile.instagramHandle ? `https://www.instagram.com/${profile.instagramHandle.replace('@', '')}` : null },
+    { label: 'Snapchat',  color: '#FFFC00', url: profile.snapchatHandle  ? `https://www.snapchat.com/add/${profile.snapchatHandle.replace('@', '')}` : null },
+    { label: 'LinkedIn',  color: '#0A66C2', url: profile.linkedinHandle  ? `https://www.linkedin.com/in/${profile.linkedinHandle.replace('@', '')}` : null },
+    { label: 'Spotify',   color: '#1DB954', url: profile.spotifyHandle   ? `https://open.spotify.com/user/${profile.spotifyHandle.replace('@', '')}` : null },
+  ];
 
   // Stats
   const stats = [
@@ -676,8 +754,7 @@ export default function UserProfileScreen() {
 
     const sheetInner = (
       <View style={[s.previewSheetInner, { paddingBottom: sheetPadBottom }]}>
-        {/* Swipe pill indicator */}
-        <View style={s.swipePill} />
+        <SwipeHint />
 
         <View style={s.nameRow}>
           <View style={{ flex: 1 }}>
@@ -780,14 +857,23 @@ export default function UserProfileScreen() {
         }}
       >
         <GlassCard>
-          <View style={{ gap: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={s.detailName}>{profile.displayName ?? 'User'}</Text>
-              {isVerified && <Ionicons name="checkmark-circle" size={20} color="#A78BFA" />}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={s.detailName} numberOfLines={1}>{profile.displayName ?? 'User'}</Text>
+                {isVerified && <Ionicons name="checkmark-circle" size={20} color="#A78BFA" />}
+              </View>
+              {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
+              {infoItems.length > 0 && (
+                <Text style={s.infoLine}>{infoItems.join('  ·  ')}</Text>
+              )}
             </View>
-            {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
-            {infoItems.length > 0 && (
-              <Text style={s.infoLine}>{infoItems.join('  ·  ')}</Text>
+            {profile.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={s.detailAvatar} resizeMode="cover" />
+            ) : (
+              <View style={[s.detailAvatar, s.detailAvatarFallback]}>
+                <Text style={s.detailAvatarInitial}>{initials}</Text>
+              </View>
             )}
           </View>
 
@@ -797,6 +883,7 @@ export default function UserProfileScreen() {
 
           <StatsRow items={stats} />
 
+          {/* Hashtags — hidden for now
           {hashTags.length > 0 && (
             <ScrollView
               horizontal
@@ -810,6 +897,7 @@ export default function UserProfileScreen() {
               ))}
             </ScrollView>
           )}
+          */}
 
           {traitChips.length > 0 && (
             <View style={s.traitsWrap}>
@@ -844,22 +932,15 @@ export default function UserProfileScreen() {
           />
         ) : null}
 
-        {socialLinks.length > 0 && (
-          <View style={s.socialCard}>
-            <Text style={s.socialTitle}>Socials</Text>
-            {socialLinks.map((link) => (
-              <View key={link.label} style={s.socialRow}>
-                <Ionicons name={link.icon} size={18} color="rgba(255,255,255,0.55)" />
-                <Text style={s.socialHandle}>{link.handle}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        <View style={s.socialCard}>
+          {socialLinks.map((link) => <SocialBtn key={link.label} link={link} />)}
+        </View>
 
         <HighlightsSection userId={userId} isOwnProfile={isSelf} scheme={scheme} />
 
         {isAccepted && (
           <TouchableOpacity style={s.removeFriendBtn} onPress={removeFriend} disabled={actionLoading} activeOpacity={0.85}>
+            <Ionicons name="person-remove-outline" size={16} color="#F87171" />
             <Text style={s.removeFriendText}>Remove friend</Text>
           </TouchableOpacity>
         )}
@@ -929,6 +1010,14 @@ export default function UserProfileScreen() {
           onConfirm={() => { setShowBlockConfirm(false); doBlockUser(); }}
           icon="ban-outline"
         />
+
+        <PaywallModal
+          visible={dmPaywall}
+          onClose={() => setDmPaywall(false)}
+          title="DMs are on Pro"
+          message="Upgrade to Pro to send direct messages."
+          upgradeTo="pro"
+        />
       </>
     );
   }
@@ -974,14 +1063,6 @@ const s = StyleSheet.create({
     paddingTop: 12,
     gap: 14,
   },
-  swipePill: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    marginBottom: 4,
-  },
   previewCtaWrap: {
     marginTop: 4,
   },
@@ -1003,6 +1084,27 @@ const s = StyleSheet.create({
     color: '#FFF',
     letterSpacing: -0.5,
     lineHeight: 36,
+    flexShrink: 1,
+  },
+  detailAvatar: {
+    width: 106,
+    height: 106,
+    borderRadius: 50,
+    marginTop:15,
+    marginRight:20,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+    overflow: 'hidden',
+  },
+  detailAvatarFallback: {
+    backgroundColor: 'rgba(124,58,237,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailAvatarInitial: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: '800',
   },
   handle: {
     color: 'rgba(255,255,255,0.55)',
@@ -1051,31 +1153,6 @@ const s = StyleSheet.create({
     borderColor: 'rgba(167,139,250,0.22)',
   },
   traitText: { color: 'rgba(167,139,250,0.9)', fontSize: 11.5, fontWeight: '600' },
-  socialCard: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 22,
-    padding: 20,
-    gap: 12,
-  },
-  socialTitle: {
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: 10.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  socialHandle: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-
   detailActions: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 22,
@@ -1115,12 +1192,25 @@ const s = StyleSheet.create({
   },
   btnSecondaryText: { fontSize: 13, fontWeight: '600', color: '#EDE9FE' },
 
+  socialCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 22,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
   removeFriendBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.45)',
+    backgroundColor: 'rgba(239,68,68,0.12)',
   },
-  removeFriendText: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '600' },
+  removeFriendText: { color: '#F87171', fontSize: 14, fontWeight: '700' },
 });

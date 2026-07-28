@@ -31,6 +31,7 @@ import {
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import LocationPickerModal from './LocationPickerModal';
+import PaywallModal from './PaywallModal';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -753,9 +754,25 @@ function makeStyles(isDark: boolean) {
     },
     suggestionText: { ...Typography.caption, color: muted, fontWeight: '600', fontSize: 12 },
     suggestionTextActive: { color: text },
-    locNote: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    locNote: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.07)',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(124,58,237,0.22)',
+      borderRadius: Radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
     locText: { ...Typography.caption, color: hint, flex: 1 },
-    changeLocBtn: { fontSize: 12, color: Ping.purple, fontWeight: '700' },
+    changeLocPill: {
+      backgroundColor: Ping.purple,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: Radius.full,
+    },
+    changeLocBtn: { fontSize: 12, color: '#FFF', fontWeight: '700' },
     footer: {
       paddingHorizontal: Spacing.lg,
       paddingTop: 10,
@@ -861,6 +878,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [customLat, setCustomLat] = useState<number | null>(null);
   const [customLng, setCustomLng] = useState<number | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [paywall, setPaywall] = useState<{ title: string; message: string; upgradeTo: 'pro' | 'premium' } | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -1108,7 +1126,15 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
       animateClose();
       return;
     } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not create ping.' });
+      if (String(err.code || '').includes('quota_') || String(err.code || '').includes('upgrade_')) {
+        setPaywall({
+          title: 'Upgrade to create more',
+          message: err.message || 'Weekly free limit reached.',
+          upgradeTo: err.details?.upgradeTo === 'premium' ? 'premium' : 'pro',
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not create ping.' });
+      }
     } finally {
       setSaving(false);
     }
@@ -1247,10 +1273,12 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                     )}
                   </View>
 
+                  {/* Vibe section — hidden for now
                   <View style={s.section}>
                     <Text style={s.label}>Vibe  <Text style={s.labelOptional}>(optional)</Text></Text>
                     <VibeGrid value={vibe} onChange={setVibe} isDark={isDark} />
                   </View>
+                  */}
                 </>
               ) : (
                 <>
@@ -1512,21 +1540,21 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                     </View>
                   </View>
 
-                  <View style={s.locNote}>
+                  <TouchableOpacity style={s.locNote} onPress={() => setShowLocationPicker(true)} activeOpacity={0.75}>
                     <Ionicons
                       name={customLat ? 'location' : 'location-outline'}
-                      size={13}
-                      color={customLat ? Ping.purple : hintColor}
+                      size={14}
+                      color={customLat ? Ping.purple : mutedIconColor}
                     />
                     <Text style={[s.locText, customLat != null && { color: Ping.purple, fontWeight: '600' }]}>
-                      {customLat != null ? 'Custom location set' : 'Ping is placed at your current location'}
+                      {customLat != null ? 'Custom location set' : 'Using your current location'}
                     </Text>
-                    <TouchableOpacity onPress={() => setShowLocationPicker(true)} hitSlop={8}>
+                    <View style={s.changeLocPill}>
                       <Text style={s.changeLocBtn}>
                         {customLat ? 'Change' : 'Pick another'}
                       </Text>
-                    </TouchableOpacity>
-                  </View>
+                    </View>
+                  </TouchableOpacity>
                 </>
               )}
             </ScrollView>
@@ -1542,15 +1570,15 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
             </Text>
 
             {step === 1 ? (
-              <>
-                <TouchableOpacity style={s.createBtn} onPress={goNext} activeOpacity={0.85}>
+              <View style={s.footerRow}>
+                <TouchableOpacity style={[s.createBtn, s.createBtnFlex]} onPress={goNext} activeOpacity={0.85}>
                   <Text style={s.createBtnText}>Continue</Text>
                   <Ionicons name="arrow-forward" size={18} color="#FFF" />
                 </TouchableOpacity>
-                <TouchableOpacity style={s.cancelBtn} onPress={handleClose} activeOpacity={0.7}>
-                  <Text style={s.cancelBtnText}>Nah, never mind</Text>
+                <TouchableOpacity style={s.backBtn} onPress={handleClose} activeOpacity={0.7}>
+                  <Text style={s.cancelBtnText}>Nah</Text>
                 </TouchableOpacity>
-              </>
+              </View>
             ) : (
               <View style={s.footerRow}>
                 <TouchableOpacity
@@ -1597,6 +1625,13 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         setShowLocationPicker(false);
       }}
       onClose={() => setShowLocationPicker(false)}
+    />
+    <PaywallModal
+      visible={!!paywall}
+      onClose={() => setPaywall(null)}
+      title={paywall?.title}
+      message={paywall?.message}
+      upgradeTo={paywall?.upgradeTo}
     />
     </>
   );

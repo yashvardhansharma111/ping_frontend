@@ -7,6 +7,7 @@ import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
 import ScreenHeader from '@/components/ScreenHeader';
 import AppAvatar from '@/components/AppAvatar';
+import { AppButton } from '@/components/ui';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -279,19 +280,14 @@ export default function SafetyScreen() {
           </View>
 
           <Text style={[styles.sectionTitle, { color: c.text, marginTop: Spacing.sm }]}>Account</Text>
-          <TouchableOpacity
-            style={[styles.dangerBtn, { borderColor: '#EF444466', backgroundColor: 'rgba(239,68,68,0.06)' }]}
+          <AppButton
+            label="Delete my account"
+            variant="dangerOutline"
+            icon="trash-outline"
             onPress={confirmDeleteAccount}
-            disabled={deletingAccount}
-            activeOpacity={0.8}
-          >
-            {deletingAccount ? <ActivityIndicator color="#EF4444" /> : (
-              <>
-                <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                <Text style={styles.dangerBtnText}>Delete my account</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            loading={deletingAccount}
+            style={{ borderRadius: Radius.md }}
+          />
         </ScrollView>
       </View>
 
@@ -371,6 +367,4 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   contactName: { ...Typography.bodyMed, fontSize: 14 },
   contactPhone: { ...Typography.caption, marginTop: 1 },
-  dangerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: Radius.md, borderWidth: 1.5, height: 52, marginTop: Spacing.xs },
-  dangerBtnText: { ...Typography.bodyMed, color: '#EF4444', fontWeight: '600' },
 });

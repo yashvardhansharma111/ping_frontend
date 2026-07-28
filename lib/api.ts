@@ -93,7 +93,14 @@ async function request<T>(
     }
   }
 
-  if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const msg = (data as any).error?.message || (data as any).message || `HTTP ${res.status}`;
+    const err = new Error(msg) as Error & { code?: string; details?: unknown; status?: number };
+    err.code = (data as any).error?.code;
+    err.details = (data as any).error?.details;
+    err.status = res.status;
+    throw err;
+  }
   return data as T;
 }
 
@@ -246,7 +253,7 @@ export const activitiesApi = {
     const r = await get<{ ok: boolean; activity: any }>(`/activities/${id}`);
     return { ...r, activity: normalizeActivity(r.activity) };
   },
-  join: (id: string) => post<{ ok: boolean }>(`/activities/${id}/join`),
+  join: (id: string) => post<{ ok: boolean }>(`/activities/${id}/join`, { soloAcknowledged: true }),
   leave: (id: string) => post<{ ok: boolean }>(`/activities/${id}/leave`),
   leaveQuietly: (id: string) => post<{ ok: boolean }>(`/activities/${id}/leave-quietly`),
   cancel: (id: string) => del<{ ok: boolean }>(`/activities/${id}`),
@@ -317,6 +324,7 @@ export interface User {
   favoriteActivities?: string[];
   socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
   instagramHandle?: string;
+  snapchatHandle?: string;
   linkedinHandle?: string;
   spotifyHandle?: string;
   photos?: string[];
@@ -425,6 +433,7 @@ export interface UserProfile {
   favoriteActivities?: string[];
   socialPreference?: 'introvert' | 'extrovert' | 'ambivert' | null;
   instagramHandle?: string;
+  snapchatHandle?: string;
   linkedinHandle?: string;
   spotifyHandle?: string;
   photos?: string[];
@@ -605,6 +614,69 @@ export const adsApi = {
     const path = type === 'view' ? 'view' : type === 'contact_tap' ? 'contact' : type === 'thumbs_up' ? 'thumbs-up' : type === 'want_to_visit' ? 'want-to-visit' : 'view';
     return post<{ ok: boolean }>(`/ads/${adId}/${path}`, {}, false);
   },
+};
+
+// ── Subscriptions (Free / Pro / Premium) ─────────────────────────────────────
+
+export type SubscriptionTier = 'free' | 'pro' | 'premium';
+
+export interface SubscriptionPlan {
+  planId: string;
+  tier: 'pro' | 'premium';
+  label: string;
+  intervalLabel: string;
+  amountMinor: number;
+  amountRupees: number;
+  durationDays: number;
+}
+
+export interface SubscriptionSnapshot {
+  tier: SubscriptionTier;
+  planId: string | null;
+  expiresAt: string | null;
+  entitlements: {
+    createPerWeek: number | null;
+    joinPerWeek: number | null;
+    dm: boolean;
+    directPing: boolean;
+    unlimitedPings: boolean;
+    highlightTag: boolean;
+    createSquad: boolean;
+  };
+  usage: {
+    weekKey: string;
+    createCount: number;
+    joinCount: number;
+    createRemaining: number | null;
+    joinRemaining: number | null;
+  };
+}
+
+export const subscriptionsApi = {
+  plans: () =>
+    get<{
+      ok: boolean;
+      plans: SubscriptionPlan[];
+      tiers: Record<string, { name: string; features: string[] }>;
+    }>('/subscriptions/plans', false),
+  me: () => get<{ ok: boolean; subscription: SubscriptionSnapshot }>('/subscriptions/me'),
+  createOrder: (planId: string) =>
+    post<{
+      ok: boolean;
+      paymentId: string;
+      order: { id: string; amount: number; currency: string; keyId: string };
+      plan: SubscriptionPlan;
+      checkoutUrl: string;
+    }>('/subscriptions/order', { planId }),
+  verifyPayment: (body: {
+    gatewayOrderId: string;
+    gatewayPaymentId: string;
+    gatewaySignature: string;
+    method?: string;
+  }) => post<{ ok: boolean; subscription: SubscriptionSnapshot }>('/subscriptions/verify-payment', body),
+  /** Dev bypass — same pattern as ads mockActivate */
+  mockActivate: (planId: string) =>
+    post<{ ok: boolean; subscription: SubscriptionSnapshot }>('/subscriptions/mock-activate', { planId }),
 };
 
 // ── Admin API ─────────────────────────────────────────────────────────────────

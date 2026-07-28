@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from './ConfirmSheet';
+import { AppButton } from '@/components/ui';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -500,21 +501,14 @@ export default function SafetyHubModal({
             {/* ── Account section ── */}
             <Text style={[styles.sectionTitle, { color: c.text, marginTop: Spacing.sm }]}>Account</Text>
 
-            <TouchableOpacity
-              style={[styles.dangerBtn, { borderColor: '#EF444466', backgroundColor: 'rgba(239,68,68,0.06)' }]}
+            <AppButton
+              label="Delete my account"
+              variant="dangerOutline"
+              icon="trash-outline"
               onPress={confirmDeleteAccount}
-              disabled={deletingAccount}
-              activeOpacity={0.8}
-            >
-              {deletingAccount ? (
-                <ActivityIndicator color="#EF4444" />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                  <Text style={styles.dangerBtnText}>Delete my account</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              loading={deletingAccount}
+              style={{ borderRadius: Radius.md }}
+            />
           </ScrollView>
         </View>
       </Modal>

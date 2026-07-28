@@ -17,13 +17,13 @@ import { useLocation } from '@/hooks/useLocation';
 import ActivityCard from '@/components/ActivityCard';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { EmptyState } from '@/components/ui';
 import {
   MagnifyingGlass,
   MapPin,
   CheckCircle,
   Star,
   Sparkle,
-  Lightning,
   X,
 } from 'phosphor-react-native';
 
@@ -179,7 +179,7 @@ export default function ActivitiesScreen() {
           const active = filter === f.key;
           const TabIcon = f.Icon;
           return (
-            <Animated.View key={f.key} style={{ transform: [{ scale: chipScales[f.key] }] }}>
+            <Animated.View key={f.key} style={{ flex: 1, transform: [{ scale: chipScales[f.key] }] }}>
               <TouchableOpacity
                 style={[
                   styles.chip,
@@ -203,7 +203,7 @@ export default function ActivitiesScreen() {
         <FlatList
           data={displayedActivities}
           keyExtractor={(a) => a._id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, displayedActivities.length === 0 && { flexGrow: 1 }]}
           refreshControl={
             <RefreshControl
               refreshing={loading}
@@ -218,15 +218,11 @@ export default function ActivitiesScreen() {
                 <ActivityIndicator color={Ping.purpleLight} size="large" />
               </View>
             ) : (
-              <View style={styles.empty}>
-                <View style={[styles.emptyIconWrap, { backgroundColor: `${Ping.purple}18` }]}>
-                  <Lightning size={36} color={Ping.purpleLight} weight="duotone" />
-                </View>
-                <Text style={[styles.emptyTitle, { color: c.text }]}>Nothing here</Text>
-                <Text style={[styles.emptyText, { color: c.textSecondary }]}>
-                  {q ? 'No pings match your search' : EMPTY_LABEL[filter]}
-                </Text>
-              </View>
+              <EmptyState
+                icon="flash-outline"
+                title="Nothing here"
+                subtitle={q ? 'No pings match your search' : EMPTY_LABEL[filter]}
+              />
             )
           }
           renderItem={({ item }) => <ActivityCard activity={item} onJoin={() => load()} />}
@@ -246,10 +242,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: 8,
     paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { ...Typography.h2, fontSize: 28 },
+  title: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5 },
   subtitle: { ...Typography.caption, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
   filterBtn: {
@@ -285,31 +280,21 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: Radius.full,
     borderWidth: 1,
   },
   chipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
   chipLabel: { ...Typography.bodySm, fontWeight: '600', fontSize: 13 },
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 130, gap: 12 },
-  center: { paddingTop: 80, alignItems: 'center' },
-  empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.sm },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xs,
-  },
-  emptyTitle: { ...Typography.bodyMed, fontSize: 17 },
-  emptyText: { ...Typography.bodySm, textAlign: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

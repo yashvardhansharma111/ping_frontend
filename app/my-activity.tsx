@@ -17,8 +17,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { activitiesApi, usersApi, type Activity, type User } from '@/lib/api';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import ScreenHeader from '@/components/ScreenHeader';
+import { activityTypeMeta } from '@/constants/activityTypes';
 
-type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type Tab = 'mine' | 'joined' | 'saved' | 'past';
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
@@ -30,19 +31,8 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 const SCREEN_W = Dimensions.get('window').width;
 
-const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
-  sport:   { icon: 'dumbbell',          color: '#EF4444' },
-  food:    { icon: 'food-fork-drink',   color: '#F97316' },
-  music:   { icon: 'music',             color: '#8B5CF6' },
-  study:   { icon: 'book-open-variant', color: '#3B82F6' },
-  outdoor: { icon: 'walk',              color: '#10B981' },
-  gaming:  { icon: 'gamepad-variant',   color: '#EC4899' },
-  meetup:  { icon: 'account-group',     color: '#7C3AED' },
-  default: { icon: 'map-marker',        color: '#6B7280' },
-};
-
 function PingRow({ activity, c }: { activity: Activity; c: (typeof Colors)['dark'] }) {
-  const cfg = TYPE_CFG[activity.type] ?? TYPE_CFG.default;
+  const cfg = activityTypeMeta(activity.type);
   const isLive = activity.status === 'live' && new Date(activity.expiresAt) > new Date();
   const date = new Date(activity.startsAt ?? activity.expiresAt).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'short',
@@ -267,14 +257,11 @@ export default function MyActivityScreen() {
 
   return (
     <View style={[s.root, { backgroundColor: c.background }]}>
-      {/* Header */}
-      <View style={[s.header, { paddingTop: insets.top + 8, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={c.text} />
-        </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: c.text }]}>My Activity</Text>
-        <View style={{ width: 46 }} />
-      </View>
+      <ScreenHeader
+        title="My Activity"
+        onBack={() => router.back()}
+        paddingTop={insets.top + 8}
+      />
 
       {/* Tab bar */}
       <View style={[s.tabBar, { backgroundColor: c.background, borderBottomColor: c.border }]}>
@@ -309,13 +296,6 @@ export default function MyActivityScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md, paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...Typography.h3 },
   tabBar: { borderBottomWidth: StyleSheet.hairlineWidth },
   tabRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg },
   tabBtn: { alignItems: 'center', paddingVertical: 12, gap: 4 },
