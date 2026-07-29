@@ -19,6 +19,9 @@ import { authApi } from '@/lib/api';
 import { Ping, Gradients } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+import { Ionicons } from '@expo/vector-icons';
+import useAuthStore from '@/lib/stores/authStore';
+
 const INDIA_PHONE_RE = /^[6-9]\d{9}$/;
 
 export default function PhoneScreen() {
@@ -49,98 +52,114 @@ export default function PhoneScreen() {
     }
   }
 
+  async function handleGuestLogin() {
+    await useAuthStore.getState().loginAsGuest();
+    router.replace('/(tabs)' as any);
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
+    <View style={s.root}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={{ flex: 1, minHeight: insets.top + 24 }} />
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={{ height: insets.top + 20 }} />
 
-        <View style={s.textBlock}>
-          <Text style={[
-            s.appName,
-            fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
-          ]}>
-            Ping
-          </Text>
-          <Text style={s.headline}>
-            Drop a ping,{'\n'}find your people.
-          </Text>
-          <Text style={s.subtitle}>
-            Real plans, real humans — not just profiles you'll never swipe right on.
-          </Text>
-        </View>
+          <View style={s.textBlock}>
+            <Text style={[
+              s.appName,
+              fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+            ]}>
+              Ping
+            </Text>
+            <Text style={s.headline}>
+              Drop a ping,{'\n'}find your people.
+            </Text>
+            <Text style={s.subtitle}>
+              Real plans, real humans — not just profiles you'll never swipe right on.
+            </Text>
+          </View>
 
-        <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
-          <View style={s.pill} />
+          <View style={[s.card, { paddingBottom: Math.max(insets.bottom + 24, 36) }]}>
+            <View style={s.pill} />
 
-          <Text style={s.cardTitle}>Enter your mobile number</Text>
-          <Text style={s.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
+            <Text style={s.cardTitle}>Enter your mobile number</Text>
+            <Text style={s.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
 
-          <TouchableOpacity
-            style={[s.inputWrap, isValid && s.inputWrapFocus]}
-            activeOpacity={1}
-            onPress={() => inputRef.current?.focus()}
-          >
-            <Text style={s.flag}>🇮🇳</Text>
-            <Text style={s.prefix}>+91</Text>
-            <View style={s.divider} />
-            <TextInput
-              ref={inputRef}
-              style={s.input}
-              placeholder="98765 43210"
-              placeholderTextColor={isDark ? '#555570' : '#A6A6B0'}
-              keyboardType="phone-pad"
-              maxLength={10}
-              value={phone}
-              onChangeText={(t) => setPhone(t.replace(/\D/g, ''))}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-              autoFocus
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={!isValid || loading}
-            activeOpacity={0.88}
-            style={{ borderRadius: 9999, overflow: 'hidden', opacity: (!isValid || loading) ? 0.55 : 1 }}
-          >
-            <LinearGradient
-              colors={[...Gradients.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.btn}
+            <TouchableOpacity
+              style={[s.inputWrap, isValid && s.inputWrapFocus]}
+              activeOpacity={1}
+              onPress={() => inputRef.current?.focus()}
             >
-              {loading
-                ? <ActivityIndicator color="#FFF" />
-                : <Text style={s.btnText}>Send OTP</Text>
-              }
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={s.flag}>🇮🇳</Text>
+              <Text style={s.prefix}>+91</Text>
+              <View style={s.divider} />
+              <TextInput
+                ref={inputRef}
+                style={s.input}
+                placeholder="98765 43210"
+                placeholderTextColor={isDark ? '#555570' : '#A6A6B0'}
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={phone}
+                onChangeText={(t) => setPhone(t.replace(/\D/g, ''))}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                autoFocus
+              />
+            </TouchableOpacity>
 
-          <Text style={s.legal}>
-            By continuing, you agree to our{' '}
-            <Text style={s.legalLink}>Terms & Conditions</Text>
-            {' '}and{' '}
-            <Text style={s.legalLink}>Privacy Policy</Text>
-            .
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!isValid || loading}
+              activeOpacity={0.88}
+              style={{ borderRadius: 9999, overflow: 'hidden', opacity: (!isValid || loading) ? 0.55 : 1 }}
+            >
+              <LinearGradient
+                colors={[...Gradients.primary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.btn}
+              >
+                {loading
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Text style={s.btnText}>Send OTP</Text>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.guestBtn}
+              onPress={handleGuestLogin}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="sparkles" size={16} color={isDark ? '#BB92FF' : Ping.purple} />
+              <Text style={s.guestBtnText}>Explore as Guest ✦</Text>
+            </TouchableOpacity>
+
+            <Text style={s.legal}>
+              By continuing, you agree to our{' '}
+              <Text style={s.legalLink}>Terms & Conditions</Text>
+              {' '}and{' '}
+              <Text style={s.legalLink}>Privacy Policy</Text>
+              .
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 function makeStyles(isDark: boolean) {
-  const bg      = isDark ? '#0F0F12' : '#FFFFFF';
-  const surface = isDark ? '#1A1A24' : '#FFFFFF';
+  const bg      = isDark ? '#0A0A0E' : '#F5F3FF';
+  const surface = isDark ? '#14141A' : '#FFFFFF';
   const text    = isDark ? '#F1F0FF' : '#111111';
   const muted   = isDark ? '#9490C0' : '#6F6866';
   const border  = isDark ? 'rgba(167,139,250,0.18)' : '#E6E1DA';
@@ -148,7 +167,7 @@ function makeStyles(isDark: boolean) {
 
   return StyleSheet.create({
     root:  { flex: 1, backgroundColor: bg },
-    scroll: { flexGrow: 1 },
+    scroll: { flexGrow: 1, justifyContent: 'space-between' },
     textBlock: { paddingHorizontal: 28, paddingBottom: 24, gap: 10 },
     appName: { fontSize: 52, color: Ping.purpleDim },
     headline: {
@@ -157,12 +176,13 @@ function makeStyles(isDark: boolean) {
     },
     subtitle: { fontSize: 14, color: muted, lineHeight: 21, maxWidth: 300 },
     card: {
+      flex: 1,
       backgroundColor: surface,
       borderTopLeftRadius: 32,
       borderTopRightRadius: 32,
       paddingHorizontal: 28,
-      paddingTop: 16,
-      gap: 14,
+      paddingTop: 18,
+      gap: 16,
       borderTopWidth: 1,
       borderColor: isDark ? 'rgba(167,139,250,0.14)' : Ping.lavender,
       shadowColor: Ping.purpleDim,
@@ -197,6 +217,22 @@ function makeStyles(isDark: boolean) {
     },
     btn: { height: 54, alignItems: 'center', justifyContent: 'center' },
     btnText: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: 0.2 },
+    guestBtn: {
+      height: 52,
+      borderRadius: 26,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(187,146,255,0.3)' : 'rgba(101,69,217,0.25)',
+      backgroundColor: isDark ? 'rgba(187,146,255,0.08)' : 'rgba(101,69,217,0.05)',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    guestBtnText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: isDark ? '#BB92FF' : Ping.purple,
+    },
     legal: { fontSize: 11, color: muted, textAlign: 'center', lineHeight: 17 },
     legalLink: { color: Ping.purpleDim, fontWeight: '600', textDecorationLine: 'underline' },
   });

@@ -151,14 +151,22 @@ export default function ActivitiesScreen() {
         </View>
       </Animated.View>
 
-      {/* Search bar */}
+      {/* Search bar — Reference Image 2 style capsule pill */}
       {searchOpen && (
-        <View style={[styles.searchWrap, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <MagnifyingGlass size={16} color={c.icon} weight="bold" />
+        <View
+          style={[
+            styles.searchWrap,
+            {
+              backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F2F2F5',
+              borderColor: c.border,
+            },
+          ]}
+        >
+          <MagnifyingGlass size={18} color={c.icon} weight="bold" />
           <TextInput
             ref={searchRef}
             style={[styles.searchInput, { color: c.text }]}
-            placeholder="Search pings by name..."
+            placeholder="What are you looking for?"
             placeholderTextColor={c.icon}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -172,6 +180,7 @@ export default function ActivitiesScreen() {
           )}
         </View>
       )}
+
 
       {/* Feed type chips */}
       <View style={styles.filterRow}>
@@ -258,9 +267,9 @@ const styles = StyleSheet.create({
   },
   filterBtnLabel: { fontSize: 13, fontWeight: '600' },
   headerBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -268,15 +277,16 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.sm,
-    paddingHorizontal: 14,
-    height: 42,
+    paddingHorizontal: 16,
+    height: 46,
     borderRadius: Radius.full,
     borderWidth: 1,
   },
   searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
+
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.lg,

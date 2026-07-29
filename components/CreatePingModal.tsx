@@ -30,6 +30,7 @@ import {
 } from '@/lib/placesApi';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LinearGradient } from 'expo-linear-gradient';
 import LocationPickerModal from './LocationPickerModal';
 import PaywallModal from './PaywallModal';
 
@@ -810,26 +811,26 @@ function makeStyles(isDark: boolean) {
     },
     backBtn: {
       height: 52,
-      paddingHorizontal: 16,
-      borderRadius: Radius.md,
+      paddingHorizontal: 18,
+      borderRadius: 26,
       borderWidth: 1.5,
-      borderColor: border,
-      backgroundColor: chipBg,
+      borderColor: isDark ? 'rgba(187,146,255,0.25)' : 'rgba(101,69,217,0.18)',
+      backgroundColor: isDark ? 'rgba(187,146,255,0.08)' : 'rgba(101,69,217,0.05)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     createBtn: {
       width: '100%',
-      backgroundColor: Ping.purple,
-      borderRadius: Radius.md,
+      backgroundColor: '#7C3AED',
+      borderRadius: 26,
       height: 52,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: Spacing.sm,
-      shadowColor: Ping.purple,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.55,
+      shadowColor: '#7C3AED',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.45,
       shadowRadius: 12,
       elevation: 8,
     },
@@ -1571,9 +1572,20 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
 
             {step === 1 ? (
               <View style={s.footerRow}>
-                <TouchableOpacity style={[s.createBtn, s.createBtnFlex]} onPress={goNext} activeOpacity={0.85}>
-                  <Text style={s.createBtnText}>Continue</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                <TouchableOpacity
+                  style={[{ borderRadius: 26, overflow: 'hidden' }, s.createBtnFlex]}
+                  onPress={goNext}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={['#6545D9', '#8B5CF6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={s.createBtn}
+                  >
+                    <Text style={s.createBtnText}>Continue</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                  </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.backBtn} onPress={handleClose} activeOpacity={0.7}>
                   <Text style={s.cancelBtnText}>Nah</Text>
@@ -1590,21 +1602,28 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                   <Ionicons name="arrow-back" size={20} color={mutedIconColor} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.createBtn, (saving || uploadingImage) && s.createBtnDisabled, s.createBtnFlex]}
+                  style={[{ borderRadius: 26, overflow: 'hidden' }, (saving || uploadingImage) && s.createBtnDisabled, s.createBtnFlex]}
                   onPress={handleCreate}
                   disabled={saving || uploadingImage}
-                  activeOpacity={0.85}
+                  activeOpacity={0.88}
                 >
-                  {saving ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <>
-                      <Ionicons name={isNow ? 'flash' : 'time'} size={20} color="#FFF" />
-                      <Text style={s.createBtnText}>
-                        {isNow ? 'Drop Ping Now' : 'Schedule Ping'}
-                      </Text>
-                    </>
-                  )}
+                  <LinearGradient
+                    colors={['#6545D9', '#8B5CF6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={s.createBtn}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name={isNow ? 'flash' : 'time'} size={18} color="#FFF" />
+                        <Text style={s.createBtnText}>
+                          {isNow ? 'Drop Ping Now' : 'Schedule Ping'}
+                        </Text>
+                      </>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             )}

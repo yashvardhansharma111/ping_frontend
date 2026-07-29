@@ -12,7 +12,7 @@ import {
   Camera,
   type CameraRef,
   type MapRef,
-} from '@maplibre/maplibre-react-native';
+} from '@/lib/mapLibre';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Ping, Typography, Spacing, Radius } from '@/constants/theme';
@@ -146,9 +146,11 @@ export default function LocationPickerModal({ visible, initialLat, initialLng, o
         >
           <Camera
             ref={pickerCameraRef}
-            centerCoordinate={[initialLng, initialLat]}
-            zoomLevel={15}
-            animationMode="none"
+            {...({
+              centerCoordinate: [initialLng, initialLat],
+              zoomLevel: 15,
+              animationMode: 'none',
+            } as any)}
           />
         </MapLibreMap>
 

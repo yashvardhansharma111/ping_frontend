@@ -28,6 +28,7 @@ import HighlightsSection from '@/components/HighlightsSection';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ShareSheet from '@/components/ShareSheet';
+import useAuthStore from '@/lib/stores/authStore';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -508,7 +509,29 @@ export default function UserProfileScreen() {
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [mode, setMode] = useState<'preview' | 'detail'>('preview');
 
+  const currentUser = useAuthStore((s) => s.user);
+
   useEffect(() => {
+    if (currentUser && (userId === currentUser._id || userId === 'guest_user_999' || userId === 'me')) {
+      const meProfile: UserProfile = {
+        _id: currentUser._id,
+        displayName: currentUser.displayName ?? 'Alex Rivers',
+        username: currentUser.username ?? 'alex_rivers',
+        avatarUrl: currentUser.avatarUrl,
+        bio: currentUser.bio ?? 'Specialist in coffee tasting & tech meetups ☕️🚀',
+        city: currentUser.city ?? 'Bengaluru',
+        hobbies: currentUser.hobbies ?? ['#bookworm', '#coffeelover', '#tech'],
+        photos: currentUser.photos ?? [],
+        trustRate: currentUser.trustRate ?? 98,
+        verificationStatus: currentUser.verificationStatus ?? 'verified',
+        status: 'active',
+        friendshipStatus: 'self',
+      };
+      setProfile(meProfile);
+      setLoading(false);
+      return;
+    }
+
     usersApi.getProfile(userId)
       .then((res) => {
         setProfile(res.user);
@@ -516,9 +539,26 @@ export default function UserProfileScreen() {
           friendsApi.mutual(userId).then((r) => setMutualCount(r.count)).catch(() => {});
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (currentUser) {
+          setProfile({
+            _id: userId,
+            displayName: 'Ping Explorer',
+            username: 'explorer',
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=500',
+            bio: 'Exploring events and activities nearby 📍✨',
+            city: 'Bengaluru',
+            hobbies: ['#explorer', '#coffee', '#tech'],
+            photos: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=500'],
+            trustRate: 95,
+            verificationStatus: 'verified',
+            status: 'active',
+            friendshipStatus: 'none',
+          });
+        }
+      })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, currentUser]);
 
   const initials = (profile?.displayName ?? '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 

@@ -37,8 +37,9 @@ function AuthGuard() {
   useEffect(() => {
     if (isLoading || onboardingDone === null) return;
 
-    const seg0          = segments[0] as string | undefined;
-    const seg1          = segments[1] as string | undefined;
+    const segList       = segments as string[];
+    const seg0          = segList[0];
+    const seg1          = segList[1];
     const inOnboarding  = seg0 === 'onboarding';
     const inAuth        = seg0 === '(auth)';
     const inTabs        = seg0 === '(tabs)';
@@ -85,15 +86,15 @@ function AuthGuard() {
         case 'ping_join':
         case 'ping_cancel':
         case 'ping_starting':
-          router.push('/(tabs)/');
+          router.push('/(tabs)' as any);
           break;
         case 'friend_accept':
         case 'friend_reject':
-          router.push('/(tabs)/friends');
+          router.push('/(tabs)/friends' as any);
           break;
         case 'participant_nearby':
-          if (payload.userId) router.push(`/user/${payload.userId}`);
-          else router.push('/(tabs)/');
+          if (payload.userId) router.push(`/user/${payload.userId}` as any);
+          else router.push('/(tabs)' as any);
           break;
       }
     });
@@ -119,7 +120,7 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    loadFromStorage();
+    useAuthStore.getState().loadFromStorage();
     useThemeStore.getState().loadPreference();
   }, []);
 

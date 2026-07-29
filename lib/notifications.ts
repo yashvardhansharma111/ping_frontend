@@ -134,7 +134,7 @@ export function addReceivedListener(
   onReceive: (title: string, body: string) => void,
 ): Notifications.Subscription {
   return Notifications.addNotificationReceivedListener((notification) => {
-    const { title = '', body = '' } = notification.request.content;
-    onReceive(title, body);
+    const { title, body } = notification.request.content;
+    onReceive(title ?? '', body ?? '');
   });
 }

@@ -221,7 +221,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
     if ((a as any).vibe) p.set('vibe', (a as any).vibe);
     if ((a as any).placeName) p.set('venue', (a as any).placeName);
     if (a.creator?.displayName) p.set('creator', a.creator.displayName);
-    return `/chat/${roomId}?${p.toString()}`;
+    return `/chat/${roomId}?${p.toString()}` as any;
   }
 
   async function handleJoin() {
@@ -1243,16 +1243,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Ping.purple,
-    height: 50,
-    borderRadius: Radius.md,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 6,
+    backgroundColor: '#7C3AED',
+    height: 52,
+    borderRadius: 26,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  btnPrimaryText: { ...Typography.bodyMed, color: '#FFF', fontWeight: '700' },
+  btnPrimaryText: { fontSize: 16, color: '#FFF', fontWeight: '700' },
   btnDisabled: { backgroundColor: '#3A3A5C', shadowOpacity: 0, elevation: 0 },
   btnRow: { flexDirection: 'row', gap: Spacing.sm },
   btnSecondary: {
@@ -1260,14 +1260,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    height: 42,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    backgroundColor: 'rgba(167,139,250,0.06)',
+    gap: 6,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(187,146,255,0.25)',
+    backgroundColor: 'rgba(187,146,255,0.08)',
   },
-  btnDanger: { backgroundColor: 'rgba(239,68,68,0.06)' },
-  btnSecondaryText: { ...Typography.bodySm, fontWeight: '600' },
+  btnDanger: { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.3)' },
+  btnSecondaryText: { fontSize: 13, fontWeight: '700', color: '#BB92FF' },
   chatTeaser: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -111,6 +111,7 @@ function EventPosterCard({
           )}
 
           <View style={card.badge}>
+            <View style={card.badgeDot} />
             <Text style={card.badgeText}>{badgeLabel(item)}</Text>
           </View>
 
@@ -126,12 +127,15 @@ function EventPosterCard({
               color={bookmarked ? '#FBBF24' : '#FFF'}
             />
           </TouchableOpacity>
-        </View>
 
-        <View style={[card.titleBlock, { backgroundColor: accent }]}>
-          <Text style={card.titleBlockText} numberOfLines={2}>
-            {item.title.toUpperCase()}
-          </Text>
+          <View style={card.bottomOverlay}>
+            <Text style={card.overlayCategory}>
+              {item.category === 'offer' ? 'PROMO OFFER ✦' : 'FEATURED EVENT ✦'}
+            </Text>
+            <Text style={card.overlayTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+          </View>
         </View>
       </View>
     </Animated.View>
@@ -180,41 +184,63 @@ const card = StyleSheet.create({
     position: 'absolute',
     top: 14,
     left: 14,
-    backgroundColor: 'rgba(20,20,20,0.72)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(18, 18, 28, 0.82)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Ping.purpleLight,
   },
   badgeText: {
     color: '#FFF',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   bookmark: {
     position: 'absolute',
     top: 12,
     right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(20,20,20,0.72)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(18, 18, 28, 0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleBlock: {
-    minHeight: CARD_H * 0.22,
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(12, 12, 18, 0.78)',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  titleBlockText: {
-    color: '#FFF',
-    fontSize: 20,
+  overlayCategory: {
+    color: Ping.purpleLight,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.6,
-    textAlign: 'center',
-    lineHeight: 26,
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  overlayTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    lineHeight: 24,
   },
 });
 

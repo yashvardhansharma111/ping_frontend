@@ -5,10 +5,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import useAuthStore from '@/lib/stores/authStore';
 import { uploadApi, usersApi } from '@/lib/api';
 import { Ping, Spacing, Radius, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import ScreenHeader from '@/components/ScreenHeader';
 
 const GREEN = '#22C55E';
 
@@ -65,7 +67,14 @@ export default function VerificationScreen() {
   async function handleSelfie() {
     pressBtn();
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (perm.status !== 'granted') return;
+    if (perm.status !== 'granted') {
+      Toast.show({
+        type: 'info',
+        text1: 'Camera permission required',
+        text2: 'Please allow camera access to take a verification selfie.',
+      });
+      return;
+    }
 
     const result = await ImagePicker.launchCameraAsync({
       cameraType: ImagePicker.CameraType.front,
@@ -79,12 +88,18 @@ export default function VerificationScreen() {
     try {
       const selfieUrl = await uploadApi.uploadImage(result.assets[0].uri, 'photos');
       const res = await usersApi.submitVerification(selfieUrl);
-      if (res.verificationStatus === 'verified') {
-        setUser({ ...user!, verificationStatus: 'verified' } as any);
-        setStatus('done');
-        showSuccess();
+      const nextStatus = res.verificationStatus || 'verified';
+      if (user) {
+        setUser({ ...user, verificationStatus: nextStatus as any });
       }
-    } catch {
+      setStatus('done');
+      showSuccess();
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Verification failed',
+        text2: err.message || 'Could not submit selfie. Please try again.',
+      });
       setStatus('idle');
     }
   }
@@ -96,7 +111,14 @@ export default function VerificationScreen() {
   const accentIcon  = scheme === 'dark' ? Ping.purpleLight : Ping.purple;
 
   return (
-    <View style={[sv.root, { backgroundColor: c.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[sv.root, { backgroundColor: c.background }]}>
+      <ScreenHeader
+        title="Verification"
+        onBack={() => router.back()}
+        paddingTop={insets.top + 4}
+      />
+      <View style={sv.container}>
+
 
       {/* Badge hero */}
       <View style={sv.hero}>
@@ -197,6 +219,7 @@ export default function VerificationScreen() {
           </Animated.View>
         )}
       </Animated.View>
+      </View>
     </View>
   );
 }
@@ -204,9 +227,14 @@ export default function VerificationScreen() {
 const sv = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  container: {
+    flex: 1,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
+    paddingBottom: 24,
   },
   hero: {
     alignItems: 'center',

@@ -24,7 +24,7 @@ import { Spacing, Radius, Typography, Colors, Ping } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const HERO_H = Math.round(SCREEN_W * 1.2);
+const HERO_H = Math.round(SCREEN_W * 1.05);
 
 function getAge(dob?: string): number | null {
   if (!dob) return null;
@@ -68,8 +68,8 @@ export default function ProfileScreen() {
 
   const age = getAge(user?.dob);
   const isVerified = user?.verificationStatus === 'verified';
-  const hobbies = (user?.hobbies ?? []).slice(0, 6);
-  const metaLine = [age ? String(age) : null, user?.city || null].filter(Boolean).join(' · ');
+  const hobbies = (user?.hobbies ?? []).slice(0, 8);
+  const username = user?.username ? `@${user.username}` : user?.phone ? `@${user.phone.slice(-4)}` : '@user';
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -105,10 +105,11 @@ export default function ProfileScreen() {
     <View style={[styles.root, { backgroundColor: c.background }]}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity: fadeAnim }}>
+          {/* Top Hero Photo Section */}
           <View style={[styles.hero, { height: HERO_H }]}>
             {photos.length > 0 ? (
               <FlatList
@@ -136,107 +137,172 @@ export default function ProfileScreen() {
             )}
 
             <LinearGradient
-              colors={['rgba(0,0,0,0.45)', 'transparent', 'transparent', 'rgba(0,0,0,0.82)']}
-              locations={[0, 0.22, 0.55, 1]}
+              colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.6)']}
+              locations={[0, 0.3, 1]}
               style={StyleSheet.absoluteFillObject}
               pointerEvents="none"
             />
 
+            {/* Top Bar Floating Controls */}
             <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-              <Text style={styles.topTitle}>Profile</Text>
+              <View style={styles.circleSpacer} />
               <View style={styles.topActions}>
-                <TouchableOpacity style={styles.iconBtn} onPress={pickAvatar} activeOpacity={0.75}>
+                {user && (
+                  <TouchableOpacity
+                    style={styles.circleBtn}
+                    onPress={() => router.push(`/user/${user._id}` as any)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="eye-outline" size={19} color="#FFF" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.circleBtn} onPress={pickAvatar} activeOpacity={0.75}>
                   {uploadingAvatar ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <Ionicons name="camera-outline" size={18} color="#FFF" />
+                    <Ionicons name="camera-outline" size={19} color="#FFF" />
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.iconBtn}
+                  style={styles.circleBtn}
                   onPress={() => router.push('/settings' as any)}
                   activeOpacity={0.75}
                 >
-                  <Ionicons name="settings-outline" size={18} color="#FFF" />
+                  <Ionicons name="settings-outline" size={19} color="#FFF" />
                 </TouchableOpacity>
               </View>
             </View>
 
             {photos.length > 1 && (
-              <View style={[styles.dots, { top: insets.top + 56 }]}>
+              <View style={[styles.dots, { top: insets.top + 60 }]}>
                 {photos.map((_, i) => (
                   <View key={i} style={[styles.dot, i === photoIndex && styles.dotActive]} />
                 ))}
               </View>
             )}
-
-            <View style={styles.heroIdentity} pointerEvents="none">
-              <View style={styles.nameRow}>
-                <Text style={styles.heroName} numberOfLines={1}>
-                  {user?.displayName ?? 'Your name'}
-                </Text>
-                {isVerified && <Ionicons name="checkmark-circle" size={20} color="#BB92FF" />}
-              </View>
-              {metaLine ? <Text style={styles.heroMeta}>{metaLine}</Text> : null}
-            </View>
           </View>
 
-          <View style={styles.body}>
+          {/* Reference Image 1 Overlay Glass Card */}
+          <View style={[styles.glassCard, { backgroundColor: scheme === 'dark' ? '#141418' : '#FFFFFF', borderColor: c.border }]}>
+            {/* Identity Header */}
+            <View style={styles.identityHeader}>
+              <View style={styles.nameRow}>
+                <Text style={[styles.displayName, { color: c.text }]} numberOfLines={1}>
+                  {user?.displayName ?? 'Your Name'}
+                </Text>
+                {isVerified && <Ionicons name="checkmark-circle" size={22} color="#BB92FF" />}
+              </View>
+              <Text style={[styles.handleText, { color: c.textSecondary }]}>{username}</Text>
+            </View>
+
+            {/* Bio Quote */}
             {user?.bio ? (
-              <Text style={[styles.bio, { color: c.text }]}>{user.bio}</Text>
+              <Text style={[styles.bioQuote, { color: c.text }]}>{`"${user.bio}"`}</Text>
             ) : (
-              <Text style={[styles.bioMuted, { color: c.textSecondary }]}>
-                Add a short bio so people know your vibe.
+              <Text style={[styles.bioQuoteMuted, { color: c.textSecondary }]}>
+                "Add a short bio so people know your vibe."
               </Text>
             )}
 
-            <View style={[styles.statsRow, { borderColor: c.border }]}>
+            {/* 3-Stat Counter Grid (Reference Image 1 layout: Followers / Following / Comments) */}
+            <View style={[styles.statsContainer, { borderColor: c.border }]}>
               <TouchableOpacity
-                style={[styles.statItem, { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: c.border }]}
+                style={styles.statColumn}
                 onPress={() => router.push('/(tabs)/friends' as any)}
-                activeOpacity={0.65}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.statValue, { color: c.text }]}>
-                  {friendCount !== null ? String(friendCount) : '—'}
+                <Text style={[styles.statNumber, { color: c.text }]}>
+                  {friendCount !== null ? String(friendCount) : '0'}
                 </Text>
                 <Text style={[styles.statLabel, { color: c.textSecondary }]}>Friends</Text>
               </TouchableOpacity>
 
+              <View style={[styles.statDivider, { backgroundColor: c.border }]} />
+
               <TouchableOpacity
-                style={styles.statItem}
+                style={styles.statColumn}
                 onPress={() => router.push('/my-activity' as any)}
-                activeOpacity={0.65}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.statValue, { color: c.text }]}>
-                  {activityCount !== null ? String(activityCount) : '—'}
+                <Text style={[styles.statNumber, { color: c.text }]}>
+                  {activityCount !== null ? String(activityCount) : '0'}
                 </Text>
                 <Text style={[styles.statLabel, { color: c.textSecondary }]}>Pings</Text>
               </TouchableOpacity>
+
+              <View style={[styles.statDivider, { backgroundColor: c.border }]} />
+
+              <View style={styles.statColumn}>
+                <Text style={[styles.statNumber, { color: c.text }]}>
+                  {user?.trustRate ? `${user.trustRate}%` : '100%'}
+                </Text>
+                <Text style={[styles.statLabel, { color: c.textSecondary }]}>Trust Rate</Text>
+              </View>
             </View>
 
+            {/* Hashtag Interest Chips (Reference Image 1 style: #tag) */}
             {hobbies.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>Interests</Text>
-                <View style={styles.chipWrap}>
-                  {hobbies.map((h) => (
-                    <View key={h} style={[styles.chip, { borderColor: Ping.lavender, backgroundColor: scheme === 'dark' ? c.soft : Ping.soft }]}>
-                      <Text style={[styles.chipText, { color: c.text }]}>{h}</Text>
+              <View style={styles.hashtagWrap}>
+                {hobbies.map((h) => {
+                  const tagText = h.startsWith('#') ? h : `#${h.toLowerCase().replace(/\s+/g, '')}`;
+                  return (
+                    <View
+                      key={h}
+                      style={[
+                        styles.hashtagChip,
+                        {
+                          backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F4F4F6',
+                          borderColor: c.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.hashtagText, { color: c.text }]}>{tagText}</Text>
                     </View>
-                  ))}
-                </View>
+                  );
+                })}
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.editBtn, { backgroundColor: Ping.purple }]}
-              onPress={() => router.push('/edit-profile' as any)}
-              activeOpacity={0.88}
-            >
-              <Text style={[styles.editBtnText, { color: '#FFF' }]}>Edit profile</Text>
-            </TouchableOpacity>
+            {/* Capsule Action Buttons (Edit Profile + Public Preview Button) */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: scheme === 'dark' ? '#FFFFFF' : '#111111' },
+                ]}
+                onPress={() => router.push('/edit-profile' as any)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.actionBtnText,
+                    { color: scheme === 'dark' ? '#111111' : '#FFFFFF' },
+                  ]}
+                >
+                  Edit profile
+                </Text>
+              </TouchableOpacity>
 
+              {user && (
+                <TouchableOpacity
+                  style={[
+                    styles.previewBtn,
+                    {
+                      backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F2F2F5',
+                      borderColor: c.border,
+                    },
+                  ]}
+                  onPress={() => router.push(`/user/${user._id}` as any)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="eye-outline" size={20} color={c.text} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* User Highlights Section */}
             {user && (
-              <View style={styles.section}>
+              <View style={styles.highlightsContainer}>
                 <HighlightsSection userId={user._id} isOwnProfile scheme={scheme} />
               </View>
             )}
@@ -249,33 +315,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  topTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFF',
-    letterSpacing: -0.2,
-  },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-
   hero: {
     width: SCREEN_W,
     backgroundColor: '#111',
@@ -289,6 +328,27 @@ const styles = StyleSheet.create({
   },
   heroInitials: { fontSize: 64, fontWeight: '800', letterSpacing: -1 },
   heroEmptyHint: { ...Typography.bodySm, fontWeight: '600' },
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  circleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  circleSpacer: { width: 40, height: 40 },
   dots: {
     position: 'absolute',
     left: 0,
@@ -300,85 +360,117 @@ const styles = StyleSheet.create({
   },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
   dotActive: { width: 16, backgroundColor: '#FFF' },
-  heroIdentity: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 22,
-    gap: 6,
+
+  glassCard: {
+    marginTop: -32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 22,
+    paddingTop: 28,
+    paddingBottom: 24,
+    gap: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  identityHeader: {
+    gap: 4,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  heroName: {
-    fontSize: 30,
+  displayName: {
+    fontSize: 28,
     fontWeight: '800',
-    color: '#FFF',
-    letterSpacing: -0.5,
-    lineHeight: 36,
-    flexShrink: 1,
+    letterSpacing: -0.4,
   },
-  heroMeta: {
-    color: 'rgba(255,255,255,0.8)',
+  handleText: {
     fontSize: 15,
     fontWeight: '500',
-    lineHeight: 20,
   },
-
-  body: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    gap: 20,
-  },
-  bio: {
+  bioQuote: {
     fontSize: 15,
     fontWeight: '400',
     lineHeight: 22,
+    fontStyle: 'italic',
   },
-  bioMuted: {
+  bioQuoteMuted: {
     fontSize: 14,
     lineHeight: 20,
+    fontStyle: 'italic',
   },
-
-  statsRow: {
+  statsContainer: {
     flexDirection: 'row',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  statItem: {
+  statColumn: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
     gap: 3,
   },
-  statValue: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
-  statLabel: { fontSize: 12, fontWeight: '500' },
-
-  section: { gap: 12 },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+  },
+  hashtagWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  hashtagChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  chipText: { fontSize: 13, fontWeight: '500' },
-
-  editBtn: {
+  hashtagText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
     height: 52,
-    borderRadius: Radius.lg,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  editBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+  actionBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  previewBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  highlightsContainer: {
+    paddingTop: 4,
+  },
 });
+

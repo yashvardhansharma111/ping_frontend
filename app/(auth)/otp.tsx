@@ -105,7 +105,11 @@ export default function OtpScreen() {
     if (code.length < OTP_LENGTH || loading) return;
     setLoading(true);
     try {
-      const res = await authApi.verifyOtp(phone, code);
+      const formattedPhone = phone?.startsWith('+') ? phone : `+91${(phone || '').replace(/\D/g, '')}`;
+      const res = await authApi.verifyOtp(formattedPhone, code);
+      if (!res || !res.accessToken || !res.user) {
+        throw new Error('Invalid response from server. Please try again.');
+      }
       await login(res.accessToken, res.refreshToken, res.user, res.isNewUser, (res as any).isAdmin, (res as any).adminToken);
       if ((res as any).isAdmin) {
         pendingRoute.current = '/(admin)';
@@ -116,7 +120,7 @@ export default function OtpScreen() {
       }
       openSafety();
     } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Wrong code', text2: err.message || 'Please check the code and try again.' });
+      Toast.show({ type: 'error', text1: 'Verification failed', text2: err.message || 'Please check the code and try again.' });
       setDigits(Array(OTP_LENGTH).fill(''));
       inputs.current[0]?.focus();
     } finally {
@@ -142,51 +146,52 @@ export default function OtpScreen() {
   const mutedColor  = isDark ? '#9490C0' : '#6F6866';
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
+    <View style={[s.root, { backgroundColor: isDark ? '#0A0A0E' : '#F5F3FF' }]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top spacer */}
-        <View style={[s.topSpacer, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="arrow-back" size={20} color={textColor} />
-          </TouchableOpacity>
-        </View>
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {/* Top spacer */}
+          <View style={[s.topSpacer, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
+              <Ionicons name="arrow-back" size={20} color={textColor} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Text block */}
-        <View style={s.textBlock}>
-          <Text style={[
-            s.appName,
-            fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
-          ]}>
-            Ping
-          </Text>
-          <Text style={s.headline}>
-            Look at your phone{'\n'}for once.
-          </Text>
-          <Text style={s.subtitle}>
-            A 6-digit code is waiting in your messages.{' '}
-            <Text style={s.phoneHighlight}>{maskedPhone}</Text>
-          </Text>
-          {debugCode ? (
-            <View style={s.debugBadge}>
-              <Ionicons name="construct-outline" size={11} color={Ping.orange} />
-              <Text style={s.debugText}>Dev code: {debugCode}</Text>
-            </View>
-          ) : null}
-        </View>
+          {/* Text block */}
+          <View style={s.textBlock}>
+            <Text style={[
+              s.appName,
+              fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+            ]}>
+              Ping
+            </Text>
+            <Text style={s.headline}>
+              Look at your phone{'\n'}for once.
+            </Text>
+            <Text style={s.subtitle}>
+              A 6-digit code is waiting in your messages.{' '}
+              <Text style={s.phoneHighlight}>{maskedPhone}</Text>
+            </Text>
+            {debugCode ? (
+              <View style={s.debugBadge}>
+                <Ionicons name="construct-outline" size={11} color={Ping.orange} />
+                <Text style={s.debugText}>Dev code: {debugCode}</Text>
+              </View>
+            ) : null}
+          </View>
 
-        {/* Card */}
-        <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
-          <View style={s.pill} />
+          {/* Card */}
+          <View style={[s.card, { paddingBottom: Math.max(insets.bottom + 24, 36) }]}>
+            <View style={s.pill} />
 
-          <Text style={s.cardTitle}>Enter the 6-digit code</Text>
+            <Text style={s.cardTitle}>Enter the 6-digit code</Text>
 
           {/* OTP boxes */}
           <View style={s.boxRow}>
@@ -274,13 +279,14 @@ export default function OtpScreen() {
           </Animated.View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 function makeStyles(isDark: boolean) {
-  const bg      = isDark ? '#0F0F12' : '#FFFFFF';
-  const surface = isDark ? '#1A1A24' : '#FFFFFF';
+  const bg      = isDark ? '#0A0A0E' : '#F5F3FF';
+  const surface = isDark ? '#14141A' : '#FFFFFF';
   const text    = isDark ? '#F1F0FF' : '#111111';
   const muted   = isDark ? '#9490C0' : '#6F6866';
   const border  = isDark ? 'rgba(167,139,250,0.18)' : '#E6E1DA';
@@ -288,7 +294,7 @@ function makeStyles(isDark: boolean) {
 
   return StyleSheet.create({
     root:  { flex: 1, backgroundColor: bg },
-    scroll: { flexGrow: 1 },
+    scroll: { flexGrow: 1, justifyContent: 'space-between' },
     topSpacer: { flex: 1, paddingHorizontal: 28 },
     backBtn: {
       width: 40, height: 40, borderRadius: 20,
@@ -312,12 +318,13 @@ function makeStyles(isDark: boolean) {
     },
     debugText: { fontSize: 11, color: Ping.orange, fontWeight: '600' },
     card: {
+      flex: 1,
       backgroundColor: surface,
       borderTopLeftRadius: 32,
       borderTopRightRadius: 32,
       paddingHorizontal: 28,
-      paddingTop: 16,
-      gap: 14,
+      paddingTop: 18,
+      gap: 16,
       borderTopWidth: 1,
       borderColor: isDark ? 'rgba(167,139,250,0.14)' : Ping.lavender,
       shadowColor: Ping.purpleDim,

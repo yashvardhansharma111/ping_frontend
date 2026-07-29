@@ -8,19 +8,20 @@ interface Props {
   onBack?: () => void;
   /** Optional element rendered in the right slot (e.g. a Save button) */
   right?: React.ReactNode;
-  /** Add a hairline border at the bottom. Default true */
+  /** Add a hairline border at the bottom. Default false for clean layout */
   border?: boolean;
   /** Extra paddingTop — pass insets.top + 8 from the caller */
   paddingTop?: number;
 }
 
 /**
- * Standard screen top bar used across all full-screen routes.
- * Keeps icon size, spacing and title style consistent everywhere.
+ * Standard screen top bar matching Reference Image 2 circular header controls.
  */
-export default function ScreenHeader({ title, onBack, right, border = true, paddingTop = 8 }: Props) {
+export default function ScreenHeader({ title, onBack, right, border = false, paddingTop = 8 }: Props) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
+
+  const circleBg = scheme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F2F2F5';
 
   return (
     <View
@@ -30,13 +31,17 @@ export default function ScreenHeader({ title, onBack, right, border = true, padd
         border && styles.bordered,
       ]}
     >
-      {/* Left — back button or spacer */}
+      {/* Left — circular back button or spacer */}
       {onBack ? (
-        <TouchableOpacity onPress={onBack} hitSlop={12} style={styles.side}>
-          <Ionicons name="arrow-back" size={22} color={c.text} />
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.7}
+          style={[styles.circleBtn, { backgroundColor: circleBg }]}
+        >
+          <Ionicons name="chevron-back" size={20} color={c.text} />
         </TouchableOpacity>
       ) : (
-        <View style={styles.side} />
+        <View style={styles.circleSpacer} />
       )}
 
       <Text style={[styles.title, { color: c.text }]} numberOfLines={1}>
@@ -44,7 +49,11 @@ export default function ScreenHeader({ title, onBack, right, border = true, padd
       </Text>
 
       {/* Right slot */}
-      <View style={styles.side}>{right ?? null}</View>
+      {right ? (
+        <View style={styles.rightWrap}>{right}</View>
+      ) : (
+        <View style={styles.circleSpacer} />
+      )}
     </View>
   );
 }
@@ -60,11 +69,28 @@ const styles = StyleSheet.create({
   bordered: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  side: {
-    width: 46,
-    height: 46,
+  circleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { ...Typography.h3, flex: 1, textAlign: 'center' },
+  circleSpacer: {
+    width: 40,
+    height: 40,
+  },
+  rightWrap: {
+    minWidth: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  title: {
+    ...Typography.h3,
+    fontSize: 17,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
 });
