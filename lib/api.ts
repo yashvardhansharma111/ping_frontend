@@ -136,29 +136,6 @@ export const uploadApi = {
   },
 };
 
-const ADMIN_BASE = `${ROOT}/api/admin/v1`;
-
-async function adminRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = await SecureStore.getItemAsync('adminToken');
-  if (!token) throw new Error('Not authenticated');
-  headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${ADMIN_BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 15_000); return c.signal; })(),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `HTTP ${res.status}`);
-  return data as T;
-}
-
-const aGet = <T>(path: string) => adminRequest<T>('GET', path);
-const aPost = <T>(path: string, body?: unknown) => adminRequest<T>('POST', path, body);
-const aPut = <T>(path: string, body?: unknown) => adminRequest<T>('PUT', path, body);
-const aDel = <T>(path: string) => adminRequest<T>('DELETE', path);
-
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface AuthVerifyResponse {
@@ -679,41 +656,55 @@ export const subscriptionsApi = {
     post<{ ok: boolean; subscription: SubscriptionSnapshot }>('/subscriptions/mock-activate', { planId }),
 };
 
-// ── Admin API ─────────────────────────────────────────────────────────────────
+// ── Verification ─────────────────────────────────────────────────────────────
 
-export interface AdminDailyPoint {
-  date: string; // YYYY-MM-DD
-  day: string;  // MM-DD
-  signups: number;
-  pings: number;
-  ads: number;
-  revenueMinor: number;
+export interface VerificationRequest {
+  _id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  poseInstruction: string;
+  selfieUrl?: string;
+  rejectionReason?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
 }
 
-export interface AdminOverview {
-  live: { activeNow: number; activePings: number; activeAds: number; todaysRevenueMinor: number };
-  last7d: { newSignups: number; pingsCreated: number; adsLaunched: number; reportsSubmitted: number; bansIssued: number };
-  queues: { pendingReports: number; pendingAppeals: number };
-  daily?: AdminDailyPoint[];
-}
+export const verificationApi = {
+  /**
+   * Submit a selfie for face verification.
+   * Sends multipart/form-data with fields: selfie (file) + poseInstruction (string).
+   */
+  request: async (selfieUri: string, poseInstruction: string): Promise<{ ok: boolean; request: VerificationRequest }> => {
+    const token = await getAccessToken();
+    if (!token) throw new Error('Not authenticated');
 
-export interface AdminUser {
-  _id: string; displayName?: string; username?: string; phone: string;
-  email?: string; status: string; strikeCount: number; createdAt: string; lastActiveAt?: string;
-}
+    const filename = selfieUri.split('/').pop() ?? 'selfie.jpg';
+    const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
-export interface AdminPayment {
-  _id: string; amountMinor: number; currency: string; status: string; method?: string;
-  gatewayOrderId?: string; gatewayPaymentId?: string; createdAt: string;
-  userId?: { displayName?: string; username?: string; phone: string };
-  adId?: { businessName: string; tier: string; status: string };
-}
+    const form = new FormData();
+    form.append('selfie', { uri: selfieUri, name: 'selfie.' + ext, type: mime } as any);
+    form.append('poseInstruction', poseInstruction);
 
-export interface AdminReport {
-  _id: string; targetType: string; reason: string; status: string; createdAt: string;
-  reporterId?: { displayName?: string; username?: string };
-  targetUserId?: { displayName?: string; username?: string; status: string };
-}
+    const res = await fetch(`${BASE_URL}/verification/request`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: makeSignal(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `Upload failed (${res.status})`);
+    return data as { ok: boolean; request: VerificationRequest };
+  },
+
+  status: (): Promise<{
+    ok: boolean;
+    verificationStatus: 'none' | 'pending' | 'verified' | 'rejected';
+    verifiedAt: string | null;
+    rejectionReason: string | null;
+    request: VerificationRequest | null;
+  }> => get('/verification/status'),
+};
+
 
 // ── Highlights ────────────────────────────────────────────────────────────────
 
@@ -782,45 +773,3 @@ export const eventsApi = {
   getById: (id: string) => get<{ ok: boolean; event: PingEvent }>(`/events/${id}`).then((r) => r.event),
 };
 
-// ── Admin API ─────────────────────────────────────────────────────────────────
-
-export const adminApi = {
-  overview: () => aGet<{ ok: boolean } & AdminOverview>('/overview'),
-  users: (q?: string, filter?: string, page = 1) =>
-    aGet<{ ok: boolean; users: AdminUser[]; total: number }>(`/users?q=${q || ''}&filter=${filter || 'all'}&page=${page}`),
-  warnUser: (id: string, reason: string) => aPost<{ ok: boolean }>(`/users/${id}/warn`, { reason }),
-  banUser: (id: string, type: 'temp' | 'perm', reason: string, durationDays?: number) =>
-    aPost<{ ok: boolean }>(`/users/${id}/ban`, { type, reason, durationDays, confirm: type === 'perm' ? 'CONFIRM' : undefined }),
-  unbanUser: (id: string) => aPost<{ ok: boolean }>(`/users/${id}/unban`),
-  payments: (page = 1, status?: string) =>
-    aGet<{ ok: boolean; items: AdminPayment[]; total: number; summary: { totalMinor: number; count: number } }>(`/payments?page=${page}${status ? `&status=${status}` : ''}`),
-  refundPayment: (id: string, reason: string) => aPost<{ ok: boolean }>(`/payments/${id}/refund`, { reason }),
-  reports: (tab = 'all', page = 1) =>
-    aGet<{ ok: boolean; items: AdminReport[]; total: number }>(`/reports?tab=${tab}&page=${page}`),
-  dismissReport: (id: string) => aPost<{ ok: boolean }>(`/reports/${id}/dismiss`),
-  removeReport: (id: string, reason: string) => aPost<{ ok: boolean }>(`/reports/${id}/remove`, { reason }),
-  warnReport: (id: string, reason: string) => aPost<{ ok: boolean }>(`/reports/${id}/remove-and-warn`, { reason }),
-
-  // Events
-  events: (page = 1) =>
-    aGet<{ ok: boolean; events: PingEvent[]; total: number; page: number }>(`/events?page=${page}`),
-  createEvent: (body: {
-    title: string; description?: string; imageUrl?: string | null;
-    venueName?: string | null; venueAddress?: string | null;
-    category: 'offer' | 'event'; startDate: string; endDate: string;
-    isActive?: boolean; tags?: string[];
-  }) => aPost<{ ok: boolean; event: PingEvent }>('/events', body).then((r) => r.event),
-  updateEvent: (id: string, body: Partial<{
-    title: string; description: string; imageUrl: string | null;
-    venueName: string | null; venueAddress: string | null;
-    category: 'offer' | 'event'; startDate: string; endDate: string;
-    isActive: boolean; tags: string[];
-  }>) => aPut<{ ok: boolean; event: PingEvent }>(`/events/${id}`, body).then((r) => r.event),
-  deleteEvent: (id: string) => aDel<{ ok: boolean }>(`/events/${id}`),
-
-  // Verification
-  pendingVerifications: (page = 1) =>
-    aGet<{ ok: boolean; users: Array<{ _id: string; displayName?: string; username?: string; avatarUrl?: string; verificationSelfieUrl?: string; phone: string; createdAt: string }>; total: number; page: number }>(`/users/verifications?page=${page}`),
-  approveVerification: (id: string) => aPost<{ ok: boolean }>(`/users/${id}/verify/approve`),
-  rejectVerification: (id: string, reason: string) => aPost<{ ok: boolean }>(`/users/${id}/verify/reject`, { reason }),
-};

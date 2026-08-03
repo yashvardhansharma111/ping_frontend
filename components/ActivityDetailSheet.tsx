@@ -959,11 +959,36 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       <View style={rpt.sheet}>
         <View style={rpt.handle} />
         <View style={[rpt.iconWrap, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
-          <Ionicons name="warning" size={22} color="#F59E0B" />
+          <Ionicons name="shield-checkmark" size={22} color="#F59E0B" />
         </View>
-        <Text style={rpt.title}>Before you join</Text>
+        <Text style={rpt.title}>Safety & Attendance Policy</Text>
 
-        {/* Checkbox row */}
+        {/* Rules list */}
+        <View style={jc.rulesList}>
+          <View style={jc.ruleRow}>
+            <Ionicons name="person" size={14} color="#F59E0B" style={{ marginTop: 1 }} />
+            <Text style={jc.ruleText}>
+              <Text style={jc.ruleBold}>1 registration = 1 person only.</Text>{' '}
+              You cannot bring friends or invite anyone who hasn't registered separately.
+            </Text>
+          </View>
+          <View style={jc.ruleRow}>
+            <Ionicons name="ban" size={14} color="#EF4444" style={{ marginTop: 1 }} />
+            <Text style={jc.ruleText}>
+              <Text style={jc.ruleBold}>No uninvited guests — ever.</Text>{' '}
+              Showing up with extra people is a direct violation of Ping's community rules.
+            </Text>
+          </View>
+          <View style={jc.ruleRow}>
+            <Ionicons name="lock-closed" size={14} color="#9490C0" style={{ marginTop: 1 }} />
+            <Text style={jc.ruleText}>
+              <Text style={jc.ruleBold}>Violation = permanent blacklist.</Text>{' '}
+              Attendance fraud results in immediate and permanent account suspension with no appeal.
+            </Text>
+          </View>
+        </View>
+
+        {/* Checkbox */}
         <TouchableOpacity
           style={jc.checkRow}
           activeOpacity={0.75}
@@ -973,13 +998,9 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
             {soloAcked && <Ionicons name="checkmark" size={14} color="#FFF" />}
           </View>
           <Text style={jc.checkLabel}>
-            I confirm I will attend this ping alone. I will not bring any uninvited guests.
+            I understand — I will attend alone and will not bring any extra people.
           </Text>
         </TouchableOpacity>
-
-        <Text style={jc.warningBody}>
-          Bringing extra people is a violation of Ping's community guidelines and may result in permanent account suspension.
-        </Text>
 
         {/* Buttons */}
         <TouchableOpacity
@@ -1419,13 +1440,29 @@ const jc = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 20,
   },
-  warningBody: {
-    color: 'rgba(245,158,11,0.8)',
+  rulesList: {
+    width: '100%',
+    gap: 10,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 10,
+    padding: 11,
+  },
+  ruleText: {
+    flex: 1,
+    color: 'rgba(241,240,255,0.75)',
     fontSize: 12.5,
     lineHeight: 18,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.sm,
-    marginTop: 12,
+  },
+  ruleBold: {
+    color: '#F1F0FF',
+    fontWeight: '700',
   },
   confirmBtn: {
     marginTop: 8,

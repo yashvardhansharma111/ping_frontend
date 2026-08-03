@@ -25,7 +25,7 @@ import { setupNotifications, addResponseListener, type NotificationPayload } fro
 import { Colors, Ping } from '@/constants/theme';
 
 function AuthGuard() {
-  const { user, isAdmin, isLoading } = useAuthStore();
+  const { user, isLoading } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
@@ -37,23 +37,14 @@ function AuthGuard() {
   useEffect(() => {
     if (isLoading || onboardingDone === null) return;
 
-    const seg0          = segments[0] as string | undefined;
-    const seg1          = segments[1] as string | undefined;
-    const inOnboarding  = seg0 === 'onboarding';
-    const inAuth        = seg0 === '(auth)';
-    const inTabs        = seg0 === '(tabs)';
-    const inAdmin       = seg0 === '(admin)';
+    const seg0           = segments[0] as string | undefined;
+    const seg1           = segments[1] as string | undefined;
+    const inOnboarding   = seg0 === 'onboarding';
+    const inAuth         = seg0 === '(auth)';
     const inVerification = seg0 === 'verification';
 
-    // Screens inside (auth) where an already-authenticated user is ALLOWED to
-    // stay: otp (safety modal still showing) and setup (filling profile).
     const inSetupFlow = inAuth && ['otp', 'setup'].includes(seg1 ?? '');
-
-    // User authenticated but never completed profile setup (no displayName).
-    // Use as a safety net: handles the race where AuthGuard fires before OTP
-    // routes to setup, AND handles the case where isNewUser=false but setup
-    // was never completed (e.g. user existed but app was force-closed mid-setup).
-    const needsSetup = !!(user && !isAdmin && !(user as any)?.displayName);
+    const needsSetup  = !!(user && !(user as any)?.displayName);
 
     if (!onboardingDone) {
       if (!inOnboarding) router.replace('/onboarding');
@@ -63,19 +54,11 @@ function AuthGuard() {
     if (!user && !inAuth) {
       router.replace('/(auth)/phone');
     } else if (user && inAuth && !inSetupFlow) {
-      // Returning user authenticated on a plain auth screen (phone) — send to app.
-      router.replace(isAdmin ? '/(admin)' : '/(tabs)');
-    } else if (user && needsSetup && !inAuth && !inVerification) {
-      // Safety net: incomplete profile ended up outside the auth group — route back to setup.
-      router.replace('/(auth)/setup' as any);
-    } else if (user && isAdmin && inTabs) {
-      router.replace('/(admin)');
-    } else if (user && !isAdmin && inAdmin) {
       router.replace('/(tabs)');
-    } else if (user && inVerification && isAdmin) {
-      router.replace('/(admin)');
+    } else if (user && needsSetup && !inAuth && !inVerification) {
+      router.replace('/(auth)/setup' as any);
     }
-  }, [user, isAdmin, isLoading, segments, onboardingDone]);
+  }, [user, isLoading, segments, onboardingDone]);
 
   // Handle notification taps — must live inside the navigator so router works
   useEffect(() => {
@@ -174,7 +157,6 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(admin)" />
             <Stack.Screen name="verification" />
           </Stack>
         </>

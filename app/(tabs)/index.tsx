@@ -1432,7 +1432,7 @@ export default function MapScreen() {
       />
 
       {/* ── Top bar ── */}
-      <View style={styles.topBar} pointerEvents="box-none">
+      <View style={[styles.topBar, { top: insets.top + 10 }]} pointerEvents="box-none">
         {/* Left: greeting — tap to go to profile */}
         <TouchableOpacity
           style={styles.greetChip}
@@ -1838,7 +1838,7 @@ function makeStyles(isDark: boolean) {
     // ── Top bar ──────────────────────────────────────────────────────────────
     topBar: {
       position: 'absolute',
-      top: Platform.OS === 'ios' ? 56 : 38,
+      top: 0,
       left: Spacing.md,
       right: Spacing.md,
       flexDirection: 'row',

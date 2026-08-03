@@ -106,10 +106,8 @@ export default function OtpScreen() {
     setLoading(true);
     try {
       const res = await authApi.verifyOtp(phone, code);
-      await login(res.accessToken, res.refreshToken, res.user, res.isNewUser, (res as any).isAdmin, (res as any).adminToken);
-      if ((res as any).isAdmin) {
-        pendingRoute.current = '/(admin)';
-      } else if (res.isNewUser || !res.user?.displayName) {
+      await login(res.accessToken, res.refreshToken, res.user, res.isNewUser);
+      if (res.isNewUser || !res.user?.displayName) {
         pendingRoute.current = '/(auth)/setup';
       } else {
         pendingRoute.current = '/(tabs)';

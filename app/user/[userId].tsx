@@ -184,11 +184,11 @@ const glass = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
   },
-  android: { backgroundColor: 'rgba(22,22,22,0.92)' },
+  android: { backgroundColor: 'rgba(12,8,36,0.94)' },
   inner: {
     padding: 22,
     gap: 16,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(0,0,0,0.32)' : 'transparent',
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(8,4,28,0.38)' : 'transparent',
   },
 });
 
@@ -603,15 +603,15 @@ export default function UserProfileScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color="#FFF" size="large" />
+      <View style={{ flex: 1, backgroundColor: '#06061A', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#A78BFA" size="large" />
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+      <View style={{ flex: 1, backgroundColor: '#06061A', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
         <Ionicons name="person-outline" size={48} color="#555" />
         <Text style={{ color: '#888', ...Typography.bodyMed }}>User not found</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: Spacing.sm }}>
@@ -674,7 +674,7 @@ export default function UserProfileScreen() {
   const stats = [
     { value: mutualCount !== null ? String(mutualCount) : '—', label: 'Mutuals' },
     { value: String(profile.completedPingsCount ?? 0), label: 'Pings' },
-    { value: `${profile.trustRate ?? 100}%`, label: 'Trust' },
+    { value: `${profile.trustRate ?? 0}%`, label: 'Trust' },
   ];
 
   // ── Primary CTA label / action ─────────────────────────────────────────────
@@ -826,12 +826,22 @@ export default function UserProfileScreen() {
   // ── DETAIL MODE (mock right screen) ────────────────────────────────────────
   return (
     <View style={s.root}>
+      {/* Deep purple base */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#06061A' }]} />
+      {/* Blurred avatar texture (when photo exists) */}
       {allPhotos[0] ? (
-        <Image source={{ uri: allPhotos[0] }} style={StyleSheet.absoluteFillObject} blurRadius={28} resizeMode="cover" />
-      ) : (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#0A0A0A' }]} />
-      )}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+        <Image source={{ uri: allPhotos[0] }} style={StyleSheet.absoluteFillObject} blurRadius={32} resizeMode="cover" />
+      ) : null}
+      {/* Purple glow orb — top-right, 3 layers for soft falloff */}
+      <View style={s.orbTR3} />
+      <View style={s.orbTR2} />
+      <View style={s.orbTR1} />
+      {/* Purple glow orb — bottom-left */}
+      <View style={s.orbBL3} />
+      <View style={s.orbBL2} />
+      <View style={s.orbBL1} />
+      {/* Dark purple veil over everything */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,4,26,0.82)' }]} />
 
       <View style={[s.detailHeader, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={handleBack} hitSlop={12} style={s.headerBtn}>
@@ -1024,7 +1034,7 @@ export default function UserProfileScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: '#06061A' },
 
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
@@ -1056,7 +1066,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   previewSheetTint: {
-    backgroundColor: 'rgba(0,0,0,0.32)',
+    backgroundColor: 'rgba(8,4,28,0.45)',
   },
   previewSheetInner: {
     paddingHorizontal: 22,
@@ -1157,10 +1167,18 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 22,
     paddingTop: 12,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(8,4,28,0.82)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(167,139,250,0.14)',
   },
+  // Purple glow orbs — top-right (3 layers = soft falloff)
+  orbTR3: { position: 'absolute', width: 440, height: 440, borderRadius: 220, backgroundColor: 'rgba(110,40,220,0.07)', top: -180, right: -150 },
+  orbTR2: { position: 'absolute', width: 310, height: 310, borderRadius: 155, backgroundColor: 'rgba(120,50,230,0.13)', top: -115, right: -85 },
+  orbTR1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(130,60,240,0.20)', top: -55, right: -25 },
+  // Purple glow orbs — bottom-left
+  orbBL3: { position: 'absolute', width: 380, height: 380, borderRadius: 190, backgroundColor: 'rgba(80,20,190,0.07)', bottom: 50, left: -140 },
+  orbBL2: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(90,25,200,0.13)', bottom: 100, left: -80 },
+  orbBL1: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: 'rgba(100,30,210,0.20)', bottom: 155, left: -25 },
   btnRow: { flexDirection: 'row', gap: 8 },
   btnPrimary: {
     height: 52,

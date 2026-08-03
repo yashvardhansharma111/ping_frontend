@@ -520,8 +520,6 @@ export default function EventsScreen() {
 
   return (
     <View style={[scr.root, { paddingTop: insets.top }]}>
-      <View style={scr.glow} pointerEvents="none" />
-
       <View style={scr.header}>
         <View>
           <Text style={scr.title}>Events</Text>

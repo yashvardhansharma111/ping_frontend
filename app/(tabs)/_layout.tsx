@@ -2,7 +2,6 @@ import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Ping } from '@/constants/theme';
 import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useRef, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -15,16 +14,16 @@ import {
 } from 'phosphor-react-native';
 import type { Icon } from 'phosphor-react-native';
 
-function TabIcon({
+function TabItem({
   IconComp,
   label,
   focused,
-  color,
+  scheme,
 }: {
   IconComp: Icon;
   label: string;
   focused: boolean;
-  color: string;
+  scheme: 'light' | 'dark';
 }) {
   const anim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
@@ -32,31 +31,55 @@ function TabIcon({
     Animated.spring(anim, {
       toValue: focused ? 1 : 0,
       useNativeDriver: false,
-      damping: 14,
-      mass: 0.8,
-      stiffness: 220,
+      damping: 20,
+      mass: 0.6,
+      stiffness: 280,
     }).start();
-  }, [focused]);
+  }, [anim, focused]);
 
-  const bg = anim.interpolate({
+  const activeBg     = scheme === 'dark' ? '#7C3AED' : '#6545D9';
+  const activeColor  = '#FFFFFF';
+  const inactiveColor = scheme === 'dark' ? '#9494A8' : '#71717A';
+
+  const pillWidth = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(187,146,255,0)', 'rgba(187,146,255,0.2)'],
+    outputRange: [38, 84],
   });
-  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] });
-  const labelOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-  const labelTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [4, 0] });
-  const iconTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [5, 0] });
+
+  const labelOpacity = anim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 0, 1],
+  });
 
   return (
-    <Animated.View style={[s.iconWrap, { backgroundColor: bg, transform: [{ scale }] }]}>
-      <Animated.View style={{ transform: [{ translateY: iconTranslateY }] }}>
-        <IconComp size={22} color={color} weight={focused ? 'fill' : 'regular'} />
-      </Animated.View>
-      <Animated.Text
-        style={[s.label, { color, opacity: labelOpacity, transform: [{ translateY: labelTranslateY }] }]}
-      >
-        {label}
-      </Animated.Text>
+    <Animated.View
+      style={[
+        s.itemContainer,
+        {
+          width: pillWidth,
+          backgroundColor: focused ? activeBg : 'transparent',
+        },
+      ]}
+    >
+      <IconComp
+        size={21}
+        color={focused ? activeColor : inactiveColor}
+        weight={focused ? 'fill' : 'regular'}
+      />
+      {focused && (
+        <Animated.Text
+          numberOfLines={1}
+          style={[
+            s.activeLabel,
+            {
+              color: activeColor,
+              opacity: labelOpacity,
+            },
+          ]}
+        >
+          {label}
+        </Animated.Text>
+      )}
     </Animated.View>
   );
 }
@@ -72,16 +95,16 @@ const TAB_SCREENS = [
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme() ?? 'dark';
-  const c = Colors[scheme];
 
   return (
     <View
       style={[
         s.bar,
         {
-          bottom: insets.bottom + 10,
-          backgroundColor: scheme === 'dark' ? 'rgba(15,15,18,0.94)' : 'rgba(255,255,255,0.94)',
-          borderColor: scheme === 'dark' ? 'rgba(187,146,255,0.22)' : 'rgba(143,99,244,0.14)',
+          bottom: Math.max(insets.bottom + 10, 16),
+          backgroundColor: scheme === 'dark' ? 'rgba(16, 16, 22, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+          borderColor: scheme === 'dark' ? 'rgba(187, 146, 255, 0.2)' : 'rgba(143, 99, 244, 0.14)',
+          shadowColor: scheme === 'dark' ? '#000000' : '#2A1850',
           shadowOpacity: scheme === 'dark' ? 0.45 : 0.12,
         },
       ]}
@@ -103,12 +126,17 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         }
 
         return (
-          <TouchableOpacity key={route.key} style={s.tab} onPress={onPress} activeOpacity={0.7}>
-            <TabIcon
+          <TouchableOpacity
+            key={route.key}
+            style={s.tab}
+            onPress={onPress}
+            activeOpacity={0.85}
+          >
+            <TabItem
               IconComp={cfg.Icon}
               label={cfg.label}
               focused={focused}
-              color={focused ? c.tabIconSelected : c.tabIconDefault}
+              scheme={scheme}
             />
           </TouchableOpacity>
         );
@@ -135,35 +163,37 @@ export default function TabLayout() {
 const s = StyleSheet.create({
   bar: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    height: 64,
+    left: 28,
+    right: 28,
+    height: 60,
     borderRadius: 30,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: Ping.purpleDim,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 24,
-    elevation: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 18,
+    elevation: 12,
   },
   tab: {
-    flex: 1,
-    height: 64,
+    height: 62,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconWrap: {
-    width: 56,
-    height: 48,
+  itemContainer: {
+    height: 42,
+    borderRadius: 21,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 24,
-    gap: 2,
+    paddingHorizontal: 12,
+    gap: 6,
   },
-  label: {
-    fontSize: 9,
+  activeLabel: {
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
   },
 });

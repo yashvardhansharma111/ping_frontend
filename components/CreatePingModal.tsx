@@ -19,8 +19,16 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { Asset } from 'expo-asset';
 import { activitiesApi, uploadApi } from '@/lib/api';
+
+const PING_COVERS = [
+  require('@/assets/ping-covers/cover1.jpeg'),
+  require('@/assets/ping-covers/cover2.jpeg'),
+  require('@/assets/ping-covers/cover3.jpeg'),
+  require('@/assets/ping-covers/cover4.jpeg'),
+  require('@/assets/ping-covers/cover5.jpeg'),
+];
 import { scheduleStartingNotification } from '@/lib/notifications';
 import {
   fetchCategorizedPlaces,
@@ -569,64 +577,45 @@ function makeStyles(isDark: boolean) {
       ...Typography.bodyMed,
       color: text,
     },
-    imagePicker: {
-      height: 140,
+    coverRow: {
+      flexDirection: 'row',
+      gap: 10,
+      paddingVertical: 4,
+    },
+    coverThumb: {
+      width: 110,
+      height: 76,
       borderRadius: Radius.md,
-      borderWidth: 1.5,
-      borderColor: border,
-      borderStyle: 'dashed',
-      backgroundColor: inputBg,
-      alignItems: 'center',
-      justifyContent: 'center',
       overflow: 'hidden',
-      gap: 6,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
-    imageIconWrap: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: isDark ? 'rgba(124,58,237,0.18)' : 'rgba(124,58,237,0.1)',
-      alignItems: 'center',
-      justifyContent: 'center',
+    coverThumbSelected: {
+      borderColor: Ping.green,
     },
-    imageHint: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: muted,
+    coverImg: {
+      width: '100%',
+      height: '100%',
     },
-    imageSub: {
-      fontSize: 11,
-      color: hint,
-    },
-    imageOverlay: {
+    coverOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.28)',
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      justifyContent: 'space-between',
-      padding: 10,
-    },
-    imageChangeBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderRadius: Radius.full,
-    },
-    imageChangeTxt: {
-      color: '#FFF',
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    imageRemoveBtn: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    coverCheck: {
+      position: 'absolute',
+      bottom: 5,
+      right: 5,
+    },
+    coverClear: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+    },
+    coverClearText: {
+      fontSize: 12,
+      color: hint,
+      textDecorationLine: 'underline',
     },
     customTypeWrap: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -881,6 +870,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [paywall, setPaywall] = useState<{ title: string; message: string; upgradeTo: 'pro' | 'premium' } | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedCoverIdx, setSelectedCoverIdx] = useState<number | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -1011,28 +1001,28 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
     setCustomLng(null);
     setImageUrl(null);
     setUploadingImage(false);
+    setSelectedCoverIdx(null);
     setStep(1);
   }
 
-  async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Toast.show({ type: 'error', text1: 'Permission needed', text2: 'Allow photo access to add a ping image.' });
+  async function selectCover(idx: number) {
+    // Tap same cover to deselect
+    if (selectedCoverIdx === idx) {
+      setSelectedCoverIdx(null);
+      setImageUrl(null);
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [16, 9],
-    });
-    if (result.canceled || !result.assets[0]) return;
+    setSelectedCoverIdx(idx);
     setUploadingImage(true);
     try {
-      const url = await uploadApi.uploadImage(result.assets[0].uri, 'pings');
+      const asset = Asset.fromModule(PING_COVERS[idx]);
+      await asset.downloadAsync();
+      const url = await uploadApi.uploadImage(asset.localUri!, 'pings');
       setImageUrl(url);
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Upload failed', text2: err.message || 'Could not upload image.' });
+      setSelectedCoverIdx(null);
+      setImageUrl(null);
     } finally {
       setUploadingImage(false);
     }
@@ -1295,43 +1285,41 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                   />
 
                   <View style={s.section}>
-                    <Text style={s.label}>Photo  <Text style={s.labelOptional}>(optional)</Text></Text>
-                    <TouchableOpacity
-                      style={s.imagePicker}
-                      onPress={pickImage}
-                      activeOpacity={0.8}
-                      disabled={uploadingImage}
-                    >
-                      {uploadingImage ? (
-                        <ActivityIndicator size="large" color={Ping.purple} />
-                      ) : imageUrl ? (
-                        <>
-                          <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                          <View style={s.imageOverlay}>
-                            <TouchableOpacity style={s.imageChangeBtn} onPress={pickImage} activeOpacity={0.85}>
-                              <Ionicons name="camera-outline" size={15} color="#FFF" />
-                              <Text style={s.imageChangeTxt}>Change</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={s.imageRemoveBtn}
-                              onPress={() => setImageUrl(null)}
-                              activeOpacity={0.85}
-                              hitSlop={8}
-                            >
-                              <Ionicons name="close" size={16} color="#FFF" />
-                            </TouchableOpacity>
-                          </View>
-                        </>
-                      ) : (
-                        <>
-                          <View style={s.imageIconWrap}>
-                            <Ionicons name="image-outline" size={28} color={Ping.purpleLight} />
-                          </View>
-                          <Text style={s.imageHint}>Tap to add a photo</Text>
-                          <Text style={s.imageSub}>Optional · 16:9 works best</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <Text style={s.label}>
+                      Cover Photo  <Text style={s.labelOptional}>(optional)</Text>
+                    </Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.coverRow}>
+                      {PING_COVERS.map((src, idx) => {
+                        const isSelected = selectedCoverIdx === idx;
+                        const isUploading = uploadingImage && selectedCoverIdx === idx;
+                        return (
+                          <TouchableOpacity
+                            key={idx}
+                            style={[s.coverThumb, isSelected && s.coverThumbSelected]}
+                            onPress={() => selectCover(idx)}
+                            activeOpacity={0.8}
+                            disabled={uploadingImage}
+                          >
+                            <Image source={src} style={s.coverImg} resizeMode="cover" />
+                            {isUploading && (
+                              <View style={s.coverOverlay}>
+                                <ActivityIndicator color="#FFF" />
+                              </View>
+                            )}
+                            {isSelected && !isUploading && (
+                              <View style={s.coverCheck}>
+                                <Ionicons name="checkmark-circle" size={22} color={Ping.green} />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                    {selectedCoverIdx !== null && !uploadingImage && (
+                      <TouchableOpacity onPress={() => { setSelectedCoverIdx(null); setImageUrl(null); }} style={s.coverClear}>
+                        <Text style={s.coverClearText}>Remove cover</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   <View style={s.section}>

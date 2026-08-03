@@ -42,7 +42,7 @@ const TIER_FEATURES: Record<'free' | 'pro' | 'premium', string[]> = {
     'Direct messages',
     'Direct pings to non-friends',
     '5 creates / week',
-    '15 joins / week',
+    '7 joins / week',
   ],
   premium: [
     'Unlimited create & join',
