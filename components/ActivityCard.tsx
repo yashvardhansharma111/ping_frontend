@@ -36,6 +36,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { activitiesApi, chatApi, type Activity, type ActivityParticipant } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
+import ConfirmSheet from '@/components/ConfirmSheet';
+import PaywallModal from '@/components/PaywallModal';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -216,6 +218,8 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
   const { user } = useAuthStore();
   const router = useRouter();
   const [joining, setJoining] = useState(false);
+  const [showJoinSafety, setShowJoinSafety] = useState(false);
+  const [paywall, setPaywall] = useState<{ message: string; upgradeTo: 'pro' | 'premium' } | null>(null);
   const [openingChat, setOpeningChat] = useState(false);
 
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -273,13 +277,25 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
   async function handleJoin() {
     if (isJoined || joining || isExpired) return;
     if (!requireVerified()) return;
+    setShowJoinSafety(true);
+  }
+
+  async function confirmJoin() {
+    if (isJoined || joining || isExpired) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setJoining(true);
     try {
       await activitiesApi.join(a._id);
       onJoin?.();
     } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Could not join', text2: err.message || 'Try again.' });
+      if (String(err.code || '').includes('quota_') || String(err.code || '').includes('upgrade_')) {
+        setPaywall({
+          message: err.message || 'Weekly join limit reached.',
+          upgradeTo: err.details?.upgradeTo === 'premium' ? 'premium' : 'pro',
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Could not join', text2: err.message || 'Try again.' });
+      }
     } finally {
       setJoining(false);
     }
@@ -473,6 +489,24 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
           </Animated.View>
         </View>
       ) : null}
+
+      <ConfirmSheet
+        visible={showJoinSafety}
+        onClose={() => setShowJoinSafety(false)}
+        title="Safety before you join"
+        subtitle="1 registration = 1 person only. Do not invite or bring extra friends — that gets you blacklisted permanently."
+        confirmLabel="I understand — Join"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => { setShowJoinSafety(false); confirmJoin(); }}
+      />
+      <PaywallModal
+        visible={!!paywall}
+        onClose={() => setPaywall(null)}
+        title="Upgrade to join more"
+        message={paywall?.message}
+        upgradeTo={paywall?.upgradeTo}
+      />
     </Animated.View>
   );
 }

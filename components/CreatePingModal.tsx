@@ -669,6 +669,11 @@ function makeStyles(isDark: boolean) {
       height: 50,
     },
     iconInputText: { flex: 1, ...Typography.bodyMed, color: text, paddingVertical: 0 },
+    venueHint: {
+      ...Typography.caption,
+      marginTop: 8,
+      lineHeight: 16,
+    },
     // Multi-line
     multiInput: {
       backgroundColor: inputBg,
@@ -1077,6 +1082,15 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
       return;
     }
 
+    if (!venue.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Venue required',
+        text2: 'Choose public places — pick a nearby spot or type one.',
+      });
+      return;
+    }
+
     const maxP = maxPeople.trim() ? parseInt(maxPeople, 10) : undefined;
     if (maxP !== undefined && (isNaN(maxP) || maxP < 2 || maxP > 100)) {
       Toast.show({ type: 'error', text1: 'Invalid count', text2: 'Max participants must be between 2 and 100.' });
@@ -1097,9 +1111,9 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         lat: pingLat,
         lng: pingLng,
         durationMinutes: duration,
+        placeName: venue.trim(),
         ...(maxP ? { maxParticipants: maxP } : {}),
         ...(startsAt ? { startsAt } : {}),
-        ...(venue.trim() ? { placeName: venue.trim() } : {}),
         ...(details.trim() ? { description: details.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(vibe ? { vibe } : {}),
@@ -1342,12 +1356,12 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                   </View>
 
                   <View style={s.section}>
-                    <Text style={s.label}>Preferred venue  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <Text style={s.label}>Preferred venue</Text>
                     <View style={s.iconInput}>
                       <Ionicons name="location-outline" size={16} color={mutedIconColor} />
                       <TextInput
                         style={s.iconInputText}
-                        placeholder="A park, a café, your building lobby. Anywhere."
+                        placeholder="Choose public places"
                         placeholderTextColor={placeholderColor}
                         value={venue}
                         onChangeText={setVenue}
@@ -1355,6 +1369,9 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                         returnKeyType="done"
                       />
                     </View>
+                    <Text style={[s.venueHint, { color: hintColor }]}>
+                      Choose public places — parks, cafés, lobbies. Avoid private homes.
+                    </Text>
 
                     {(loadingPlaces || Object.keys(categorizedPlaces).length > 0) && (
                       <View style={s.locSuggestWrap}>
