@@ -116,9 +116,10 @@ export async function cancelSafetyReminder(activityId: string): Promise<void> {
 }
 
 export type NotificationPayload = {
-  type: 'ping_join' | 'ping_cancel' | 'friend_accept' | 'friend_reject' | 'participant_nearby' | 'ping_starting';
+  type: 'ping_join' | 'ping_cancel' | 'friend_accept' | 'friend_reject' | 'friend_request' | 'participant_nearby' | 'ping_starting' | 'ping_new' | 'chat_message';
   activityId?: string;
   userId?: string;
+  roomId?: string;
 };
 
 export function addResponseListener(

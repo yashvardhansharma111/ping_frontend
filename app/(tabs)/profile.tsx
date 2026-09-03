@@ -105,7 +105,7 @@ export default function ProfileScreen() {
     <View style={[styles.root, { backgroundColor: c.background }]}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -147,15 +147,6 @@ export default function ProfileScreen() {
             <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
               <View style={styles.circleSpacer} />
               <View style={styles.topActions}>
-                {user && (
-                  <TouchableOpacity
-                    style={styles.circleBtn}
-                    onPress={() => router.push(`/user/${user._id}` as any)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="eye-outline" size={19} color="#FFF" />
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity style={styles.circleBtn} onPress={pickAvatar} activeOpacity={0.75}>
                   {uploadingAvatar ? (
                     <ActivityIndicator size="small" color="#FFF" />
@@ -234,7 +225,7 @@ export default function ProfileScreen() {
 
               <View style={styles.statColumn}>
                 <Text style={[styles.statNumber, { color: c.text }]}>
-                  {user?.trustRate ? `${user.trustRate}%` : '100%'}
+                  {user?.ratingCount && user.ratingCount > 0 ? `${user.trustRate ?? 0}%` : '—'}
                 </Text>
                 <Text style={[styles.statLabel, { color: c.textSecondary }]}>Trust Rate</Text>
               </View>
@@ -268,7 +259,7 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={[
                   styles.actionBtn,
-                  { backgroundColor: scheme === 'dark' ? '#FFFFFF' : '#111111' },
+                  { backgroundColor: Ping.purple },
                 ]}
                 onPress={() => router.push('/edit-profile' as any)}
                 activeOpacity={0.85}
@@ -276,7 +267,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.actionBtnText,
-                    { color: scheme === 'dark' ? '#111111' : '#FFFFFF' },
+                    { color: '#FFFFFF' },
                   ]}
                 >
                   Edit profile
@@ -435,13 +426,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hashtagChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: Radius.full,
     borderWidth: StyleSheet.hairlineWidth,
   },
   hashtagText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   actionRow: {

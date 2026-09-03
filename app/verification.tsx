@@ -492,10 +492,20 @@ export default function VerificationScreen() {
     try {
       const res = await verificationApi.status();
       const vs = res.verificationStatus;
-      if (vs === 'verified') setStep('verified');
-      else if (vs === 'pending') setStep('pending');
-      else if (vs === 'rejected') { setRejectionReason(res.rejectionReason); setStep('rejected'); }
-      else setStep('intro');
+      if (vs === 'verified') {
+        // Sync local store so FAB gate works without requiring re-login
+        if (user && (user as any).verificationStatus !== 'verified') {
+          setUser({ ...user, verificationStatus: 'verified' } as any);
+        }
+        setStep('verified');
+      } else if (vs === 'pending') {
+        setStep('pending');
+      } else if (vs === 'rejected') {
+        setRejectionReason(res.rejectionReason);
+        setStep('rejected');
+      } else {
+        setStep('intro');
+      }
     } catch {
       setStep('intro');
     }

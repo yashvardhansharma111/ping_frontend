@@ -25,7 +25,8 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#080815",
-        "foregroundImage": "./assets/images/icon.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -81,7 +82,7 @@
     "extra": {
       "apiUrl": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app",
       "eas": {
-        "projectId": "b38efb15-2d7b-4392-ab8b-720a7a2a83f3"
+        "projectId": "04768189-03f7-478e-92d3-6d30fb5f68b9"
       },
       "router": {}
     }

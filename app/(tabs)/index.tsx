@@ -13,6 +13,7 @@ import {
   Image,
   FlatList,
   PanResponder,
+  BackHandler,
   type AppStateStatus,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
@@ -865,6 +866,7 @@ export default function MapScreen() {
   const SHEET_PEEK_Y = SCREEN_H * 0.37; // translateY so 55% of screen shows
   const sheetAnim    = useRef(new Animated.Value(SCREEN_H)).current;
   const sheetExpandedRef = useRef(false);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const prevSheetIdRef   = useRef<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -969,6 +971,7 @@ export default function MapScreen() {
       await activitiesApi.cancel(myActivePing._id);
       setMyActivePing(null);
       loadNearby(true);
+      Toast.show({ type: 'success', text1: 'Ping cancelled.', text2: 'Your ping has been removed.' });
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not cancel ping.' });
     }
@@ -1008,7 +1011,15 @@ export default function MapScreen() {
       setSheetActivity((prev) => prev ? fresh.find((a) => a._id === prev._id) ?? prev : null);
     } catch (err: any) {
       const msg = err?.message ?? 'Unknown error';
-      console.error(`[Map] API ERROR — ${msg}`);
+      // AbortError fires during HMR reloads in dev — not a real network failure
+      const isAbort = err?.name === 'AbortError' || msg === 'Aborted';
+      if (isAbort) return;
+
+      if (silent) {
+        console.warn(`[Map] API ERROR (retry) — ${msg}`);
+      } else {
+        console.error(`[Map] API ERROR — ${msg}`);
+      }
       setApiError(true);
       setApiErrMsg(msg);
       setLoaded(true);
@@ -1121,6 +1132,24 @@ export default function MapScreen() {
     };
   }, [coords.latitude, coords.longitude, locLoading]));
 
+  // Keep a ref with the latest overlay state so the back handler never has stale closures
+  const overlayStateRef = useRef({ showFilterPanel, selected, sheetActivity });
+  useEffect(() => {
+    overlayStateRef.current = { showFilterPanel, selected, sheetActivity };
+  }, [showFilterPanel, selected, sheetActivity]);
+
+  // Intercept Android back gesture: close overlays before exiting
+  useFocusEffect(useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const { showFilterPanel: fp, selected: sel, sheetActivity: sheet } = overlayStateRef.current;
+      if (fp)   { setShowFilterPanel(false); return true; }
+      if (sel)  { setSelected(null); return true; }
+      if (sheet){ dismissSheet(); return true; }
+      return false; // let system handle (exit app / go back)
+    });
+    return () => sub.remove();
+  }, [])); // empty — ref always holds current values
+
   const filteredActivities = activities.filter((a) => {
     if (typeFilter && a.type !== typeFilter) return false;
     if (vibeFilter && a.vibe !== vibeFilter) return false;
@@ -1150,6 +1179,7 @@ export default function MapScreen() {
     if (sheetActivity && sheetActivity._id !== prevSheetIdRef.current) {
       prevSheetIdRef.current = sheetActivity._id;
       sheetExpandedRef.current = false;
+      setSheetExpanded(false);
       sheetAnim.setValue(SCREEN_H);
       Animated.spring(sheetAnim, { toValue: SHEET_PEEK_Y, damping: 22, stiffness: 200, useNativeDriver: true }).start();
     }
@@ -1179,11 +1209,13 @@ export default function MapScreen() {
         setSheetActivity(null);
         prevSheetIdRef.current = null;
         sheetExpandedRef.current = false;
+        setSheetExpanded(false);
       });
   }
 
   function expandSheet() {
     sheetExpandedRef.current = true;
+    setSheetExpanded(true);
     Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
   }
 
@@ -1192,8 +1224,17 @@ export default function MapScreen() {
 
   const sheetPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 6,
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, { dy, dx }) =>
+        Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8,
+      onMoveShouldSetPanResponderCapture: (_, { dy, dx }) => {
+        if (Math.abs(dx) > Math.abs(dy)) return false;
+        // At peek: capture any vertical drag
+        if (!sheetExpandedRef.current) return Math.abs(dy) > 8;
+        // At expanded: only capture clear downward swipes (to collapse)
+        return dy > 14;
+      },
       onPanResponderMove: (_, { dy }) => {
         const base = sheetExpandedRef.current ? 0 : SHEET_PEEK_Y;
         sheetAnim.setValue(Math.max(0, base + dy));
@@ -1208,9 +1249,11 @@ export default function MapScreen() {
               setSheetActivity(null);
               prevSheetIdRef.current = null;
               sheetExpandedRef.current = false;
+              setSheetExpanded(false);
             });
         } else if (vy < -0.5 || dy < -60) {
           sheetExpandedRef.current = true;
+          setSheetExpanded(true);
           Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
         } else {
           Animated.spring(sheetAnim, { toValue: base, damping: 22, stiffness: 200, useNativeDriver: true }).start();
@@ -1679,20 +1722,22 @@ export default function MapScreen() {
       {/* Full detail bottom sheet (opens when popup is tapped) */}
       {sheetActivity && (
         <Animated.View
+          {...sheetPanResponder.panHandlers}
           style={[
             styles.sheet,
-            { height: SHEET_FULL_H, paddingBottom: insets.bottom + 80, transform: [{ translateY: sheetAnim }] },
+            { height: SHEET_FULL_H, paddingBottom: insets.bottom + 8, transform: [{ translateY: sheetAnim }] },
           ]}
         >
-          <View {...sheetPanResponder.panHandlers} style={styles.sheetHandleArea}>
+          <View style={styles.sheetHandleArea}>
             <View style={styles.sheetHandle} />
           </View>
           <ActivityDetailSheet
             activity={sheetActivity}
-            onRefresh={() => loadNearby()}
+            onRefresh={() => { loadNearby(); loadMyActivePing(); }}
             onDismiss={dismissSheet}
             onScrolledDown={expandSheet}
             onActivityUpdate={(act) => setSheetActivity(act)}
+            scrollEnabled={sheetExpanded}
           />
         </Animated.View>
       )}
@@ -1712,10 +1757,6 @@ export default function MapScreen() {
       {!sheetActivity && <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + 90 }]}
         onPress={() => {
-          if ((user as any)?.verificationStatus !== 'verified') {
-            router.push('/verification' as any);
-            return;
-          }
           setShowFilterPanel(false);
           setShowCreate(true);
         }}
@@ -1840,7 +1881,7 @@ function makeStyles(isDark: boolean) {
       position: 'absolute',
       top: 0,
       left: Spacing.md,
-      right: Spacing.md,
+      right: 20,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',

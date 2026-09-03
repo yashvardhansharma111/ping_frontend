@@ -98,6 +98,7 @@ export default function SettingsScreen() {
               onPress={() => router.push('/verification' as any)}
               separator
             />
+            <UIRow icon="ban-outline" label="Blocked Users" onPress={() => router.push('/blocked-users' as any)} separator />
             <UIRow icon="shield-outline" label="Safety & Account" onPress={() => router.push('/safety' as any)} />
           </UICard>
         </View>

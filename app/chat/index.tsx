@@ -56,6 +56,7 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
   const dmOther = room.kind === 'dm' ? room.participantIds.find((p) => p._id !== myId) : null;
   const avatarUrl = dmOther?.avatarUrl || room.avatarUrl;
   const dmName = dmOther?.displayName || dmOther?.username;
+  const isMuted = !!myId && (room.mutedBy?.includes(myId) ?? false);
 
   return (
     <TouchableOpacity
@@ -74,8 +75,11 @@ function RoomRow({ room, myId, onPress }: { room: ChatRoom; myId?: string; onPre
 
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
-          <Text style={[styles.roomName, { color: c.text }]} numberOfLines={1}>{name}</Text>
-          <Text style={[styles.time, { color: c.textSecondary }]}>{relativeTime(room.lastMessageAt)}</Text>
+          <Text style={[styles.roomName, { color: isMuted ? c.textSecondary : c.text }]} numberOfLines={1}>{name}</Text>
+          <View style={styles.rowTopRight}>
+            {isMuted && <Ionicons name="volume-mute" size={13} color={c.textSecondary} />}
+            <Text style={[styles.time, { color: c.textSecondary }]}>{relativeTime(room.lastMessageAt)}</Text>
+          </View>
         </View>
         <Text style={[styles.preview, { color: c.textSecondary }]} numberOfLines={1}>
           {room.lastMessagePreview || 'No messages yet'}
@@ -247,6 +251,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 3,
+  },
+  rowTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   roomName: { ...Typography.bodyMed, flex: 1, marginRight: Spacing.sm },
   time: { ...Typography.caption, fontSize: 11 },

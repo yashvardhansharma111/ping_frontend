@@ -288,11 +288,20 @@ export default function ActivityCard({ activity: a, onJoin, compact = false }: P
       await activitiesApi.join(a._id);
       onJoin?.();
     } catch (err: any) {
-      if (String(err.code || '').includes('quota_') || String(err.code || '').includes('upgrade_')) {
+      const code = String(err.code || '');
+      const msg  = String(err.message || '');
+      const isStale = code === 'not_live' || code === 'activity_not_found'
+        || msg.includes('no longer live') || msg.includes('not found');
+      if (code.includes('quota_') || code.includes('upgrade_')) {
         setPaywall({
           message: err.message || 'Weekly join limit reached.',
           upgradeTo: err.details?.upgradeTo === 'premium' ? 'premium' : 'pro',
         });
+      } else if (isStale) {
+        Toast.show({ type: 'info', text1: 'Ping just ended', text2: 'This one wrapped up — check out others nearby.' });
+        onJoin?.();
+      } else if (code === 'gender_restricted') {
+        Toast.show({ type: 'info', text1: 'Restricted ping', text2: err.message });
       } else {
         Toast.show({ type: 'error', text1: 'Could not join', text2: err.message || 'Try again.' });
       }

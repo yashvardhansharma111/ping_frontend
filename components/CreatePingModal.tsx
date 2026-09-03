@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system/legacy';
 import { activitiesApi, uploadApi } from '@/lib/api';
 
 const PING_COVERS = [
@@ -38,7 +39,10 @@ import {
 } from '@/lib/placesApi';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Map as MapLibreMap, Camera } from '@maplibre/maplibre-react-native';
 import LocationPickerModal from './LocationPickerModal';
+
+const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 import PaywallModal from './PaywallModal';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -63,12 +67,6 @@ const VIBES: { key: string; icon: MCIName; label: string; color: string }[] = [
   { key: 'fitness',    icon: 'arm-flex',        label: 'Fitness',    color: '#22C55E' },
 ];
 
-const DURATIONS: { label: string; value: number }[] = [
-  { label: '30m', value: 30  },
-  { label: '1h',  value: 60  },
-  { label: '2h',  value: 120 },
-  { label: '3h+', value: 180 },
-];
 
 // ── Time Picker ───────────────────────────────────────────────────────────────
 
@@ -113,16 +111,16 @@ function makeDsStyles(isDark: boolean) {
       paddingVertical: 10,
       borderRadius: Radius.md,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
       minWidth: 58,
     },
     chipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-    dayName: { ...Typography.caption, color: isDark ? '#9490C0' : '#6B6080', fontWeight: '600' },
+    dayName: { ...Typography.caption, color: isDark ? '#9CA3AF' : '#6B7280', fontWeight: '600' },
     dayNameActive: { color: 'rgba(255,255,255,0.8)' },
-    dayNum: { ...Typography.h3, color: isDark ? '#F1F0FF' : '#1A1730', marginVertical: 2 },
+    dayNum: { ...Typography.h3, color: isDark ? '#F5F5F5' : '#111111', marginVertical: 2 },
     dayNumActive: { color: '#FFF' },
-    month: { ...Typography.caption, color: isDark ? '#5C5A80' : '#8B85A0' },
+    month: { ...Typography.caption, color: isDark ? '#6B7280' : '#9CA3AF' },
     monthActive: { color: 'rgba(255,255,255,0.7)' },
   });
 }
@@ -164,21 +162,21 @@ function makeTpStyles(isDark: boolean) {
     row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     spinnerWrap: {
       alignItems: 'center',
-      backgroundColor: isDark ? 'rgba(167,139,250,0.08)' : 'rgba(124,58,237,0.05)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
       borderRadius: Radius.md,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
       paddingVertical: 4,
       paddingHorizontal: 14,
       minWidth: 56,
     },
     arrow: { padding: 2 },
-    value: { ...Typography.h3, color: isDark ? '#F1F0FF' : '#1A1730', marginVertical: 2 },
-    colon: { ...Typography.h3, color: isDark ? '#9490C0' : '#6B6080' },
-    ampmWrap: { borderRadius: Radius.md, borderWidth: 1, borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)', overflow: 'hidden' },
+    value: { ...Typography.h3, color: isDark ? '#F5F5F5' : '#111111', marginVertical: 2 },
+    colon: { ...Typography.h3, color: isDark ? '#9CA3AF' : '#6B7280' },
+    ampmWrap: { borderRadius: Radius.md, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', overflow: 'hidden' },
     ampmBtn: { paddingHorizontal: 14, paddingVertical: 8 },
     ampmActive: { backgroundColor: Ping.purple },
-    ampmText: { ...Typography.bodyMed, color: isDark ? '#9490C0' : '#6B6080', fontWeight: '600' },
+    ampmText: { ...Typography.bodyMed, color: isDark ? '#9CA3AF' : '#6B7280', fontWeight: '600' },
     ampmTextActive: { color: '#FFF' },
   });
 }
@@ -251,8 +249,8 @@ function makeTlStyles(isDark: boolean) {
       gap: 5,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.16)' : 'rgba(124,58,237,0.1)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
       paddingVertical: 8,
       paddingHorizontal: 2,
     },
@@ -266,11 +264,11 @@ function makeTlStyles(isDark: boolean) {
     typeLabel: {
       fontSize: 11,
       fontWeight: '600',
-      color: isDark ? '#9490C0' : '#6B6080',
+      color: isDark ? '#9CA3AF' : '#6B7280',
       textAlign: 'center',
     },
     typeLabelActive: {
-      color: isDark ? '#F1F0FF' : '#1A1730',
+      color: isDark ? '#F5F5F5' : '#111111',
       fontWeight: '700',
     },
   });
@@ -337,7 +335,7 @@ function PingPreviewCard({
       style={[
         preview.card,
         {
-          backgroundColor: isDark ? '#16162E' : '#F8F6FF',
+          backgroundColor: isDark ? '#1A1A1A' : '#F5F5F5',
           borderColor: isDark ? `${typeColor}40` : `${typeColor}30`,
         },
       ]}
@@ -348,7 +346,7 @@ function PingPreviewCard({
           <MaterialCommunityIcons name={typeIcon} size={22} color={typeColor} />
         </View>
         <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[preview.title, { color: isDark ? '#F1F0FF' : '#1A1730' }]} numberOfLines={1}>
+          <Text style={[preview.title, { color: isDark ? '#F5F5F5' : '#111111' }]} numberOfLines={1}>
             {title.trim() || 'Your ping title'}
           </Text>
           <View style={preview.metaRow}>
@@ -361,15 +359,15 @@ function PingPreviewCard({
             ) : null}
           </View>
           <View style={preview.metaRow}>
-            <Ionicons name="time-outline" size={11} color={isDark ? '#6B6B9A' : '#8B85A0'} />
-            <Text style={[preview.sub, { color: isDark ? '#9490C0' : '#6B6080' }]} numberOfLines={1}>
+            <Ionicons name="time-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
+            <Text style={[preview.sub, { color: isDark ? '#9CA3AF' : '#6B7280' }]} numberOfLines={1}>
               {whenLabel}
             </Text>
             {venue.trim() ? (
               <>
                 <Text style={preview.dot}>·</Text>
-                <Ionicons name="location-outline" size={11} color={isDark ? '#6B6B9A' : '#8B85A0'} />
-                <Text style={[preview.sub, { color: isDark ? '#9490C0' : '#6B6080', flex: 1 }]} numberOfLines={1}>
+                <Ionicons name="location-outline" size={11} color={isDark ? '#6B7280' : '#9CA3AF'} />
+                <Text style={[preview.sub, { color: isDark ? '#9CA3AF' : '#6B7280', flex: 1 }]} numberOfLines={1}>
                   {venue.trim()}
                 </Text>
               </>
@@ -377,7 +375,7 @@ function PingPreviewCard({
           </View>
         </View>
       </View>
-      <Text style={[preview.hint, { color: isDark ? '#5C5A80' : '#8B85A0' }]}>Preview</Text>
+      <Text style={[preview.hint, { color: isDark ? '#6B7280' : '#9CA3AF' }]}>Preview</Text>
     </View>
   );
 }
@@ -451,11 +449,11 @@ function makeVgStyles(isDark: boolean) {
       paddingVertical: 11,
       borderRadius: Radius.md,
       borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.12)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
       gap: 3,
     },
-    vibeLabel: { fontSize: 11, fontWeight: '600', color: isDark ? '#9490C0' : '#6B6080' },
+    vibeLabel: { fontSize: 11, fontWeight: '600', color: isDark ? '#9CA3AF' : '#6B7280' },
   });
 }
 
@@ -502,15 +500,15 @@ interface Props {
 }
 
 function makeStyles(isDark: boolean) {
-  const inputBg  = isDark ? '#1A1A38' : '#F4F0FF';
-  const border   = isDark ? 'rgba(167,139,250,0.2)'  : 'rgba(124,58,237,0.12)';
-  const border10 = isDark ? 'rgba(167,139,250,0.1)'  : 'rgba(124,58,237,0.06)';
-  const border15 = isDark ? 'rgba(167,139,250,0.15)' : 'rgba(124,58,237,0.08)';
-  const text     = isDark ? '#F1F0FF' : '#1A1730';
-  const muted    = isDark ? '#9490C0' : '#6B6080';
-  const hint     = isDark ? '#5C5A80' : '#8B85A0';
-  const chipBg   = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
-  const sheetBg  = isDark ? '#11112A' : '#FFFFFF';
+  const inputBg  = isDark ? '#1C1C1C' : '#F4F4F4';
+  const border   = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
+  const border10 = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+  const border15 = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const text     = isDark ? '#F5F5F5' : '#111111';
+  const muted    = isDark ? '#9CA3AF' : '#6B7280';
+  const hint     = isDark ? '#6B7280' : '#9CA3AF';
+  const chipBg   = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const sheetBg  = isDark ? '#111111' : '#FFFFFF';
 
   return StyleSheet.create({
     overlay: { flex: 1, justifyContent: 'flex-end' },
@@ -536,7 +534,7 @@ function makeStyles(isDark: boolean) {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: isDark ? 'rgba(167,139,250,0.4)' : 'rgba(124,58,237,0.28)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
     },
     header: {
       flexDirection: 'row',
@@ -622,7 +620,7 @@ function makeStyles(isDark: boolean) {
       backgroundColor: inputBg,
       borderRadius: Radius.md,
       borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.35)' : 'rgba(124,58,237,0.2)',
+      borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
       paddingHorizontal: Spacing.md,
       height: 46,
       marginTop: Spacing.sm,
@@ -642,23 +640,12 @@ function makeStyles(isDark: boolean) {
     whenLabelActive: { color: '#FFF' },
     liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },
     timePickerWrap: {
-      backgroundColor: isDark ? 'rgba(167,139,250,0.06)' : 'rgba(124,58,237,0.04)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
       borderRadius: Radius.md, borderWidth: 1,
       borderColor: border15,
       padding: Spacing.md, gap: Spacing.md,
     },
     timePickerLabel: { ...Typography.caption, color: muted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-    // Duration
-    chipRow: { flexDirection: 'row', gap: Spacing.sm },
-    durationChip: {
-      flex: 1, alignItems: 'center', paddingVertical: 10,
-      borderRadius: Radius.md, borderWidth: 1.5,
-      borderColor: border,
-      backgroundColor: chipBg,
-    },
-    durationChipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
-    durationLabel: { ...Typography.bodyMed, color: muted, fontWeight: '600' },
-    durationLabelActive: { color: '#FFF' },
     // Icon input
     iconInput: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -698,13 +685,13 @@ function makeStyles(isDark: boolean) {
     visLabel: { ...Typography.bodySm, color: muted, fontWeight: '600' },
     visLabelActive: { color: '#FFF' },
     // Gender
-    genderRow: { flexDirection: 'row', gap: Spacing.sm },
+    genderRow: { flexDirection: 'row', gap: 4 },
     genderChip: {
       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 5, paddingVertical: 10,
+      gap: 3, paddingVertical: 8, paddingHorizontal: 2,
       borderRadius: Radius.md, borderWidth: 1.5,
     },
-    genderLabel: { ...Typography.bodySm, color: muted, fontWeight: '600', fontSize: 11 },
+    genderLabel: { ...Typography.bodySm, color: muted, fontWeight: '600', fontSize: 10, flexShrink: 1 },
     genderLabelActive: { color: '#FFF' },
     // Location suggestions
     locSuggestWrap: { gap: 8 },
@@ -717,8 +704,8 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 6,
       borderRadius: Radius.full,
       borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.25)' : 'rgba(124,58,237,0.15)',
-      backgroundColor: isDark ? 'rgba(167,139,250,0.07)' : 'rgba(124,58,237,0.05)',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     },
     locCatChipActive: {
       backgroundColor: Ping.purple,
@@ -738,8 +725,8 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 7,
       borderRadius: Radius.full,
       borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.25)' : 'rgba(124,58,237,0.15)',
-      backgroundColor: isDark ? 'rgba(167,139,250,0.07)' : 'rgba(124,58,237,0.05)',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
       maxWidth: 180,
     },
     suggestionChipActive: {
@@ -748,25 +735,36 @@ function makeStyles(isDark: boolean) {
     },
     suggestionText: { ...Typography.caption, color: muted, fontWeight: '600', fontSize: 12 },
     suggestionTextActive: { color: text },
-    locNote: {
+    locMapCard: {
+      height: 145,
+      borderRadius: Radius.lg,
+      overflow: 'hidden',
+      borderWidth: 1.5,
+      borderColor: border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    locMapPin: {
+      marginBottom: -18,
+    },
+    locMapChip: {
+      position: 'absolute',
+      bottom: 10,
+      left: 10,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.07)',
-      borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(124,58,237,0.22)',
-      borderRadius: Radius.md,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    locText: { ...Typography.caption, color: hint, flex: 1 },
-    changeLocPill: {
-      backgroundColor: Ping.purple,
+      gap: 5,
+      backgroundColor: 'rgba(255,255,255,0.92)',
       paddingHorizontal: 10,
-      paddingVertical: 5,
+      paddingVertical: 6,
       borderRadius: Radius.full,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
     },
-    changeLocBtn: { fontSize: 12, color: '#FFF', fontWeight: '700' },
+    locMapChipText: { fontSize: 12, fontWeight: '700', color: '#111111' },
     footer: {
       paddingHorizontal: Spacing.lg,
       paddingTop: 10,
@@ -790,12 +788,6 @@ function makeStyles(isDark: boolean) {
     stepDotActive: {
       width: 18,
       backgroundColor: Ping.purple,
-    },
-    stepHint: {
-      textAlign: 'center',
-      fontSize: 11,
-      fontWeight: '600',
-      color: muted,
     },
     footerRow: {
       flexDirection: 'row',
@@ -860,7 +852,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [notes, setNotes]             = useState('');
   const [visibility, setVisibility]   = useState<'public' | 'friends'>('public');
   const [genderFilter, setGenderFilter] = useState<'all' | 'women_only' | 'men_only'>('all');
-  const [duration, setDuration]       = useState(60);
   const [maxPeople, setMaxPeople]     = useState('');
   const [isNow, setIsNow]             = useState(true);
   const [scheduledTime, setScheduledTime] = useState<TimeState>(getDefaultTime);
@@ -995,7 +986,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
     setNotes('');
     setVisibility('public');
     setGenderFilter('all');
-    setDuration(60);
     setMaxPeople('');
     setIsNow(true);
     setScheduledTime(getDefaultTime());
@@ -1011,7 +1001,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   }
 
   async function selectCover(idx: number) {
-    // Tap same cover to deselect
     if (selectedCoverIdx === idx) {
       setSelectedCoverIdx(null);
       setImageUrl(null);
@@ -1022,7 +1011,13 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
     try {
       const asset = Asset.fromModule(PING_COVERS[idx]);
       await asset.downloadAsync();
-      const url = await uploadApi.uploadImage(asset.localUri!, 'pings');
+      const sourceUri = asset.localUri ?? asset.uri;
+      if (!sourceUri) throw new Error('Could not load cover image asset');
+      const cacheDir = FileSystem.cacheDirectory;
+      if (!cacheDir) throw new Error('Device cache directory unavailable');
+      const tmpUri = `${cacheDir}ping_cover_${idx}.jpg`;
+      await FileSystem.copyAsync({ from: sourceUri, to: tmpUri });
+      const url = await uploadApi.uploadImage(tmpUri, 'pings');
       setImageUrl(url);
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Upload failed', text2: err.message || 'Could not upload image.' });
@@ -1082,6 +1077,11 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
       return;
     }
 
+    if (!imageUrl) {
+      Toast.show({ type: 'error', text1: 'Cover photo required', text2: 'Pick a cover photo for your ping.' });
+      return;
+    }
+
     if (!venue.trim()) {
       Toast.show({
         type: 'error',
@@ -1110,7 +1110,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         genderFilter,
         lat: pingLat,
         lng: pingLng,
-        durationMinutes: duration,
         placeName: venue.trim(),
         ...(maxP ? { maxParticipants: maxP } : {}),
         ...(startsAt ? { startsAt } : {}),
@@ -1130,12 +1129,15 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
       animateClose();
       return;
     } catch (err: any) {
-      if (String(err.code || '').includes('quota_') || String(err.code || '').includes('upgrade_')) {
+      const code = String(err.code || '');
+      if (code.includes('quota_') || code.includes('upgrade_')) {
         setPaywall({
           title: 'Upgrade to create more',
           message: err.message || 'Weekly free limit reached.',
           upgradeTo: err.details?.upgradeTo === 'premium' ? 'premium' : 'pro',
         });
+      } else if (code === 'active_ping_exists') {
+        Toast.show({ type: 'info', text1: 'Time conflict', text2: err.message || 'You already have a ping during that time.' });
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not create ping.' });
       }
@@ -1299,9 +1301,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                   />
 
                   <View style={s.section}>
-                    <Text style={s.label}>
-                      Cover Photo  <Text style={s.labelOptional}>(optional)</Text>
-                    </Text>
+                    <Text style={s.label}>Cover Photo</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.coverRow}>
                       {PING_COVERS.map((src, idx) => {
                         const isSelected = selectedCoverIdx === idx;
@@ -1334,25 +1334,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                         <Text style={s.coverClearText}>Remove cover</Text>
                       </TouchableOpacity>
                     )}
-                  </View>
-
-                  <View style={s.section}>
-                    <Text style={s.label}>Expected duration</Text>
-                    <View style={s.chipRow}>
-                      {DURATIONS.map((d) => {
-                        const active = duration === d.value;
-                        return (
-                          <TouchableOpacity
-                            key={d.value}
-                            style={[s.durationChip, active && s.durationChipActive]}
-                            onPress={() => setDuration(d.value)}
-                            activeOpacity={0.75}
-                          >
-                            <Text style={[s.durationLabel, active && s.durationLabelActive]}>{d.label}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
                   </View>
 
                   <View style={s.section}>
@@ -1466,7 +1447,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                       <Ionicons name="sparkles-outline" size={16} color={mutedIconColor} />
                       <TextInput
                         style={s.iconInputText}
-                        placeholder="e.g. Bring your gear. Or don't — we're not your mom."
+                        placeholder="e.g. Bring your gear"
                         placeholderTextColor={placeholderColor}
                         value={notes}
                         onChangeText={setNotes}
@@ -1503,8 +1484,8 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                     <View style={s.genderRow}>
                       {([
                         { key: 'all', label: 'Everyone', icon: 'earth-outline' },
-                        { key: 'women_only', label: 'Women only', icon: 'female-outline' },
-                        { key: 'men_only', label: 'Men only', icon: 'male-outline' },
+                        { key: 'women_only', label: 'Women', icon: 'female-outline' },
+                        { key: 'men_only', label: 'Men', icon: 'male-outline' },
                       ] as const).map((g) => {
                         const active = genderFilter === g.key;
                         const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : Ping.purple;
@@ -1545,21 +1526,50 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                     </View>
                   </View>
 
-                  <TouchableOpacity style={s.locNote} onPress={() => setShowLocationPicker(true)} activeOpacity={0.75}>
-                    <Ionicons
-                      name={customLat ? 'location' : 'location-outline'}
-                      size={14}
-                      color={customLat ? Ping.purple : mutedIconColor}
-                    />
-                    <Text style={[s.locText, customLat != null && { color: Ping.purple, fontWeight: '600' }]}>
-                      {customLat != null ? 'Custom location set' : 'Using your current location'}
+                  <View style={s.section}>
+                    <Text style={s.label}>
+                      Ping location
+                      {customLat != null && <Text style={[s.labelOptional, { color: Ping.purpleLight }]}> · Custom</Text>}
                     </Text>
-                    <View style={s.changeLocPill}>
-                      <Text style={s.changeLocBtn}>
-                        {customLat ? 'Change' : 'Pick another'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.locMapCard}
+                      onPress={() => setShowLocationPicker(true)}
+                      activeOpacity={0.9}
+                    >
+                      {/* Non-interactive map fills the card */}
+                      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                        <MapLibreMap
+                          style={{ flex: 1 }}
+                          styleURL={MAP_STYLE_URL}
+                          scrollEnabled={false}
+                          pitchEnabled={false}
+                          rotateEnabled={false}
+                          zoomEnabled={false}
+                          logoEnabled={false}
+                          attributionEnabled={false}
+                          compassEnabled={false}
+                        >
+                          <Camera
+                            centerCoordinate={[customLng ?? lng, customLat ?? lat]}
+                            zoomLevel={14}
+                            animationMode="none"
+                            animationDuration={0}
+                          />
+                        </MapLibreMap>
+                      </View>
+                      {/* Center pin */}
+                      <View style={s.locMapPin} pointerEvents="none">
+                        <Ionicons name="location" size={36} color="#EF4444" />
+                      </View>
+                      {/* Open maps chip */}
+                      <View style={s.locMapChip} pointerEvents="none">
+                        <Ionicons name="map-outline" size={12} color="#111111" />
+                        <Text style={s.locMapChipText}>
+                          {customLat != null ? 'Change location' : 'Open maps'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -1570,9 +1580,6 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
               <View style={[s.stepDot, step === 1 && s.stepDotActive]} />
               <View style={[s.stepDot, step === 2 && s.stepDotActive]} />
             </View>
-            <Text style={s.stepHint}>
-              {step === 1 ? 'Step 1 of 2 - The basics' : 'Step 2 of 2 - Details & who'}
-            </Text>
 
             {step === 1 ? (
               <View style={s.footerRow}>

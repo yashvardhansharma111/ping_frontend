@@ -14,6 +14,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 
 import Toast from 'react-native-toast-message';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import useAuthStore from '@/lib/stores/authStore';
 import useThemeStore from '@/lib/stores/themeStore';
@@ -72,7 +73,14 @@ function AuthGuard() {
           break;
         case 'friend_accept':
         case 'friend_reject':
+        case 'friend_request':
           router.push('/(tabs)/friends');
+          break;
+        case 'ping_new':
+          router.push('/(tabs)/');
+          break;
+        case 'chat_message':
+          if (payload.roomId) router.push(`/chat/${payload.roomId}` as any);
           break;
         case 'participant_nearby':
           if (payload.userId) router.push(`/user/${payload.userId}`);
@@ -146,6 +154,7 @@ export default function RootLayout() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={navTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
 
@@ -176,6 +185,7 @@ export default function RootLayout() {
       )}
       <Toast config={toastConfig} position="top" topOffset={56} visibilityTime={3500} />
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

@@ -15,6 +15,13 @@ import {
   Animated,
   Linking,
 } from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import RAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
 import PaywallModal from '@/components/PaywallModal';
@@ -25,7 +32,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi, friendsApi, chatApi, activitiesApi, type UserProfile, type Activity } from '@/lib/api';
 import HighlightsSection from '@/components/HighlightsSection';
-import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
+import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ShareSheet from '@/components/ShareSheet';
 
@@ -137,8 +144,10 @@ const pc = StyleSheet.create({
 
 // ── Swipe-up hint (blinking) ─────────────────────────────────────────────────
 
-function SwipeHint() {
+function SwipeHint({ scheme = 'dark' }: { scheme?: 'light' | 'dark' }) {
   const opacity = useRef(new Animated.Value(1)).current;
+  const iconColor  = scheme === 'dark' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)';
+  const textColor  = scheme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)';
 
   useEffect(() => {
     Animated.loop(
@@ -152,8 +161,8 @@ function SwipeHint() {
 
   return (
     <Animated.View style={{ alignSelf: 'center', alignItems: 'center', gap: 2, opacity }}>
-      <Ionicons name="chevron-up" size={14} color="rgba(255,255,255,0.7)" />
-      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>
+      <Ionicons name="chevron-up" size={14} color={iconColor} />
+      <Text style={{ color: textColor, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>
         Swipe up · Full profile
       </Text>
     </Animated.View>
@@ -162,16 +171,22 @@ function SwipeHint() {
 
 // ── Glass card (detail) ──────────────────────────────────────────────────────
 
-function GlassCard({ children }: { children: React.ReactNode }) {
+function GlassCard({ children, scheme = 'dark' }: { children: React.ReactNode; scheme?: 'light' | 'dark' }) {
+  const borderColor = scheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)';
+  const androidBg   = scheme === 'dark' ? 'rgba(10,10,10,0.95)'   : 'rgba(255,255,255,0.97)';
+  const innerBg     = Platform.OS === 'ios'
+    ? (scheme === 'dark' ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.40)')
+    : 'transparent';
+
   if (Platform.OS === 'ios') {
     return (
-      <BlurView intensity={55} tint="dark" style={glass.card}>
-        <View style={glass.inner}>{children}</View>
+      <BlurView intensity={55} tint={scheme === 'dark' ? 'dark' : 'light'} style={[glass.card, { borderColor }]}>
+        <View style={[glass.inner, { backgroundColor: innerBg }]}>{children}</View>
       </BlurView>
     );
   }
   return (
-    <View style={[glass.card, glass.android]}>
+    <View style={[glass.card, { borderColor, backgroundColor: androidBg }]}>
       <View style={glass.inner}>{children}</View>
     </View>
   );
@@ -182,13 +197,10 @@ const glass = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
   },
-  android: { backgroundColor: 'rgba(12,8,36,0.94)' },
   inner: {
     padding: 22,
     gap: 16,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(8,4,28,0.38)' : 'transparent',
   },
 });
 
@@ -218,11 +230,155 @@ function SocialBtn({ link }: { link: SocialItem }) {
   );
 }
 
+// ── Zoomable image (pinch + double-tap) ──────────────────────────────────────
+
+function ZoomableImage({ uri, onZoomChange }: { uri: string; onZoomChange: (z: boolean) => void }) {
+  const scale     = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(0);
+
+  function reset(notify = true) {
+    'worklet';
+    scale.value     = withSpring(1, { damping: 20 });
+    tx.value        = withSpring(0, { damping: 20 });
+    ty.value        = withSpring(0, { damping: 20 });
+    savedScale.value = 1;
+    savedTx.value   = 0;
+    savedTy.value   = 0;
+    if (notify) runOnJS(onZoomChange)(false);
+  }
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.max(1, savedScale.value * e.scale);
+    })
+    .onEnd(() => {
+      if (scale.value < 1.1) {
+        reset();
+      } else {
+        savedScale.value = scale.value;
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value > 1.05) {
+        tx.value = savedTx.value + e.translationX;
+        ty.value = savedTy.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (savedScale.value > 1.05) {
+        reset();
+      } else {
+        scale.value      = withSpring(2.5, { damping: 20 });
+        savedScale.value = 2.5;
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, doubleTap)}>
+      <RAnimated.View style={{ width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' }}>
+        <RAnimated.Image
+          source={{ uri }}
+          style={[{ width: SCREEN_W, height: SCREEN_H }, animStyle]}
+          resizeMode="contain"
+        />
+      </RAnimated.View>
+    </GestureDetector>
+  );
+}
+
+// ── Full-screen photo viewer modal ───────────────────────────────────────────
+
+function PhotoViewer({ photos, startIndex, onClose }: {
+  photos: string[]; startIndex: number; onClose: () => void;
+}) {
+  const listRef  = useRef<FlatList>(null);
+  const [active, setActive]   = useState(startIndex);
+  const [zoomed, setZoomed]   = useState(false);
+  const insets = useSafeAreaInsets();
+
+  // Scroll to the correct photo after the modal mounts
+  useEffect(() => {
+    const t = setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: startIndex, animated: false });
+    }, 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <FlatList
+          ref={listRef}
+          data={photos}
+          horizontal
+          pagingEnabled
+          scrollEnabled={!zoomed}
+          showsHorizontalScrollIndicator={false}
+          getItemLayout={(_, i) => ({ length: SCREEN_W, offset: i * SCREEN_W, index: i })}
+          onMomentumScrollEnd={(e) => {
+            setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
+            setZoomed(false);
+          }}
+          renderItem={({ item }) => (
+            <ZoomableImage uri={item} onZoomChange={setZoomed} />
+          )}
+          keyExtractor={(_, i) => `fv-${i}`}
+        />
+
+        {photos.length > 1 && (
+          <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 }}>
+            {photos.map((_, i) => (
+              <View key={i} style={{ width: i === active ? 16 : 5, height: 5, borderRadius: 3, backgroundColor: i === active ? '#FFF' : 'rgba(255,255,255,0.35)' }} />
+            ))}
+          </View>
+        )}
+
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10 }} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={12}
+            style={{ position: 'absolute', top: insets.top + 12, right: 16, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="close" size={20} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={{ position: 'absolute', top: insets.top + 20, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600' } as any}>
+            {active + 1} / {photos.length}
+          </Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Thumbnail gallery with arrow controls ────────────────────────────────────
 
 function PhotoGallery({ photos }: { photos: string[] }) {
   const listRef = useRef<FlatList>(null);
   const [index, setIndex] = useState(0);
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   if (photos.length === 0) return null;
 
   function scrollTo(next: number) {
@@ -243,8 +399,10 @@ function PhotoGallery({ photos }: { photos: string[] }) {
           const i = Math.round(e.nativeEvent.contentOffset.x / (THUMB + GALLERY_GAP));
           setIndex(Math.max(0, Math.min(photos.length - 1, i)));
         }}
-        renderItem={({ item }) => (
-          <Image source={{ uri: item }} style={gal.thumb} resizeMode="cover" />
+        renderItem={({ item, index: i }) => (
+          <TouchableOpacity onPress={() => setViewerIdx(i)} activeOpacity={0.85}>
+            <Image source={{ uri: item }} style={gal.thumb} resizeMode="cover" />
+          </TouchableOpacity>
         )}
         keyExtractor={(_, i) => `g-${i}`}
       />
@@ -267,6 +425,9 @@ function PhotoGallery({ photos }: { photos: string[] }) {
             <Ionicons name="chevron-forward" size={16} color="#FFF" />
           </TouchableOpacity>
         </View>
+      )}
+      {viewerIdx !== null && (
+        <PhotoViewer photos={photos} startIndex={viewerIdx} onClose={() => setViewerIdx(null)} />
       )}
     </View>
   );
@@ -304,71 +465,50 @@ const gal = StyleSheet.create({
 
 // ── Quote / testimonial card ─────────────────────────────────────────────────
 
-function QuoteCard({
-  text,
-  name,
-  handle,
-  avatarUrl,
-  initials,
-}: {
-  text: string;
-  name: string;
-  handle?: string | null;
-  avatarUrl?: string | null;
-  initials: string;
-}) {
+function QuoteCard({ question, text, scheme = 'dark' }: { question: string; text: string; scheme?: 'light' | 'dark' }) {
+  const cardBg      = scheme === 'dark' ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)';
+  const questionCol = scheme === 'dark' ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.42)';
+  const textCol     = scheme === 'dark' ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.82)';
   return (
-    <View style={quote.card}>
-      <Text style={quote.text}>{text}</Text>
-      <View style={quote.attr}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={quote.avatar} />
-        ) : (
-          <View style={[quote.avatar, quote.avatarFallback]}>
-            <Text style={quote.avatarText}>{initials}</Text>
-          </View>
-        )}
-        <View>
-          <Text style={quote.name}>{name}</Text>
-          {handle ? <Text style={quote.handle}>@{handle}</Text> : null}
-        </View>
-      </View>
+    <View style={[quote.card, { backgroundColor: cardBg }]}>
+      <Text style={[quote.question, { color: questionCol }]}>{question}</Text>
+      <Text style={[quote.text, { color: textCol }]}>{text}</Text>
     </View>
   );
 }
 
 const quote = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 22,
     padding: 20,
-    gap: 16,
+    gap: 10,
+  },
+  question: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   text: {
-    color: 'rgba(255,255,255,0.9)',
     fontSize: 15,
     lineHeight: 23,
     fontStyle: 'italic',
   },
-  attr: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  avatarFallback: { backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
-  name: { color: '#FFF', fontWeight: '700', fontSize: 13 },
-  handle: { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
 });
 
 // ── Stats (mock-style 3-up) ──────────────────────────────────────────────────
 
-function StatsRow({ items }: { items: { value: string; label: string }[] }) {
+function StatsRow({ items, scheme = 'dark' }: { items: { value: string; label: string; onPress?: () => void }[]; scheme?: 'light' | 'dark' }) {
   if (items.length === 0) return null;
+  const numColor   = scheme === 'dark' ? '#FFF' : '#0D0B1E';
+  const labelColor = scheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(13,11,30,0.55)';
   return (
     <View style={st.row}>
       {items.map((item) => (
-        <View key={item.label} style={st.item}>
-          <Text style={st.num}>{item.value}</Text>
-          <Text style={st.label}>{item.label}</Text>
-        </View>
+        <TouchableOpacity key={item.label} style={st.item} onPress={item.onPress} disabled={!item.onPress} activeOpacity={item.onPress ? 0.7 : 1}>
+          <Text style={[st.num, { color: numColor }]}>{item.value}</Text>
+          <Text style={[st.label, { color: labelColor }, item.onPress && st.labelTappable]}>{item.label}</Text>
+        </TouchableOpacity>
       ))}
     </View>
   );
@@ -384,6 +524,92 @@ const st = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
+  labelTappable: {
+    color: Ping.purpleLight,
+    textDecorationLine: 'underline',
+  },
+});
+
+// ── Mutuals sheet ────────────────────────────────────────────────────────────
+
+function MutualsSheet({ visible, mutualIds, onClose }: {
+  visible: boolean; mutualIds: string[]; onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  type MiniProfile = { _id: string; displayName?: string; username?: string; avatarUrl?: string };
+  const [profiles, setProfiles] = useState<MiniProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || mutualIds.length === 0) return;
+    setLoading(true);
+    Promise.all(mutualIds.map((id) => usersApi.getProfile(id).then((r) => r.user).catch(() => null)))
+      .then((results) => setProfiles(results.filter(Boolean) as MiniProfile[]))
+      .finally(() => setLoading(false));
+  }, [visible, mutualIds.join(',')]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={mu.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
+        <View style={[mu.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={mu.header}>
+            <Text style={mu.title}>Mutual Friends</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Ionicons name="close" size={22} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+          {loading ? (
+            <ActivityIndicator color={Ping.purpleLight} style={{ padding: 32 }} />
+          ) : profiles.length === 0 ? (
+            <Text style={mu.empty}>No mutual friends found.</Text>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, gap: 12 }} showsVerticalScrollIndicator={false}>
+              {profiles.map((p) => {
+                const initials = (p.displayName ?? p.username ?? '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+                return (
+                  <TouchableOpacity
+                    key={p._id}
+                    style={mu.row}
+                    activeOpacity={0.75}
+                    onPress={() => { onClose(); router.push(`/user/${p._id}` as any); }}
+                  >
+                    {p.avatarUrl ? (
+                      <Image source={{ uri: p.avatarUrl }} style={mu.avatar} />
+                    ) : (
+                      <View style={[mu.avatar, mu.avatarFallback]}>
+                        <Text style={mu.avatarText}>{initials}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={mu.name}>{p.displayName ?? 'User'}</Text>
+                      {p.username ? <Text style={mu.handle}>@{p.username}</Text> : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const mu = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  sheet: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '65%', borderTopWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  title: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  empty: { color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 32, fontSize: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  avatar: { width: 44, height: 44, borderRadius: 22 },
+  avatarFallback: { backgroundColor: 'rgba(124,58,237,0.35)', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  name: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  handle: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 1 },
 });
 
 // ── Invite to Ping sheet ─────────────────────────────────────────────────────
@@ -396,6 +622,8 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
   const [inviting, setInviting] = useState<string | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const invScheme = useColorScheme() ?? 'dark';
+  const invDark = invScheme === 'dark';
 
   useEffect(() => {
     if (!visible) return;
@@ -426,18 +654,18 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={inv.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
-        <View style={[inv.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={inv.header}>
-            <Text style={inv.title}>Invite to a Ping</Text>
+        <View style={[inv.sheet, { backgroundColor: invDark ? '#11112A' : '#FFFFFF', paddingBottom: insets.bottom + 16 }]}>
+          <View style={[inv.header, { borderBottomColor: invDark ? 'rgba(167,139,250,0.12)' : 'rgba(0,0,0,0.08)' }]}>
+            <Text style={[inv.title, { color: invDark ? '#F1F0FF' : '#111111' }]}>Invite to a Ping</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}><Ionicons name="close" size={22} color="#9CA3AF" /></TouchableOpacity>
           </View>
-          <Text style={inv.sub}>Pick one of your active pings to invite {targetName}:</Text>
+          <Text style={[inv.sub, { color: invDark ? '#9490C0' : '#666666' }]}>Pick one of your active pings to invite {targetName}:</Text>
           {loading ? (
             <ActivityIndicator color={Ping.purpleLight} style={{ padding: 40 }} />
           ) : activities.length === 0 ? (
             <View style={inv.empty}>
-              <Ionicons name="flash-outline" size={36} color="#5C5A80" />
-              <Text style={inv.emptyText}>No active pings. Drop one on the map first.</Text>
+              <Ionicons name="flash-outline" size={36} color={invDark ? '#5C5A80' : '#888888'} />
+              <Text style={[inv.emptyText, { color: invDark ? '#5C5A80' : '#888888' }]}>No active pings. Drop one on the map first.</Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={inv.list} showsVerticalScrollIndicator={false}>
@@ -446,7 +674,7 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
                 return (
                   <TouchableOpacity
                     key={activity._id}
-                    style={[inv.pingRow, { borderColor: `${cfg.color}40`, opacity: inviting === activity._id ? 0.5 : 1 }]}
+                    style={[inv.pingRow, { backgroundColor: invDark ? '#1A1A38' : '#F5F5F5', borderColor: `${cfg.color}40`, opacity: inviting === activity._id ? 0.5 : 1 }]}
                     onPress={() => invite(activity)}
                     disabled={!!inviting}
                     activeOpacity={0.75}
@@ -455,8 +683,8 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
                       <MaterialCommunityIcons name={cfg.icon} size={20} color={cfg.color} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={inv.pingTitle}>{activity.title}</Text>
-                      <Text style={inv.pingMeta}>{new Date(activity.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {activity.participants?.length ?? 0} joined</Text>
+                      <Text style={[inv.pingTitle, { color: invDark ? '#F1F0FF' : '#111111' }]}>{activity.title}</Text>
+                      <Text style={[inv.pingMeta, { color: invDark ? '#9490C0' : '#666666' }]}>{new Date(activity.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {activity.participants?.length ?? 0} joined</Text>
                     </View>
                     {inviting === activity._id
                       ? <ActivityIndicator size="small" color={Ping.purpleLight} />
@@ -474,17 +702,17 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
 
 const inv = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  sheet: { backgroundColor: '#11112A', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '72%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(167,139,250,0.12)' },
-  title: { color: '#F1F0FF', fontSize: 17, fontWeight: '700' },
-  sub: { color: '#9490C0', fontSize: 13, paddingHorizontal: Spacing.lg, paddingTop: 12, paddingBottom: 4 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '72%' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
+  title: { fontSize: 17, fontWeight: '700' },
+  sub: { fontSize: 13, paddingHorizontal: Spacing.lg, paddingTop: 12, paddingBottom: 4 },
   list: { padding: Spacing.md, gap: 10 },
-  pingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1A1A38', borderRadius: 14, padding: 14, borderWidth: 1 },
+  pingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, padding: 14, borderWidth: 1 },
   pingIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  pingTitle: { color: '#F1F0FF', fontWeight: '600', fontSize: 14 },
-  pingMeta: { color: '#9490C0', fontSize: 12, marginTop: 2 },
+  pingTitle: { fontWeight: '600', fontSize: 14 },
+  pingMeta: { fontSize: 12, marginTop: 2 },
   empty: { padding: 40, alignItems: 'center', gap: 10 },
-  emptyText: { color: '#5C5A80', textAlign: 'center', lineHeight: 20 },
+  emptyText: { textAlign: 'center', lineHeight: 20 },
 });
 
 // ── Main profile screen ───────────────────────────────────────────────────────
@@ -498,14 +726,17 @@ export default function UserProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
+
   const [dmLoading, setDmLoading] = useState(false);
   const [mutualCount, setMutualCount] = useState<number | null>(null);
+  const [mutualIds, setMutualIds] = useState<string[]>([]);
+  const [showMutuals, setShowMutuals] = useState(false);
   const [dmPaywall, setDmPaywall] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
   const [mode, setMode] = useState<'preview' | 'detail'>('preview');
 
   useEffect(() => {
@@ -513,7 +744,7 @@ export default function UserProfileScreen() {
       .then((res) => {
         setProfile(res.user);
         if (res.user.friendshipStatus !== 'self') {
-          friendsApi.mutual(userId).then((r) => setMutualCount(r.count)).catch(() => {});
+          friendsApi.mutual(userId).then((r) => { setMutualCount(r.count); setMutualIds(r.mutualIds ?? []); }).catch(() => {});
         }
       })
       .catch(() => {})
@@ -572,20 +803,6 @@ export default function UserProfileScreen() {
     } finally { setDmLoading(false); }
   }
 
-  async function toggleSave() {
-    if (!profile || saveLoading) return;
-    setSaveLoading(true);
-    try {
-      if (profile.isSaved) {
-        await usersApi.unsaveProfile(profile._id);
-        setProfile((p) => p ? { ...p, isSaved: false } : p);
-      } else {
-        await usersApi.saveProfile(profile._id);
-        setProfile((p) => p ? { ...p, isSaved: true } : p);
-      }
-    } catch (e: any) { Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not update.' }); }
-    finally { setSaveLoading(false); }
-  }
 
   async function doBlockUser() {
     if (!profile) return;
@@ -603,7 +820,7 @@ export default function UserProfileScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#06061A', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator color="#A78BFA" size="large" />
       </View>
     );
@@ -611,7 +828,7 @@ export default function UserProfileScreen() {
 
   if (!profile) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#06061A', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+      <View style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
         <Ionicons name="person-outline" size={48} color="#555" />
         <Text style={{ color: '#888', ...Typography.bodyMed }}>User not found</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: Spacing.sm }}>
@@ -671,28 +888,32 @@ export default function UserProfileScreen() {
   ];
 
   // Stats
+  const canShowMutuals = mutualCount !== null && mutualCount > 0;
   const stats = [
-    { value: mutualCount !== null ? String(mutualCount) : '—', label: 'Mutuals' },
+    { value: mutualCount !== null ? String(mutualCount) : '—', label: 'Mutuals', onPress: canShowMutuals ? () => setShowMutuals(true) : undefined },
     { value: String(profile.completedPingsCount ?? 0), label: 'Pings' },
-    { value: `${profile.trustRate ?? 0}%`, label: 'Trust' },
+    { value: profile.ratingCount && profile.ratingCount > 0 ? `${profile.trustRate ?? 0}%` : '—', label: 'Trust Rate' },
   ];
 
   // ── Primary CTA label / action ─────────────────────────────────────────────
+  const ctaBg   = scheme === 'dark' ? '#FFF' : Ping.purple;
+  const ctaText = scheme === 'dark' ? '#000' : '#FFF';
+
   function renderPrimaryCta(fullWidth = true) {
     if (isSelf) return null;
 
     if (profile!.friendshipStatus === 'none') {
       return (
         <TouchableOpacity
-          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          style={[s.btnPrimary, { backgroundColor: ctaBg }, !fullWidth && { flex: 1 }]}
           onPress={sendRequest}
           disabled={actionLoading}
           activeOpacity={0.88}
         >
           {actionLoading ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ActivityIndicator size="small" color={ctaText} />
           ) : (
-            <Text style={s.btnPrimaryText}>Add Friend</Text>
+            <Text style={[s.btnPrimaryText, { color: ctaText }]}>Add Friend</Text>
           )}
         </TouchableOpacity>
       );
@@ -700,15 +921,15 @@ export default function UserProfileScreen() {
     if (isPendingReceived) {
       return (
         <TouchableOpacity
-          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          style={[s.btnPrimary, { backgroundColor: ctaBg }, !fullWidth && { flex: 1 }]}
           onPress={acceptRequest}
           disabled={actionLoading}
           activeOpacity={0.88}
         >
           {actionLoading ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ActivityIndicator size="small" color={ctaText} />
           ) : (
-            <Text style={s.btnPrimaryText}>Accept Request</Text>
+            <Text style={[s.btnPrimaryText, { color: ctaText }]}>Accept Request</Text>
           )}
         </TouchableOpacity>
       );
@@ -723,15 +944,15 @@ export default function UserProfileScreen() {
     if (isAccepted) {
       return (
         <TouchableOpacity
-          style={[s.btnPrimary, !fullWidth && { flex: 1 }]}
+          style={[s.btnPrimary, { backgroundColor: ctaBg }, !fullWidth && { flex: 1 }]}
           onPress={openDm}
           disabled={dmLoading}
           activeOpacity={0.88}
         >
           {dmLoading ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ActivityIndicator size="small" color={ctaText} />
           ) : (
-            <Text style={s.btnPrimaryText}>Message</Text>
+            <Text style={[s.btnPrimaryText, { color: ctaText }]}>Message</Text>
           )}
         </TouchableOpacity>
       );
@@ -752,31 +973,35 @@ export default function UserProfileScreen() {
       onPanResponderRelease: (_, { dy }) => { if (dy < -40) setMode('detail'); },
     });
 
+    const previewTextColor  = scheme === 'dark' ? '#FFF' : '#0D0B1E';
+    const previewHandleColor = scheme === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(13,11,30,0.6)';
+    const previewBioColor   = scheme === 'dark' ? 'rgba(255,255,255,0.85)' : 'rgba(13,11,30,0.8)';
+
     const sheetInner = (
       <View style={[s.previewSheetInner, { paddingBottom: sheetPadBottom }]}>
-        <SwipeHint />
+        <SwipeHint scheme={scheme} />
 
         <View style={s.nameRow}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-              <Text style={s.name} numberOfLines={1}>{shortName}</Text>
+              <Text style={[s.name, { color: previewTextColor }]} numberOfLines={1}>{shortName}</Text>
               {isVerified && (
                 <Ionicons name="checkmark-circle" size={18} color="#A78BFA" />
               )}
             </View>
             {profile.username ? (
-              <Text style={s.handle}>@{profile.username}</Text>
+              <Text style={[s.handle, { color: previewHandleColor }]}>@{profile.username}</Text>
             ) : null}
           </View>
         </View>
 
         {profile.bio ? (
-          <Text style={s.bio} numberOfLines={3}>
+          <Text style={[s.bio, { color: previewBioColor }]} numberOfLines={3}>
             "{profile.bio}"
           </Text>
         ) : null}
 
-        <StatsRow items={stats} />
+        <StatsRow items={stats} scheme={scheme} />
 
         {!isSelf ? (
           <View style={s.previewCtaWrap}>{renderPrimaryCta(true)}</View>
@@ -808,11 +1033,17 @@ export default function UserProfileScreen() {
         <View style={s.previewSheetWrap} pointerEvents="box-none">
           <BlurView
             intensity={Platform.OS === 'ios' ? 75 : 90}
-            tint="dark"
+            tint={scheme === 'dark' ? 'dark' : 'light'}
             experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
             style={s.previewSheet}
           >
-            <View style={s.previewSheetTint} {...cardSwipePan.panHandlers}>
+            <View
+              style={[
+                s.previewSheetTint,
+                { backgroundColor: scheme === 'dark' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.35)' },
+              ]}
+              {...cardSwipePan.panHandlers}
+            >
               {sheetInner}
             </View>
           </BlurView>
@@ -824,36 +1055,48 @@ export default function UserProfileScreen() {
   }
 
   // ── DETAIL MODE (mock right screen) ────────────────────────────────────────
+  const isDark = scheme === 'dark';
+  const c = Colors[scheme];
+  const dt = {
+    text:       isDark ? '#FFF'                       : '#111111',
+    sub:        isDark ? 'rgba(255,255,255,0.55)'     : 'rgba(0,0,0,0.55)',
+    muted:      isDark ? 'rgba(255,255,255,0.48)'     : 'rgba(0,0,0,0.48)',
+    bio:        isDark ? 'rgba(255,255,255,0.80)'     : 'rgba(0,0,0,0.75)',
+    tagBg:      isDark ? 'rgba(255,255,255,0.12)'     : 'rgba(0,0,0,0.06)',
+    tagText:    isDark ? 'rgba(255,255,255,0.90)'     : 'rgba(0,0,0,0.80)',
+    veil:       isDark ? 'rgba(0,0,0,0.75)'           : 'rgba(246,243,239,0.90)',
+    base:       isDark ? '#000000'                    : c.background,
+    ctaBg:      isDark ? '#FFF'                       : Ping.purple,
+    ctaText:    isDark ? '#000'                       : '#FFF',
+    barBg:      isDark ? 'rgba(0,0,0,0.82)'           : 'rgba(246,243,239,0.96)',
+    barBorder:  isDark ? 'rgba(255,255,255,0.10)'     : 'rgba(0,0,0,0.08)',
+    socialBg:   isDark ? 'rgba(255,255,255,0.07)'     : 'rgba(0,0,0,0.04)',
+    headerBtn:  isDark ? 'rgba(0,0,0,0.45)'           : 'rgba(0,0,0,0.10)',
+    headerText: isDark ? '#FFF'                       : '#111111',
+  };
+
   return (
-    <View style={s.root}>
-      {/* Deep purple base */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#06061A' }]} />
-      {/* Blurred avatar texture (when photo exists) */}
+    <View style={[s.root, { backgroundColor: dt.base }]}>
+      {/* Base */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: dt.base }]} />
+      {/* Blurred avatar texture */}
       {allPhotos[0] ? (
         <Image source={{ uri: allPhotos[0] }} style={StyleSheet.absoluteFillObject} blurRadius={32} resizeMode="cover" />
       ) : null}
-      {/* Purple glow orb — top-right, 3 layers for soft falloff */}
-      <View style={s.orbTR3} />
-      <View style={s.orbTR2} />
-      <View style={s.orbTR1} />
-      {/* Purple glow orb — bottom-left */}
-      <View style={s.orbBL3} />
-      <View style={s.orbBL2} />
-      <View style={s.orbBL1} />
-      {/* Dark purple veil over everything */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,4,26,0.82)' }]} />
+      {/* Veil */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: dt.veil }]} />
 
       <View style={[s.detailHeader, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={handleBack} hitSlop={12} style={s.headerBtn}>
-          <Ionicons name="arrow-back" size={20} color="#FFF" />
+        <TouchableOpacity onPress={handleBack} hitSlop={12} style={[s.headerBtn, { backgroundColor: dt.headerBtn }]}>
+          <Ionicons name="arrow-back" size={20} color={dt.headerText} />
         </TouchableOpacity>
         {profile.username ? (
-          <Text style={s.headerHandle}>@{profile.username}</Text>
+          <Text style={[s.headerHandle, { color: dt.headerText }]}>@{profile.username}</Text>
         ) : (
           <View />
         )}
-        <TouchableOpacity onPress={() => setShowShare(true)} hitSlop={12} style={s.headerBtn}>
-          <Ionicons name="share-outline" size={18} color="#FFF" />
+        <TouchableOpacity onPress={() => setShowShare(true)} hitSlop={12} style={[s.headerBtn, { backgroundColor: dt.headerBtn }]}>
+          <Ionicons name="share-outline" size={18} color={dt.headerText} />
         </TouchableOpacity>
       </View>
 
@@ -862,24 +1105,26 @@ export default function UserProfileScreen() {
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 8,
-          paddingBottom: insets.bottom + (isSelf ? 40 : 120),
+          paddingBottom: isSelf ? insets.bottom + 24 : insets.bottom + 100,
           gap: 18,
         }}
       >
-        <GlassCard>
+        <GlassCard scheme={scheme}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             <View style={{ flex: 1, gap: 4 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={s.detailName} numberOfLines={1}>{profile.displayName ?? 'User'}</Text>
+                <Text style={[s.detailName, { color: dt.text }]} numberOfLines={1}>{profile.displayName ?? 'User'}</Text>
                 {isVerified && <Ionicons name="checkmark-circle" size={20} color="#A78BFA" />}
               </View>
-              {profile.username ? <Text style={s.handle}>@{profile.username}</Text> : null}
+              {profile.username ? <Text style={[s.handle, { color: dt.sub }]}>@{profile.username}</Text> : null}
               {infoItems.length > 0 && (
-                <Text style={s.infoLine}>{infoItems.join('  ·  ')}</Text>
+                <Text style={[s.infoLine, { color: dt.muted }]}>{infoItems.join('  ·  ')}</Text>
               )}
             </View>
             {profile.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} style={s.detailAvatar} resizeMode="cover" />
+              <TouchableOpacity onPress={() => setShowAvatarViewer(true)} activeOpacity={0.85}>
+                <Image source={{ uri: profile.avatarUrl }} style={s.detailAvatar} resizeMode="cover" />
+              </TouchableOpacity>
             ) : (
               <View style={[s.detailAvatar, s.detailAvatarFallback]}>
                 <Text style={s.detailAvatarInitial}>{initials}</Text>
@@ -888,12 +1133,11 @@ export default function UserProfileScreen() {
           </View>
 
           {profile.bio ? (
-            <Text style={s.detailBio}>"{profile.bio}"</Text>
+            <Text style={[s.detailBio, { color: dt.bio }]}>"{profile.bio}"</Text>
           ) : null}
 
-          <StatsRow items={stats} />
+          <StatsRow items={stats} scheme={scheme} />
 
-          {/* Hashtags — hidden for now
           {hashTags.length > 0 && (
             <ScrollView
               horizontal
@@ -901,19 +1145,21 @@ export default function UserProfileScreen() {
               contentContainerStyle={s.tagsRow}
             >
               {hashTags.map((tag) => (
-                <View key={tag} style={s.tagChip}>
-                  <Text style={s.tagText}>{tag}</Text>
+                <View key={tag} style={[s.tagChip, { backgroundColor: dt.tagBg }]}>
+                  <Text style={[s.tagText, { color: dt.tagText }]}>{tag}</Text>
                 </View>
               ))}
             </ScrollView>
           )}
-          */}
 
           {traitChips.length > 0 && (
             <View style={s.traitsWrap}>
               {traitChips.map((trait) => (
-                <View key={trait} style={s.traitChip}>
-                  <Text style={s.traitText}>{trait}</Text>
+                <View key={trait} style={[s.traitChip, {
+                  backgroundColor: isDark ? 'rgba(167,139,250,0.10)' : 'rgba(143,99,244,0.07)',
+                  borderColor:     isDark ? 'rgba(167,139,250,0.22)' : 'rgba(143,99,244,0.18)',
+                }]}>
+                  <Text style={[s.traitText, { color: isDark ? 'rgba(167,139,250,0.9)' : Ping.purpleDim }]}>{trait}</Text>
                 </View>
               ))}
             </View>
@@ -923,26 +1169,14 @@ export default function UserProfileScreen() {
         </GlassCard>
 
         {pingPitchText ? (
-          <QuoteCard
-            text={pingPitchText}
-            name={profile.displayName ?? 'User'}
-            handle={profile.username}
-            avatarUrl={profile.avatarUrl}
-            initials={initials}
-          />
+          <QuoteCard question="Ping Pitch" text={pingPitchText} scheme={scheme} />
         ) : null}
 
         {funTruthText ? (
-          <QuoteCard
-            text={funTruthText}
-            name={profile.displayName ?? 'User'}
-            handle={profile.username}
-            avatarUrl={profile.avatarUrl}
-            initials={initials}
-          />
+          <QuoteCard question="Fun Truth" text={funTruthText} scheme={scheme} />
         ) : null}
 
-        <View style={s.socialCard}>
+        <View style={[s.socialCard, { backgroundColor: dt.socialBg }]}>
           {socialLinks.map((link) => <SocialBtn key={link.label} link={link} />)}
         </View>
 
@@ -957,7 +1191,7 @@ export default function UserProfileScreen() {
       </ScrollView>
 
       {!isSelf && (
-        <View style={[s.detailActions, { paddingBottom: insets.bottom + 14 }]}>
+        <View style={[s.detailActions, { paddingBottom: insets.bottom + 14, backgroundColor: dt.barBg, borderTopColor: dt.barBorder }]}>
           {isAccepted ? (
             <View style={s.btnRow}>
               {renderPrimaryCta(false)}
@@ -978,6 +1212,12 @@ export default function UserProfileScreen() {
   function renderSheets() {
     return (
       <>
+        <MutualsSheet
+          visible={showMutuals}
+          mutualIds={mutualIds}
+          onClose={() => setShowMutuals(false)}
+        />
+
         <InviteToPingSheet
           visible={showInvite}
           targetUserId={profile!._id}
@@ -1028,13 +1268,21 @@ export default function UserProfileScreen() {
           message="Upgrade to Pro to send direct messages."
           upgradeTo="pro"
         />
+
+        {showAvatarViewer && profile?.avatarUrl && (
+          <PhotoViewer
+            photos={[profile.avatarUrl]}
+            startIndex={0}
+            onClose={() => setShowAvatarViewer(false)}
+          />
+        )}
       </>
     );
   }
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#06061A' },
+  root: { flex: 1, backgroundColor: '#000000' },
 
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
@@ -1066,7 +1314,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   previewSheetTint: {
-    backgroundColor: 'rgba(8,4,28,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   previewSheetInner: {
     paddingHorizontal: 22,
@@ -1167,18 +1415,10 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 22,
     paddingTop: 12,
-    backgroundColor: 'rgba(8,4,28,0.82)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(167,139,250,0.14)',
+    borderTopColor: 'rgba(255,255,255,0.1)',
   },
-  // Purple glow orbs — top-right (3 layers = soft falloff)
-  orbTR3: { position: 'absolute', width: 440, height: 440, borderRadius: 220, backgroundColor: 'rgba(110,40,220,0.07)', top: -180, right: -150 },
-  orbTR2: { position: 'absolute', width: 310, height: 310, borderRadius: 155, backgroundColor: 'rgba(120,50,230,0.13)', top: -115, right: -85 },
-  orbTR1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(130,60,240,0.20)', top: -55, right: -25 },
-  // Purple glow orbs — bottom-left
-  orbBL3: { position: 'absolute', width: 380, height: 380, borderRadius: 190, backgroundColor: 'rgba(80,20,190,0.07)', bottom: 50, left: -140 },
-  orbBL2: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(90,25,200,0.13)', bottom: 100, left: -80 },
-  orbBL1: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: 'rgba(100,30,210,0.20)', bottom: 155, left: -25 },
   btnRow: { flexDirection: 'row', gap: 8 },
   btnPrimary: {
     height: 52,

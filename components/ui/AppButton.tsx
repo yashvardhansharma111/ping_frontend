@@ -103,7 +103,7 @@ export default function AppButton({
 
   const bg =
     variant === 'primary'
-      ? c.primary
+      ? Ping.purple
       : variant === 'danger'
       ? Ping.red
       : variant === 'secondary'

@@ -43,7 +43,7 @@ function TabItem({
 
   const pillWidth = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [38, 84],
+    outputRange: [38, 120],
   });
 
   const labelOpacity = anim.interpolate({

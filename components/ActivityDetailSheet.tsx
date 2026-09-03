@@ -3,7 +3,7 @@
  * Shows: header info, participants, creator, all action buttons.
  * Used inside the map screen's selected-activity sheet.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { activitiesApi, chatApi, friendsApi, reportsApi, type Activity, type ActivityParticipant } from '@/lib/api';
@@ -65,14 +66,14 @@ function getJoinTaunt(name: string) {
 }
 
 const TYPE_META: Record<string, { icon: IoniconName; color: string }> = {
-  sport:   { icon: 'barbell-outline',        color: '#22C55E' },
-  food:    { icon: 'restaurant-outline',      color: '#F97316' },
-  music:   { icon: 'musical-notes-outline',   color: '#8B5CF6' },
-  study:   { icon: 'book-outline',            color: '#3B82F6' },
-  outdoor: { icon: 'walk-outline',            color: '#10B981' },
-  gaming:  { icon: 'game-controller-outline', color: '#EC4899' },
+  sport:   { icon: 'barbell-outline',        color: Ping.purple },
+  food:    { icon: 'restaurant-outline',      color: Ping.purple },
+  music:   { icon: 'musical-notes-outline',   color: Ping.purple },
+  study:   { icon: 'book-outline',            color: Ping.purple },
+  outdoor: { icon: 'walk-outline',            color: Ping.purple },
+  gaming:  { icon: 'game-controller-outline', color: Ping.purple },
   meetup:  { icon: 'people-outline',          color: Ping.purple },
-  default: { icon: 'location-outline',        color: '#6B7280' },
+  default: { icon: 'location-outline',        color: Ping.purple },
 };
 
 function ParticipantAvatar({
@@ -147,12 +148,17 @@ interface Props {
   onDismiss: () => void;
   onScrolledDown?: () => void;
   onActivityUpdate?: (activity: Activity) => void;
+  scrollEnabled?: boolean;
 }
 
-export default function ActivityDetailSheet({ activity: initial, onRefresh, onDismiss, onScrolledDown, onActivityUpdate }: Props) {
+export default function ActivityDetailSheet({ activity: initial, onRefresh, onDismiss, onScrolledDown, onActivityUpdate, scrollEnabled = true }: Props) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
+  const isDark = scheme === 'dark';
+  const rpt = useMemo(() => makeRptStyles(isDark, c), [isDark]);
+  const jc  = useMemo(() => makeJcStyles(isDark), [isDark]);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
 
   const [a, setA] = useState(initial);
@@ -259,7 +265,16 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
         setTimeout(() => router.push(chatUrl(res.room._id)), 800);
       }
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'Could not join', text2: e.message });
+      const code = String(e.code || '');
+      if (code === 'not_live') {
+        Toast.show({ type: 'info', text1: 'Ping just ended', text2: 'This one wrapped up — check out others nearby.' });
+        onDismiss();
+        onRefresh();
+      } else if (code === 'gender_restricted') {
+        Toast.show({ type: 'info', text1: 'Restricted ping', text2: e.message });
+      } else {
+        Toast.show({ type: 'error', text1: 'Could not join', text2: e.message });
+      }
     } finally {
       setJoining(false);
     }
@@ -315,6 +330,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       cancelSafetyReminder(a._id);
       onDismiss();
       onRefresh();
+      Toast.show({ type: 'success', text1: 'Ping cancelled.', text2: 'Your ping has been removed.' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: e.message });
     } finally {
@@ -387,9 +403,10 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
     <>
     <ScrollView
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.root}
+      contentContainerStyle={[styles.root, { paddingBottom: insets.bottom + 80 }]}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={32}
+      scrollEnabled={scrollEnabled}
       onScroll={(e) => {
         const y = e.nativeEvent.contentOffset.y;
         if (y > 40 && !scrollExpandedRef.current) {
@@ -451,7 +468,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       <View style={styles.metaBlock}>
         <View style={styles.metaRow}>
           <Ionicons name="time-outline" size={13} color={c.icon} />
-          <Text style={[styles.metaText, { color: timeStatus === 'live' ? '#22C55E' : c.textSecondary }]}>
+          <Text style={[styles.metaText, { color: timeStatus === 'live' ? Ping.purpleLight : c.textSecondary }]}>
             {timeStatus === 'live' ? 'Happening now' : formatStartTime(a.startsAt)}
           </Text>
         </View>
@@ -475,15 +492,14 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       {a.genderFilter && a.genderFilter !== 'all' && (
         <View style={[
           styles.genderBadge,
-          { backgroundColor: a.genderFilter === 'women_only' ? 'rgba(236,72,153,0.15)' : 'rgba(59,130,246,0.15)',
-            borderColor: a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' },
+          { backgroundColor: 'rgba(143,99,244,0.12)', borderColor: `${Ping.purple}60` },
         ]}>
           <Ionicons
             name={a.genderFilter === 'women_only' ? 'female' : 'male'}
             size={13}
-            color={a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6'}
+            color={Ping.purpleLight}
           />
-          <Text style={[styles.genderBadgeText, { color: a.genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' }]}>
+          <Text style={[styles.genderBadgeText, { color: Ping.purpleLight }]}>
             {a.genderFilter === 'women_only' ? 'Women only' : 'Men only'}
           </Text>
         </View>
@@ -519,13 +535,10 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
           <View style={{ flex: 1 }}>
             <Text style={[styles.creatorName, { color: c.text }]}>{a.creator.displayName}</Text>
             <View style={styles.creatorMeta}>
-              {/* Trust Rate */}
-              {a.creator.trustRate !== undefined && (
+              {/* Trust Rate — only shown once the creator has real ratings */}
+              {a.creator.ratingCount != null && a.creator.ratingCount > 0 && a.creator.trustRate !== undefined && (
                 <View style={styles.trustChip}>
-                  <View style={[styles.trustDot, {
-                    backgroundColor: a.creator.trustRate >= 70 ? '#22C55E'
-                      : a.creator.trustRate >= 40 ? '#F59E0B' : '#9490C0',
-                  }]} />
+                  <View style={[styles.trustDot, { backgroundColor: Ping.purpleLight }]} />
                   <Text style={[styles.trustText, { color: c.textSecondary }]}>
                     {a.creator.trustRate}% trust
                   </Text>
@@ -707,7 +720,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
             <View style={styles.btnRow}>
               {!myParticipant?.onMyWayAt && (
                 <TouchableOpacity
-                  style={[styles.btnSecondary, { borderColor: c.border }]}
+                  style={styles.btnSecondary}
                   onPress={handleOnMyWay}
                   disabled={onMyWayLoading}
                   activeOpacity={0.8}
@@ -716,7 +729,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
                     <ActivityIndicator size="small" color={Ping.purpleLight} />
                   ) : (
                     <>
-                      <Ionicons name="walk-outline" size={14} color={Ping.purpleLight} />
+                      <Ionicons name="walk-outline" size={15} color={Ping.purpleLight} />
                       <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
                     </>
                   )}
@@ -725,16 +738,16 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 
               {!myParticipant?.arrivedAt && (
                 <TouchableOpacity
-                  style={[styles.btnSecondary, { borderColor: c.border }]}
+                  style={[styles.btnSecondary, { borderColor: 'rgba(34,197,94,0.4)', backgroundColor: 'rgba(34,197,94,0.07)' }]}
                   onPress={handleArrived}
                   disabled={arrivedLoading}
                   activeOpacity={0.8}
                 >
                   {arrivedLoading ? (
-                    <ActivityIndicator size="small" color={Ping.purpleLight} />
+                    <ActivityIndicator size="small" color="#22C55E" />
                   ) : (
                     <>
-                      <Ionicons name="pin-outline" size={14} color="#22C55E" />
+                      <Ionicons name="pin" size={15} color="#22C55E" />
                       <Text style={[styles.btnSecondaryText, { color: '#22C55E' }]}>I'm Here</Text>
                     </>
                   )}
@@ -742,17 +755,17 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
               )}
 
               <TouchableOpacity
-                style={[styles.btnSecondary, { borderColor: c.border }]}
+                style={[styles.btnSecondary, styles.btnDanger]}
                 onPress={handleLeave}
                 disabled={leaving}
                 activeOpacity={0.8}
               >
                 {leaving ? (
-                  <ActivityIndicator size="small" color={c.textSecondary} />
+                  <ActivityIndicator size="small" color="#EF4444" />
                 ) : (
                   <>
-                    <Ionicons name="exit-outline" size={14} color={c.textSecondary} />
-                    <Text style={[styles.btnSecondaryText, { color: c.textSecondary }]}>Leave</Text>
+                    <Ionicons name="exit-outline" size={15} color="#EF4444" />
+                    <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Leave</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -813,29 +826,35 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
             <View style={styles.btnRow}>
               {!myParticipant?.onMyWayAt && (
                 <TouchableOpacity
-                  style={[styles.btnSecondary, { borderColor: c.border }]}
+                  style={styles.btnSecondary}
                   onPress={handleOnMyWay}
                   disabled={onMyWayLoading}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="walk-outline" size={14} color={Ping.purpleLight} />
-                  <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
+                  {onMyWayLoading ? (
+                    <ActivityIndicator size="small" color={Ping.purpleLight} />
+                  ) : (
+                    <>
+                      <Ionicons name="walk-outline" size={15} color={Ping.purpleLight} />
+                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               )}
 
               {!isExpired && (
                 <TouchableOpacity
-                  style={[styles.btnSecondary, styles.btnDanger, { borderColor: `${Ping.red}44` }]}
+                  style={[styles.btnSecondary, styles.btnDanger]}
                   onPress={handleCancel}
                   disabled={cancelling}
                   activeOpacity={0.8}
                 >
                   {cancelling ? (
-                    <ActivityIndicator size="small" color={Ping.red} />
+                    <ActivityIndicator size="small" color="#EF4444" />
                   ) : (
                     <>
-                      <Ionicons name="close-circle-outline" size={14} color={Ping.red} />
-                      <Text style={[styles.btnSecondaryText, { color: Ping.red }]}>Cancel Ping</Text>
+                      <Ionicons name="close-circle-outline" size={15} color="#EF4444" />
+                      <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Cancel Ping</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -1187,20 +1206,22 @@ const styles = StyleSheet.create({
   trustText: { ...Typography.caption, fontSize: 11 },
   safetyRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 4,
   },
   safetyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: Radius.full,
-    backgroundColor: 'rgba(148,144,192,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,144,192,0.18)',
+    backgroundColor: 'rgba(148,144,192,0.07)',
   },
-  safetyBtnText: { ...Typography.caption, color: '#9490C0', fontSize: 11, fontWeight: '600' },
+  safetyBtnText: { fontSize: 12, color: '#9490C0', fontWeight: '600', letterSpacing: 0.1 },
   safetyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1265,30 +1286,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: Ping.purple,
-    height: 50,
+    height: 52,
     borderRadius: Radius.md,
     shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  btnPrimaryText: { ...Typography.bodyMed, color: '#FFF', fontWeight: '700' },
-  btnDisabled: { backgroundColor: '#3A3A5C', shadowOpacity: 0, elevation: 0 },
-  btnRow: { flexDirection: 'row', gap: Spacing.sm },
+  btnPrimaryText: { fontSize: 15, color: '#FFF', fontWeight: '700', letterSpacing: 0.2 },
+  btnDisabled: { backgroundColor: '#2E2B4A', shadowOpacity: 0, elevation: 0 },
+  btnRow: { flexDirection: 'row', gap: 10 },
   btnSecondary: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    height: 42,
+    gap: 6,
+    height: 46,
     borderRadius: Radius.md,
-    borderWidth: 1,
-    backgroundColor: 'rgba(167,139,250,0.06)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(167,139,250,0.3)',
+    backgroundColor: 'rgba(167,139,250,0.07)',
   },
-  btnDanger: { backgroundColor: 'rgba(239,68,68,0.06)' },
-  btnSecondaryText: { ...Typography.bodySm, fontWeight: '600' },
+  btnDanger: {
+    borderColor: 'rgba(239,68,68,0.45)',
+    backgroundColor: 'rgba(239,68,68,0.07)',
+  },
+  btnSecondaryText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.1 },
   chatTeaser: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1322,170 +1347,187 @@ const styles = StyleSheet.create({
 
 // ── Report / Profile menu sheet styles ───────────────────────────────────────
 
-const rpt = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#11112A',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: 'rgba(167,139,250,0.15)',
-    paddingTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 36,
-    alignItems: 'center',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(167,139,250,0.3)',
-    marginBottom: Spacing.lg,
-  },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(239,68,68,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
-  },
-  title: {
-    color: '#F1F0FF',
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: -0.2,
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: 'rgba(241,240,255,0.45)',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(167,139,250,0.1)',
-  },
-  optionText: {
-    color: '#F1F0FF',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  cancelBtn: {
-    marginTop: Spacing.md,
-    width: '100%',
-    height: 48,
-    borderRadius: Radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.15)',
-  },
-  cancelText: {
-    color: 'rgba(241,240,255,0.6)',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
+function makeRptStyles(isDark: boolean, c: typeof Colors.dark) {
+  const sheetBg  = isDark ? '#11112A' : '#FFFFFF';
+  const titleClr = isDark ? '#F1F0FF' : '#111111';
+  const subClr   = isDark ? 'rgba(241,240,255,0.45)' : '#6B7280';
+  const optionClr= isDark ? '#F1F0FF' : '#111111';
+  const divider  = isDark ? 'rgba(167,139,250,0.1)' : 'rgba(0,0,0,0.07)';
+  const handleBg = isDark ? 'rgba(167,139,250,0.3)' : 'rgba(0,0,0,0.15)';
+  const cancelBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+  const cancelBorder = isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.1)';
+  const cancelTxt = isDark ? 'rgba(241,240,255,0.6)' : '#6B7280';
+  const topBorder = isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.08)';
+  return StyleSheet.create({
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)',
+    },
+    sheet: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: sheetBg,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      borderTopWidth: 1,
+      borderColor: topBorder,
+      paddingTop: Spacing.sm,
+      paddingHorizontal: Spacing.lg,
+      paddingBottom: 36,
+      alignItems: 'center',
+    },
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: handleBg,
+      marginBottom: Spacing.lg,
+    },
+    iconWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: 'rgba(239,68,68,0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: Spacing.sm,
+    },
+    title: {
+      color: titleClr,
+      fontSize: 16,
+      fontWeight: '700',
+      textAlign: 'center',
+      letterSpacing: -0.2,
+      marginBottom: 4,
+    },
+    subtitle: {
+      color: subClr,
+      fontSize: 13,
+      textAlign: 'center',
+      marginBottom: Spacing.md,
+    },
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+      paddingVertical: 14,
+      paddingHorizontal: Spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: divider,
+    },
+    optionText: {
+      color: optionClr,
+      fontSize: 15,
+      fontWeight: '500',
+    },
+    cancelBtn: {
+      marginTop: Spacing.md,
+      width: '100%',
+      height: 48,
+      borderRadius: Radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: cancelBg,
+      borderWidth: 1,
+      borderColor: cancelBorder,
+    },
+    cancelText: {
+      color: cancelTxt,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+  });
+}
 
-// ── Join confirm modal styles ─────────────────────────────────────────────────
-
-const jc = StyleSheet.create({
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    width: '100%',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(167,139,250,0.1)',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: 'rgba(167,139,250,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  checkboxChecked: {
-    backgroundColor: Ping.purple,
-    borderColor: Ping.purple,
-  },
-  checkLabel: {
-    flex: 1,
-    color: '#F1F0FF',
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  rulesList: {
-    width: '100%',
-    gap: 10,
-    paddingHorizontal: 4,
-    marginBottom: 4,
-  },
-  ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 10,
-    padding: 11,
-  },
-  ruleText: {
-    flex: 1,
-    color: 'rgba(241,240,255,0.75)',
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-  ruleBold: {
-    color: '#F1F0FF',
-    fontWeight: '700',
-  },
-  confirmBtn: {
-    marginTop: 8,
-    width: '100%',
-    height: 50,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Ping.purple,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  confirmBtnDisabled: {
-    backgroundColor: '#3A3A5C',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  confirmBtnText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+function makeJcStyles(isDark: boolean) {
+  const text    = isDark ? '#F1F0FF' : '#111111';
+  const subText = isDark ? 'rgba(241,240,255,0.75)' : '#4B5563';
+  const divider = isDark ? 'rgba(167,139,250,0.1)' : 'rgba(0,0,0,0.07)';
+  const rowBg   = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
+  const disabledBg = isDark ? '#3A3A5C' : '#C4B5FD';
+  return StyleSheet.create({
+    checkRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      width: '100%',
+      paddingVertical: 14,
+      paddingHorizontal: Spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: divider,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: 'rgba(167,139,250,0.5)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      marginTop: 1,
+    },
+    checkboxChecked: {
+      backgroundColor: Ping.purple,
+      borderColor: Ping.purple,
+    },
+    checkLabel: {
+      flex: 1,
+      color: text,
+      fontSize: 14,
+      fontWeight: '500',
+      lineHeight: 20,
+    },
+    rulesList: {
+      width: '100%',
+      gap: 10,
+      paddingHorizontal: 4,
+      marginBottom: 4,
+    },
+    ruleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      backgroundColor: rowBg,
+      borderRadius: 10,
+      padding: 11,
+    },
+    ruleText: {
+      flex: 1,
+      color: subText,
+      fontSize: 12.5,
+      lineHeight: 18,
+    },
+    ruleBold: {
+      color: text,
+      fontWeight: '700',
+    },
+    confirmBtn: {
+      marginTop: 8,
+      width: '100%',
+      height: 52,
+      borderRadius: Radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: Ping.purple,
+      shadowColor: Ping.purple,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.45,
+      shadowRadius: 14,
+      elevation: 8,
+    },
+    confirmBtnDisabled: {
+      backgroundColor: disabledBg,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    confirmBtnText: {
+      color: '#FFF',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });
+}

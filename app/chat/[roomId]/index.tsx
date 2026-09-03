@@ -11,6 +11,7 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Modal,
 } from 'react-native';
 import AppAvatar from '@/components/AppAvatar';
 import Reanimated, {
@@ -18,15 +19,18 @@ import Reanimated, {
   useAnimatedStyle,
   useAnimatedReaction,
   useSharedValue,
+  withSpring,
   runOnJS,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { chatApi, type ChatMessage, type ChatRoom } from '@/lib/api';
+import { chatApi, friendsApi, type ChatMessage, type ChatRoom } from '@/lib/api';
+import Toast from 'react-native-toast-message';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -100,19 +104,25 @@ const DateSeparator = memo(function DateSeparator({ label }: { label: string }) 
   );
 });
 
+const SWIPE_THRESHOLD = 55;
+
 const MessageBubble = memo(function MessageBubble({
   msg,
   myId,
   isGroup,
+  onReply,
 }: {
   msg: LocalMessage;
   myId?: string;
   isGroup: boolean;
+  onReply: (msg: LocalMessage) => void;
 }) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
   const isMine = senderId === myId;
+  const translateX = useSharedValue(0);
+  const triggered = useSharedValue(false);
 
   if (msg.type === 'system') {
     return (
@@ -128,49 +138,100 @@ const MessageBubble = memo(function MessageBubble({
     msg.body ||
     (msg.type === 'image' ? '📷 Photo' : msg.type === 'location' ? '📍 Location' : '');
 
+  const quoted = msg.replyTo;
+  const quotedSender = quoted?.senderId?.displayName || quoted?.senderId?.username || 'User';
+  const quotedBody = quoted?.body || (quoted?.type === 'image' ? '📷 Photo' : '📍 Location');
+
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([SWIPE_THRESHOLD * -2, 8])
+    .failOffsetY([-10, 10])
+    .onUpdate((e) => {
+      const dx = Math.max(0, e.translationX);
+      translateX.value = Math.min(dx, SWIPE_THRESHOLD + 10);
+      if (dx >= SWIPE_THRESHOLD && !triggered.value) {
+        triggered.value = true;
+        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+        runOnJS(onReply)(msg);
+      }
+    })
+    .onEnd(() => {
+      translateX.value = withSpring(0, { damping: 18, stiffness: 260 });
+      triggered.value = false;
+    });
+
+  const bubbleAnim = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const replyIconOpacity = useAnimatedStyle(() => ({
+    opacity: Math.min(translateX.value / SWIPE_THRESHOLD, 1),
+    transform: [{ scale: 0.7 + 0.3 * Math.min(translateX.value / SWIPE_THRESHOLD, 1) }],
+  }));
+
   return (
-    <View style={[styles.bubbleRow, isMine ? styles.rowMine : styles.rowTheirs]}>
-      {!isMine && (
-        <AppAvatar
-          uri={sender?.avatarUrl}
-          name={senderName}
-          size={28}
-        />
-      )}
-      <View
-        style={[
-          styles.bubble,
-          isMine
-            ? styles.bubbleMine
-            : [styles.bubbleTheirs, { backgroundColor: scheme === 'dark' ? '#1F1F36' : '#FFFFFF' }],
-          msg.failed && styles.bubbleFailed,
-          msg.pending && styles.bubblePending,
-        ]}
-      >
-        {!isMine && isGroup ? (
-          <Text style={[styles.senderName, { color: Ping.purpleLight }]} numberOfLines={1}>
-            {senderName}
-          </Text>
-        ) : null}
-        <Text style={[styles.bubbleText, { color: isMine ? '#FFF' : c.text }]}>
-          {bodyText}
-        </Text>
-        <View style={styles.metaRow}>
-          <Text style={[styles.msgTime, { color: isMine ? 'rgba(255,255,255,0.7)' : c.textSecondary }]}>
-            {formatTime(msg.createdAt)}
-          </Text>
-          {isMine ? (
-            msg.failed ? (
-              <Ionicons name="alert-circle" size={12} color="#FCA5A5" />
-            ) : msg.pending ? (
-              <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.65)" />
-            ) : (
-              <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.75)" />
-            )
+    <GestureDetector gesture={swipeGesture}>
+      <View style={[styles.bubbleRow, isMine ? styles.rowMine : styles.rowTheirs]}>
+        {/* Reply icon peeks in from left as you swipe */}
+        <Reanimated.View style={[styles.replyIcon, replyIconOpacity]}>
+          <Ionicons name="return-down-forward" size={16} color={Ping.purpleLight} />
+        </Reanimated.View>
+
+        {!isMine && (
+          <AppAvatar uri={sender?.avatarUrl} name={senderName} size={28} />
+        )}
+
+        <Reanimated.View
+          style={[
+            styles.bubble,
+            isMine
+              ? styles.bubbleMine
+              : [styles.bubbleTheirs, { backgroundColor: scheme === 'dark' ? '#1F1F36' : '#FFFFFF' }],
+            msg.failed && styles.bubbleFailed,
+            msg.pending && styles.bubblePending,
+            bubbleAnim,
+          ]}
+        >
+          {/* Quoted message preview */}
+          {quoted && (
+            <View style={[
+              styles.quotedWrap,
+              { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : Ping.purpleLight,
+                backgroundColor: isMine ? 'rgba(0,0,0,0.18)' : scheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
+            ]}>
+              <Text style={[styles.quotedSender, { color: isMine ? 'rgba(255,255,255,0.85)' : Ping.purpleLight }]} numberOfLines={1}>
+                {quotedSender}
+              </Text>
+              <Text style={[styles.quotedBody, { color: isMine ? 'rgba(255,255,255,0.7)' : c.textSecondary }]} numberOfLines={2}>
+                {quotedBody}
+              </Text>
+            </View>
+          )}
+
+          {!isMine && isGroup ? (
+            <Text style={[styles.senderName, { color: Ping.purpleLight }]} numberOfLines={1}>
+              {senderName}
+            </Text>
           ) : null}
-        </View>
+          <Text style={[styles.bubbleText, { color: isMine ? '#FFF' : c.text }]}>
+            {bodyText}
+          </Text>
+          <View style={styles.metaRow}>
+            <Text style={[styles.msgTime, { color: isMine ? 'rgba(255,255,255,0.7)' : c.textSecondary }]}>
+              {formatTime(msg.createdAt)}
+            </Text>
+            {isMine ? (
+              msg.failed ? (
+                <Ionicons name="alert-circle" size={12} color="#FCA5A5" />
+              ) : msg.pending ? (
+                <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.65)" />
+              ) : (
+                <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.75)" />
+              )
+            ) : null}
+          </View>
+        </Reanimated.View>
       </View>
-    </View>
+    </GestureDetector>
   );
 });
 
@@ -252,7 +313,12 @@ export default function ChatRoomScreen() {
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<LocalMessage | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [showDpViewer, setShowDpViewer] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
 
   // UI-thread IME tracking — sticks to keyboard like WhatsApp (no JS lag)
   const keyboard = useAnimatedKeyboard({
@@ -331,7 +397,17 @@ export default function ChatRoomScreen() {
   const loadRoom = useCallback(async () => {
     const res = await chatApi.getRoom(roomId);
     setRoom(res.room);
-  }, [roomId]);
+    if (user?._id && res.room.mutedBy?.includes(user._id)) setMuted(true);
+    else setMuted(false);
+    if (res.room.kind === 'dm' && user?._id) {
+      const other = res.room.participantIds.find((p) => p._id !== user._id);
+      if (other) {
+        friendsApi.blocked().then((r) => {
+          setIsBlockedByMe(r.users.some((u) => u._id === other._id));
+        }).catch(() => {});
+      }
+    }
+  }, [roomId, user?._id]);
 
   useEffect(() => {
     setError(null);
@@ -352,7 +428,7 @@ export default function ChatRoomScreen() {
     }, [loadRoom, loading]),
   );
 
-  const sendBody = useCallback(async (body: string) => {
+  const sendBody = useCallback(async (body: string, replyToMsg?: LocalMessage | null) => {
     if (!body || sendingLock.current || !user) return;
     sendingLock.current = true;
     setSending(true);
@@ -373,12 +449,23 @@ export default function ChatRoomScreen() {
       readBy: [],
       createdAt: new Date().toISOString(),
       pending: true,
+      ...(replyToMsg ? {
+        replyTo: {
+          _id: replyToMsg._id,
+          body: replyToMsg.body,
+          type: replyToMsg.type,
+          senderId: typeof replyToMsg.senderId === 'object'
+            ? { _id: replyToMsg.senderId._id, displayName: replyToMsg.senderId.displayName, username: replyToMsg.senderId.username }
+            : { _id: String(replyToMsg.senderId) },
+        },
+      } : {}),
     };
     setMessages((prev) => [...prev, optimistic]);
     setText('');
+    setReplyingTo(null);
 
     try {
-      const res = await chatApi.sendMessage(roomId, body);
+      const res = await chatApi.sendMessage(roomId, body, replyToMsg?._id);
       setMessages((prev) =>
         prev.map((m) => (m._id === tempId ? { ...res.message, pending: false } : m)),
       );
@@ -395,8 +482,8 @@ export default function ChatRoomScreen() {
   const pressSend = useCallback(() => {
     const body = text.trim();
     if (!body || sending) return;
-    sendBody(body);
-  }, [text, sending, sendBody]);
+    sendBody(body, replyingTo);
+  }, [text, sending, sendBody, replyingTo]);
 
   const retryFailed = useCallback((msg: LocalMessage) => {
     if (!msg.body || !msg.failed) return;
@@ -404,11 +491,63 @@ export default function ChatRoomScreen() {
     sendBody(msg.body);
   }, [sendBody]);
 
+  const handleReply = useCallback((msg: LocalMessage) => {
+    setReplyingTo(msg);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleClearChat = useCallback(async () => {
+    setShowOptions(false);
+    try {
+      await chatApi.clearMessages(roomId);
+      setMessages([]);
+      Toast.show({ type: 'success', text1: 'Chat cleared' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not clear chat' });
+    }
+  }, [roomId]);
+
+  const handleToggleMute = useCallback(async () => {
+    setShowOptions(false);
+    try {
+      const res = await chatApi.toggleMute(roomId);
+      setMuted(res.muted);
+      Toast.show({ type: 'success', text1: res.muted ? 'Chat muted' : 'Chat unmuted' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not update mute' });
+    }
+  }, [roomId]);
+
+  const handleBlock = useCallback(async () => {
+    setShowOptions(false);
+    if (!dmOtherParticipant?._id) return;
+    try {
+      await friendsApi.block(dmOtherParticipant._id);
+      setIsBlockedByMe(true);
+      setMessages([]);
+      Toast.show({ type: 'success', text1: 'User blocked' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not block user' });
+    }
+  }, [dmOtherParticipant?._id]);
+
+  const handleUnblock = useCallback(async () => {
+    setShowOptions(false);
+    if (!dmOtherParticipant?._id) return;
+    try {
+      await friendsApi.unblock(dmOtherParticipant._id);
+      setIsBlockedByMe(false);
+      Toast.show({ type: 'success', text1: 'User unblocked' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not unblock user' });
+    }
+  }, [dmOtherParticipant?._id]);
+
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
       if (item.kind === 'sep') return <DateSeparator label={item.label} />;
       const bubble = (
-        <MessageBubble msg={item.msg} myId={user?._id} isGroup={!!isGroup} />
+        <MessageBubble msg={item.msg} myId={user?._id} isGroup={!!isGroup} onReply={handleReply} />
       );
       if (item.msg.failed) {
         return (
@@ -425,35 +564,46 @@ export default function ChatRoomScreen() {
     [],
   );
 
-  const ActivityFooter = useMemo(() => {
+  const ActivityHeader = useMemo(() => {
     if (!isActivityRoom || !(title || vibe || venue || creator)) return null;
     return (
-      <View style={[styles.activityCard, { backgroundColor: `${typeColor}12`, borderColor: `${typeColor}30` }]}>
-        <View style={[styles.activityAccent, { backgroundColor: typeColor }]} />
-        {title ? (
-          <View style={styles.activityTitleRow}>
-            <Ionicons name={typeIcon} size={14} color={typeColor} />
-            <Text style={[styles.activityTitle, { color: c.text }]} numberOfLines={1}>{title}</Text>
+      <View style={[styles.activityCard, {
+        backgroundColor: scheme === 'dark' ? c.surface : '#FFFFFF',
+        borderColor: c.border,
+      }]}>
+        {/* Type icon pill + title row */}
+        <View style={styles.activityTitleRow}>
+          <View style={[styles.activityIconPill, { backgroundColor: `${typeColor}20` }]}>
+            <Ionicons name={typeIcon} size={15} color={typeColor} />
+          </View>
+          <Text style={[styles.activityTitle, { color: c.text }]} numberOfLines={1}>
+            {title}
+          </Text>
+          <View style={styles.activityLiveBadge}>
+            <View style={styles.activityLiveDot} />
+            <Text style={styles.activityLiveText}>LIVE</Text>
+          </View>
+        </View>
+        {/* Meta row */}
+        {(venue || creator) ? (
+          <View style={styles.activityMeta}>
+            {venue ? (
+              <View style={styles.activityMetaItem}>
+                <Ionicons name="location-outline" size={11} color={c.textSecondary} />
+                <Text style={[styles.activityMetaText, { color: c.textSecondary }]} numberOfLines={1}>{venue}</Text>
+              </View>
+            ) : null}
+            {creator ? (
+              <View style={styles.activityMetaItem}>
+                <Ionicons name="person-outline" size={11} color={c.textSecondary} />
+                <Text style={[styles.activityMetaText, { color: c.textSecondary }]}>{creator}</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
-        <View style={styles.activityMeta}>
-          {vibe ? (
-            <Text style={[styles.activityMetaText, { color: typeColor }]}>
-              {vibe.charAt(0).toUpperCase() + vibe.slice(1)}
-            </Text>
-          ) : null}
-          {venue ? (
-            <Text style={[styles.activityMetaText, { color: c.textSecondary }]} numberOfLines={1}>
-              {venue}
-            </Text>
-          ) : null}
-          {creator ? (
-            <Text style={[styles.activityMetaText, { color: c.textSecondary }]}>{creator}</Text>
-          ) : null}
-        </View>
       </View>
     );
-  }, [isActivityRoom, title, vibe, venue, creator, typeColor, typeIcon, c.text, c.textSecondary]);
+  }, [isActivityRoom, title, vibe, venue, creator, typeColor, typeIcon, c, scheme]);
 
   return (
     <View style={[styles.root, { backgroundColor: scheme === 'dark' ? '#0B0B14' : '#EFEAE2' }]}>
@@ -472,23 +622,32 @@ export default function ChatRoomScreen() {
           <Ionicons name="arrow-back" size={22} color={c.text} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.headerMid}
-          activeOpacity={isGroup ? 0.7 : 1}
-          disabled={!isGroup}
-          onPress={() => {
-            if (isGroup) router.push(`/chat/${roomId}/settings` as any);
-          }}
-        >
-          <AppAvatar
-            uri={dmOtherAvatar || room?.avatarUrl}
-            name={dmOtherParticipant?.displayName || dmOtherParticipant?.username}
-            icon={room?.kind === 'dm' ? 'person' : typeIcon}
-            size={36}
-            bg={`${typeColor}33`}
-            tint={typeColor}
-          />
-          <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={styles.headerMid}>
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => {
+              if (isGroup) router.push(`/chat/${roomId}/settings` as any);
+              else if (dmOtherAvatar) setShowDpViewer(true);
+            }}
+            hitSlop={4}
+          >
+            <AppAvatar
+              uri={dmOtherAvatar || room?.avatarUrl}
+              name={dmOtherParticipant?.displayName || dmOtherParticipant?.username}
+              icon={room?.kind === 'dm' ? 'person' : typeIcon}
+              size={36}
+              bg={`${typeColor}33`}
+              tint={typeColor}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1, minWidth: 0 }}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (isGroup) router.push(`/chat/${roomId}/settings` as any);
+              else if (dmOtherParticipant?._id) router.push(`/user/${dmOtherParticipant._id}` as any);
+            }}
+          >
             <Text style={[styles.headerTitle, { color: c.text }]} numberOfLines={1}>
               {roomTitle}
             </Text>
@@ -497,8 +656,8 @@ export default function ChatRoomScreen() {
                 {subtitle}
               </Text>
             ) : null}
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
 
         {isGroup ? (
           <TouchableOpacity
@@ -509,7 +668,13 @@ export default function ChatRoomScreen() {
             <Ionicons name="ellipsis-vertical" size={18} color={c.text} />
           </TouchableOpacity>
         ) : (
-          <View style={{ width: 40 }} />
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => setShowOptions(true)}
+            hitSlop={12}
+          >
+            <Ionicons name="ellipsis-vertical" size={18} color={c.text} />
+          </TouchableOpacity>
         )}
       </View>
 
@@ -538,6 +703,7 @@ export default function ChatRoomScreen() {
         <>
           {/* Messages shrink above keyboard on the UI thread */}
           <Reanimated.View style={listAnimStyle}>
+            {ActivityHeader}
             <FlatList
               data={listItems}
               inverted
@@ -550,7 +716,6 @@ export default function ChatRoomScreen() {
               ]}
               keyboardDismissMode="interactive"
               keyboardShouldPersistTaps="handled"
-              ListFooterComponent={ActivityFooter}
               ListEmptyComponent={
                 <View style={styles.empty}>
                   <Ionicons name="chatbubbles-outline" size={40} color={c.textSecondary} />
@@ -580,7 +745,27 @@ export default function ChatRoomScreen() {
               composerAnimStyle,
             ]}
           >
-            {!keyboardOpen && !text.trim() ? (
+            {/* Reply preview bar */}
+            {replyingTo && (
+              <View style={[styles.replyBar, { borderTopColor: c.border, backgroundColor: scheme === 'dark' ? '#16162A' : '#F0F0FA' }]}>
+                <View style={[styles.replyBarAccent, { backgroundColor: Ping.purple }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.replyBarSender, { color: Ping.purpleLight }]} numberOfLines={1}>
+                    {typeof replyingTo.senderId === 'object'
+                      ? replyingTo.senderId.displayName || replyingTo.senderId.username
+                      : 'User'}
+                  </Text>
+                  <Text style={[styles.replyBarBody, { color: c.textSecondary }]} numberOfLines={1}>
+                    {replyingTo.body || (replyingTo.type === 'image' ? '📷 Photo' : '📍 Location')}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={10}>
+                  <Ionicons name="close" size={18} color={c.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {!keyboardOpen && !text.trim() && !replyingTo ? (
               <View style={[styles.quickBar, { borderBottomColor: c.border }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
                   {quickActions.map((qa) => (
@@ -639,12 +824,96 @@ export default function ChatRoomScreen() {
           </Reanimated.View>
         </>
       )}
+
+      {/* DM options sheet */}
+      <Modal
+        visible={showOptions}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowOptions(false)}
+      >
+        <View style={dmOpt.container}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowOptions(false)}
+          />
+          <View style={[dmOpt.sheet, { backgroundColor: scheme === 'dark' ? '#1A1A2E' : '#FFFFFF', paddingBottom: insets.bottom + 8 }]}>
+            <View style={[dmOpt.handle, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)' }]} />
+            <TouchableOpacity style={dmOpt.row} onPress={handleClearChat} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={20} color={scheme === 'dark' ? '#E5E7EB' : '#374151'} />
+              <Text style={[dmOpt.rowText, { color: scheme === 'dark' ? '#E5E7EB' : '#374151' }]}>Clear Chat</Text>
+            </TouchableOpacity>
+            <View style={[dmOpt.divider, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} />
+            <TouchableOpacity style={dmOpt.row} onPress={handleToggleMute} activeOpacity={0.7}>
+              <Ionicons name={muted ? 'volume-high-outline' : 'volume-mute-outline'} size={20} color={scheme === 'dark' ? '#E5E7EB' : '#374151'} />
+              <Text style={[dmOpt.rowText, { color: scheme === 'dark' ? '#E5E7EB' : '#374151' }]}>{muted ? 'Unmute Chat' : 'Mute Chat'}</Text>
+            </TouchableOpacity>
+            <View style={[dmOpt.divider, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} />
+            <TouchableOpacity style={dmOpt.row} onPress={isBlockedByMe ? handleUnblock : handleBlock} activeOpacity={0.7}>
+              <Ionicons name={isBlockedByMe ? 'shield-checkmark-outline' : 'ban-outline'} size={20} color="#EF4444" />
+              <Text style={[dmOpt.rowText, { color: '#EF4444' }]}>{isBlockedByMe ? 'Unblock User' : 'Block User'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DP full-screen viewer (DM only) */}
+      {dmOtherAvatar ? (
+        <Modal
+          visible={showDpViewer}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDpViewer(false)}
+          statusBarTranslucent
+        >
+          <TouchableOpacity
+            style={styles.dpBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowDpViewer(false)}
+          >
+            <Image
+              source={{ uri: dmOtherAvatar }}
+              style={styles.dpFull}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={styles.dpClose}
+              onPress={() => setShowDpViewer(false)}
+              hitSlop={12}
+            >
+              <Ionicons name="close" size={22} color="#FFF" />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  dpBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dpFull: {
+    width: '100%',
+    height: '80%',
+  },
+  dpClose: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -747,6 +1016,55 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   msgTime: { fontSize: 10, fontWeight: '500' },
+  replyIcon: {
+    position: 'absolute',
+    left: -28,
+    top: '50%',
+    marginTop: -10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(124,58,237,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quotedWrap: {
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 6,
+  },
+  quotedSender: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  quotedBody: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  replyBarAccent: {
+    width: 3,
+    height: 36,
+    borderRadius: 2,
+  },
+  replyBarSender: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  replyBarBody: {
+    fontSize: 12,
+  },
   systemRow: {
     alignItems: 'center',
     marginVertical: 8,
@@ -824,15 +1142,62 @@ const styles = StyleSheet.create({
     gap: 6,
     overflow: 'hidden',
   },
-  activityAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-  },
   activityTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   activityTitle: { ...Typography.bodyMed, fontSize: 14, fontWeight: '700', flex: 1 },
-  activityMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  activityIconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(143,99,244,0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  activityLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#8F63F4',
+  },
+  activityLiveText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#8F63F4',
+    letterSpacing: 0.8,
+  },
+  activityMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  activityMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   activityMetaText: { ...Typography.caption, fontSize: 11 },
+});
+
+const dmOpt = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 10,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+  },
+  rowText: { fontSize: 16, fontWeight: '500' },
+  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 22 },
 });

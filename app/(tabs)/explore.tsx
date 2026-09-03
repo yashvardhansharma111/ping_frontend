@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, cloneElement } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +20,7 @@ import ActivityCard from '@/components/ActivityCard';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EmptyState } from '@/components/ui';
+import * as Haptics from 'expo-haptics';
 import {
   MagnifyingGlass,
   MapPin,
@@ -26,6 +29,8 @@ import {
   Sparkle,
   X,
 } from 'phosphor-react-native';
+
+const SCREEN_W = Dimensions.get('window').width;
 
 type Filter = 'nearby' | 'joined' | 'mine';
 
@@ -41,20 +46,25 @@ export default function ActivitiesScreen() {
   const insets = useSafeAreaInsets();
   const { coords } = useLocation();
   const isFocused = useIsFocused();
-  const [filter, setFilter] = useState<Filter>('nearby');
-  const [allActivities, setAllActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchOpen, setSearchOpen] = useState(false);
+
+  const [tabIdx, setTabIdx] = useState(0);
+  const [contentH, setContentH] = useState(600);
+
+  const [nearbyActivities, setNearbyActivities] = useState<Activity[]>([]);
+  const [joinedActivities, setJoinedActivities] = useState<Activity[]>([]);
+  const [mineActivities,   setMineActivities]   = useState<Activity[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(true);
+  const [joinedLoading, setJoinedLoading] = useState(true);
+  const [mineLoading,   setMineLoading]   = useState(true);
+
+  const [searchOpen,  setSearchOpen]  = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef<TextInput>(null);
 
+  const pageScrollRef = useRef<ScrollView>(null);
+  const TAB_W = (SCREEN_W - Spacing.lg * 2 - 8 * (FILTERS.length - 1)) / FILTERS.length;
+  const indicatorX = useRef(new Animated.Value(0)).current;
   const headerAnim  = useRef(new Animated.Value(0)).current;
-  const chipScales  = useRef<Record<Filter, Animated.Value>>({
-    nearby: new Animated.Value(1),
-    joined: new Animated.Value(1),
-    mine:   new Animated.Value(1),
-  }).current;
-  const listOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.spring(headerAnim, {
@@ -62,54 +72,138 @@ export default function ActivitiesScreen() {
     }).start();
   }, []);
 
-  async function load(f: Filter = filter) {
-    Animated.timing(listOpacity, { toValue: 0.4, duration: 120, useNativeDriver: true }).start();
-    setLoading(true);
+  async function loadNearby() {
+    setNearbyLoading(true);
     try {
-      let res: { activities: Activity[] };
-      if (f === 'nearby') {
-        res = await activitiesApi.nearby(coords.latitude, coords.longitude);
-      } else if (f === 'joined') {
-        res = await activitiesApi.joined();
-      } else {
-        res = await activitiesApi.mine();
-      }
-      setAllActivities(res.activities ?? []);
+      const res = await activitiesApi.nearby(coords.latitude, coords.longitude);
+      setNearbyActivities(res.activities ?? []);
     } catch {
-      setAllActivities([]);
+      setNearbyActivities([]);
     } finally {
-      setLoading(false);
-      Animated.spring(listOpacity, { toValue: 1, damping: 16, stiffness: 200, useNativeDriver: true }).start();
+      setNearbyLoading(false);
     }
   }
 
-  // Re-run whenever the screen gains focus OR GPS coords update while focused
-  useEffect(() => {
-    if (isFocused) load();
-  }, [filter, isFocused, coords.latitude, coords.longitude]);
-
-  function switchFilter(f: Filter) {
-    const sc = chipScales[f];
-    Animated.sequence([
-      Animated.spring(sc, { toValue: 0.82, damping: 20, stiffness: 500, useNativeDriver: true }),
-      Animated.spring(sc, { toValue: 1,    damping: 12, stiffness: 220, mass: 0.8, useNativeDriver: true }),
-    ]).start();
-    setFilter(f);
-    load(f);
+  async function loadJoined() {
+    setJoinedLoading(true);
+    try {
+      const res = await activitiesApi.joined();
+      setJoinedActivities(res.activities ?? []);
+    } catch {
+      setJoinedActivities([]);
+    } finally {
+      setJoinedLoading(false);
+    }
   }
 
-  const q = searchQuery.trim().toLowerCase();
-  const displayedActivities = q
-    ? allActivities.filter((a) =>
-        a.title.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q)
-      )
-    : allActivities;
+  async function loadMine() {
+    setMineLoading(true);
+    try {
+      const res = await activitiesApi.mine('all');
+      const sorted = [...(res.activities ?? [])].sort((a, b) => {
+        const aLive = a.status === 'live' ? 0 : 1;
+        const bLive = b.status === 'live' ? 0 : 1;
+        if (aLive !== bLive) return aLive - bLive;
+        return new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime();
+      });
+      setMineActivities(sorted);
+    } catch {
+      setMineActivities([]);
+    } finally {
+      setMineLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isFocused) {
+      loadNearby();
+      loadJoined();
+      loadMine();
+    }
+  }, [isFocused, coords.latitude, coords.longitude]);
+
+  function switchTab(idx: number) {
+    setTabIdx(idx);
+    pageScrollRef.current?.scrollTo({ x: idx * SCREEN_W, animated: true });
+    Animated.spring(indicatorX, {
+      toValue: idx * (TAB_W + 8),
+      damping: 22, stiffness: 220, mass: 0.7,
+      useNativeDriver: true,
+    }).start();
+    Haptics.selectionAsync();
+  }
+
+  function onPageScrollEnd(e: any) {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+    if (idx !== tabIdx) {
+      setTabIdx(idx);
+      Animated.spring(indicatorX, {
+        toValue: idx * (TAB_W + 8),
+        damping: 22, stiffness: 220, mass: 0.7,
+        useNativeDriver: true,
+      }).start();
+      Haptics.selectionAsync();
+    }
+  }
 
   const EMPTY_LABEL: Record<Filter, string> = {
-    nearby:  'No pings near you right now',
-    joined:  "You haven't joined any pings yet",
-    mine:    "You haven't created any pings yet",
+    nearby: 'No pings near you right now',
+    joined: "You haven't joined any pings yet",
+    mine:   "You haven't created any pings yet",
   };
+
+  function renderPage(f: Filter) {
+    const data    = f === 'nearby' ? nearbyActivities : f === 'joined' ? joinedActivities : mineActivities;
+    const setData = f === 'nearby' ? setNearbyActivities : f === 'joined' ? setJoinedActivities : setMineActivities;
+    const loading = f === 'nearby' ? nearbyLoading    : f === 'joined' ? joinedLoading    : mineLoading;
+    const reload  = f === 'nearby' ? loadNearby       : f === 'joined' ? loadJoined       : loadMine;
+
+    const q = searchQuery.trim().toLowerCase();
+    const displayed = q
+      ? data.filter((a) => a.title.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q))
+      : data;
+
+    return (
+      <View style={{ width: SCREEN_W, height: contentH }}>
+        <FlatList
+          data={displayed}
+          keyExtractor={(a) => a._id}
+          contentContainerStyle={[styles.list, displayed.length === 0 && { flexGrow: 1 }]}
+          nestedScrollEnabled
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={reload}
+              tintColor={Ping.purple}
+              colors={[Ping.purple]}
+            />
+          }
+          ListEmptyComponent={
+            loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator color={Ping.purpleLight} size="large" />
+              </View>
+            ) : (
+              <EmptyState
+                icon="flash-outline"
+                title="Nothing here"
+                subtitle={q ? 'No pings match your search' : EMPTY_LABEL[f]}
+              />
+            )
+          }
+          renderItem={({ item }) => (
+            <ActivityCard
+              activity={item}
+              onJoin={() => {
+                setData((prev) => prev.filter((a) => a._id !== item._id));
+                reload();
+              }}
+            />
+          )}
+        />
+      </View>
+    );
+  }
 
   const headerOpacity    = headerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
   const headerTranslateY = headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] });
@@ -173,62 +267,46 @@ export default function ActivitiesScreen() {
         </View>
       )}
 
-      {/* Feed type chips */}
+      {/* Tab pills */}
       <View style={styles.filterRow}>
-        {FILTERS.map((f) => {
-          const active = filter === f.key;
+        {FILTERS.map((f, idx) => {
+          const active = tabIdx === idx;
           const TabIcon = f.Icon;
           return (
-            <Animated.View key={f.key} style={{ flex: 1, transform: [{ scale: chipScales[f.key] }] }}>
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  { borderColor: c.border, backgroundColor: c.surface },
-                  active && styles.chipActive,
-                ]}
-                onPress={() => switchFilter(f.key)}
-                activeOpacity={0.75}
-              >
-                <TabIcon size={14} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
-                <Text style={[styles.chipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
-                  {f.label}
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
+            <TouchableOpacity
+              key={f.key}
+              style={[styles.chip, { borderColor: c.border, backgroundColor: c.surface }, active && styles.chipActive]}
+              onPress={() => switchTab(idx)}
+              activeOpacity={0.75}
+            >
+              <TabIcon size={14} color={active ? '#FFF' : c.textSecondary} weight={active ? 'fill' : 'bold'} />
+              <Text style={[styles.chipLabel, { color: active ? '#FFF' : c.textSecondary }]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
           );
         })}
       </View>
 
-      <Animated.View style={{ flex: 1, opacity: listOpacity }}>
-        <FlatList
-          data={displayedActivities}
-          keyExtractor={(a) => a._id}
-          contentContainerStyle={[styles.list, displayedActivities.length === 0 && { flexGrow: 1 }]}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={() => load()}
-              tintColor={Ping.purple}
-              colors={[Ping.purple]}
-            />
-          }
-          ListEmptyComponent={
-            loading ? (
-              <View style={styles.center}>
-                <ActivityIndicator color={Ping.purpleLight} size="large" />
-              </View>
-            ) : (
-              <EmptyState
-                icon="flash-outline"
-                title="Nothing here"
-                subtitle={q ? 'No pings match your search' : EMPTY_LABEL[filter]}
-              />
-            )
-          }
-          renderItem={({ item }) => <ActivityCard activity={item} onJoin={() => load()} />}
-        />
-      </Animated.View>
-
+      {/* Swipeable pages */}
+      <View
+        style={{ flex: 1 }}
+        onLayout={(e) => setContentH(e.nativeEvent.layout.height)}
+      >
+        <ScrollView
+          ref={pageScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={onPageScrollEnd}
+          decelerationRate="fast"
+          bounces={false}
+          style={{ flex: 1 }}
+        >
+          {FILTERS.map((f) => cloneElement(renderPage(f.key), { key: f.key }))}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -247,34 +325,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5 },
   subtitle: { ...Typography.caption, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
-  filterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    height: 38,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-  },
-  filterBtnLabel: { fontSize: 13, fontWeight: '600' },
   headerBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1,
   },
   searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
-    paddingHorizontal: 14,
-    height: 42,
-    borderRadius: Radius.full,
-    borderWidth: 1,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: Spacing.lg, marginTop: Spacing.sm,
+    paddingHorizontal: 14, height: 42,
+    borderRadius: Radius.full, borderWidth: 1,
   },
   searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
   filterRow: {
@@ -285,6 +344,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

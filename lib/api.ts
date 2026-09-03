@@ -125,11 +125,22 @@ export const uploadApi = {
     form.append('image', { uri: localUri, name: filename, type: mime } as any);
     form.append('folder', folder);
 
-    const res = await fetch(`${BASE_URL}/upload/image`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/upload/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+        signal: controller.signal,
+      });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') throw new Error('Upload timed out — check your connection');
+      throw new Error('Network request failed — check your connection and try again');
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error((data as any).error?.message || (data as any).message || `Upload failed (${res.status})`);
     return (data as any).url as string;
@@ -174,8 +185,13 @@ export const usersApi = {
     get<{ ok: boolean; users: User[] }>(`/users/search?q=${encodeURIComponent(q)}`),
   getProfile: (id: string) =>
     get<{ ok: boolean; user: UserProfile }>(`/users/${id}`),
-  nearby: (lat: number, lng: number, radius?: number) =>
-    get<{ ok: boolean; users: User[] }>(`/users/nearby?lat=${lat}&lng=${lng}${radius ? `&radius=${radius}` : ''}`),
+  nearby: (lat: number, lng: number, radius?: number, page = 0, exclude?: string[]) => {
+    let q = `/users/nearby?lat=${lat}&lng=${lng}`;
+    if (radius) q += `&radius=${radius}`;
+    if (page) q += `&page=${page}`;
+    if (exclude?.length) q += `&exclude=${exclude.join(',')}`;
+    return get<{ ok: boolean; users: User[]; fallback?: boolean; hasMore?: boolean }>(q);
+  },
   savedProfiles: () =>
     get<{ ok: boolean; users: User[] }>('/users/me/saved'),
   saveProfile: (userId: string) =>
@@ -263,6 +279,13 @@ export interface PendingRating {
 
 // ── Friends ───────────────────────────────────────────────────────────────────
 
+export interface BlockedUser {
+  _id: string;
+  displayName?: string;
+  username?: string;
+  avatarUrl?: string;
+}
+
 export const friendsApi = {
   list: () => get<{ ok: boolean; friends: Friendship[] }>('/friends'),
   requests: (direction: 'received' | 'sent' | 'rejected' = 'received') =>
@@ -274,6 +297,7 @@ export const friendsApi = {
   block: (userId: string) => post<{ ok: boolean }>(`/friends/${userId}/block`),
   unblock: (userId: string) => post<{ ok: boolean }>(`/friends/${userId}/unblock`),
   mutual: (userId: string) => get<{ ok: boolean; count: number; mutualIds: string[] }>(`/friends/${userId}/mutual`),
+  blocked: () => get<{ ok: boolean; users: BlockedUser[] }>('/friends/blocked'),
 };
 
 export const reportsApi = {
@@ -360,7 +384,7 @@ export interface Activity {
   maxParticipants?: number;
   visibility: 'public' | 'friends' | 'squad';
   genderFilter?: 'all' | 'women_only' | 'men_only';
-  creator?: { _id?: string; displayName?: string; username?: string; avatarUrl?: string; trustRate?: number; createdAt?: string };
+  creator?: { _id?: string; displayName?: string; username?: string; avatarUrl?: string; trustRate?: number; ratingCount?: number; createdAt?: string };
   creatorId?: string;
   distance?: number;
 }
@@ -467,6 +491,7 @@ export interface ChatRoom {
   isOwner?: boolean;
   lastMessageAt?: string;
   lastMessagePreview?: string;
+  mutedBy?: string[];
   createdAt: string;
 }
 
@@ -481,6 +506,12 @@ export interface ChatMessage {
   readBy: { userId: string; readAt: string }[];
   createdAt: string;
   deletedAt?: string | null;
+  replyTo?: {
+    _id: string;
+    body?: string;
+    type: string;
+    senderId: { _id: string; displayName?: string; username?: string };
+  } | null;
 }
 
 export const chatApi = {
@@ -502,10 +533,14 @@ export const chatApi = {
     get<{ ok: boolean; messages: ChatMessage[] }>(
       `/chat/rooms/${roomId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,
     ),
-  sendMessage: (roomId: string, body: string) =>
-    post<{ ok: boolean; message: ChatMessage }>(`/chat/rooms/${roomId}/messages`, { type: 'text', body }),
+  sendMessage: (roomId: string, body: string, replyTo?: string) =>
+    post<{ ok: boolean; message: ChatMessage }>(`/chat/rooms/${roomId}/messages`, { type: 'text', body, ...(replyTo ? { replyTo } : {}) }),
   markRead: (roomId: string) =>
     post<{ ok: boolean; marked: number }>(`/chat/rooms/${roomId}/read`),
+  clearMessages: (roomId: string) =>
+    del<{ ok: boolean }>(`/chat/rooms/${roomId}/messages`),
+  toggleMute: (roomId: string) =>
+    put<{ ok: boolean; muted: boolean }>(`/chat/rooms/${roomId}/mute`),
 };
 
 // ── Ads ───────────────────────────────────────────────────────────────────────
