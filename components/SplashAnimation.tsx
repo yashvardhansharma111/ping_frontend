@@ -106,7 +106,7 @@ export default function SplashAnimation({ onDone }: Props) {
         <Ripple delay={720} maxScale={3.6} />
         <Ripple delay={940} maxScale={5.2} />
         <Image
-          source={require('../assets/images/icon.png')}
+          source={require('../assets/images/ping.png')}
           style={{ width: ICON, height: ICON }}
           resizeMode="contain"
         />

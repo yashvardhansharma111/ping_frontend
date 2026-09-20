@@ -14,7 +14,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { ChartBar } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
@@ -23,7 +25,7 @@ import HighlightsSection from '@/components/HighlightsSection';
 import { Spacing, Radius, Typography, Colors, Ping } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HERO_H = Math.round(SCREEN_W * 1.05);
 
 function getAge(dob?: string): number | null {
@@ -33,10 +35,120 @@ function getAge(dob?: string): number | null {
   return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }
 
+// ── Completion % from user object ────────────────────────────────────────────
+function calcCompletion(user: any): number {
+  if (!user) return 0;
+  const checks = [
+    !!(user.avatarUrl || (user.photos?.length ?? 0) > 0),
+    !!user.displayName?.trim(),
+    !!user.bio?.trim(),
+    !!user.dob,
+    !!user.gender,
+    !!user.city?.trim(),
+    !!user.email?.trim(),
+    (user.hobbies?.length ?? 0) > 0 || (user.favoriteActivities?.length ?? 0) > 0,
+    !!(user.instagramHandle || (user as any).snapchatHandle || user.linkedinHandle || user.spotifyHandle),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+function completionQuip(pct: number): string {
+  if (pct <= 15) return "Bhai, yeh profile nahi — ghost town hai 👻 Even ghosts have more presence.";
+  if (pct <= 30) return "Less info here than a suspicious WhatsApp forward. Isse zyada toh aapka ration card hai.";
+  if (pct <= 50) return "Halfway done. Like a half-eaten samosa — technically food, but deeply disappointing.";
+  if (pct <= 65) return "You're a 5/10 with 10/10 potential. Embarrassing, honestly. Fill it up.";
+  if (pct <= 80) return "Almost decent! Your future ping partners deserve the full version, not the demo.";
+  if (pct <= 95) return "Itni mehnat karke ruk gaye? Commitment issues toh nahi? Bas thoda aur.";
+  return "99% done and still holding back. That last 1% is personal isn't it 😭";
+}
+
+// ── Profile Completion Banner ─────────────────────────────────────────────────
+function CompletionBanner({
+  pct, onEdit, onDismiss, c, scheme,
+}: {
+  pct: number;
+  onEdit: () => void;
+  onDismiss: () => void;
+  c: any;
+  scheme: 'light' | 'dark';
+}) {
+  const isDark = scheme === 'dark';
+  const bg = isDark ? 'rgba(139,92,246,0.13)' : 'rgba(143,99,244,0.08)';
+  const border = isDark ? 'rgba(167,139,250,0.28)' : 'rgba(143,99,244,0.22)';
+
+  return (
+    <View style={[bn.card, { backgroundColor: bg, borderColor: border }]}>
+      <TouchableOpacity style={bn.dismiss} onPress={onDismiss} hitSlop={10}>
+        <Ionicons name="close" size={14} color={c.textSecondary} />
+      </TouchableOpacity>
+
+      <View style={bn.row}>
+        <ChartBar size={22} color={Ping.purple} weight="fill" />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[bn.pctText, { color: Ping.purple }]}>{pct}% complete</Text>
+          <Text style={[bn.quip, { color: c.textSecondary }]} numberOfLines={2}>
+            {completionQuip(pct)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Progress bar */}
+      <View style={[bn.track, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' }]}>
+        <View style={[bn.fill, { width: `${pct}%` as any, backgroundColor: Ping.purple }]} />
+      </View>
+
+      <TouchableOpacity style={[bn.cta, { backgroundColor: Ping.purple }]} onPress={onEdit} activeOpacity={0.85}>
+        <Text style={bn.ctaText}>Complete profile →</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ── Verification Banner ───────────────────────────────────────────────────────
+function VerificationBanner({
+  onVerify, onDismiss, c, scheme,
+}: {
+  onVerify: () => void;
+  onDismiss: () => void;
+  c: any;
+  scheme: 'light' | 'dark';
+}) {
+  const isDark = scheme === 'dark';
+  const bg = isDark ? 'rgba(251,191,36,0.10)' : 'rgba(245,158,11,0.08)';
+  const border = isDark ? 'rgba(251,191,36,0.28)' : 'rgba(245,158,11,0.22)';
+
+  return (
+    <View style={[bn.card, { backgroundColor: bg, borderColor: border }]}>
+      <TouchableOpacity style={bn.dismiss} onPress={onDismiss} hitSlop={10}>
+        <Ionicons name="close" size={14} color={c.textSecondary} />
+      </TouchableOpacity>
+
+      <View style={bn.row}>
+        <Text style={bn.emoji}>✅</Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[bn.pctText, { color: '#D97706' }]}>Get verified</Text>
+          <Text style={[bn.quip, { color: c.textSecondary }]} numberOfLines={2}>
+            You're out here unverified like a WhatsApp forward. Get the badge before someone vibes with a catfish instead.
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={[bn.cta, { backgroundColor: '#D97706' }]}
+        onPress={onVerify}
+        activeOpacity={0.85}
+      >
+        <Text style={bn.ctaText}>Verify me →</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { user, setUser } = useAuthStore();
 
@@ -44,6 +156,10 @@ export default function ProfileScreen() {
   const [activityCount, setActivityCount] = useState<number | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [hideCompletion, setHideCompletion] = useState(false);
+  const [hideVerification, setHideVerification] = useState(false);
+
+  const completionPct = useMemo(() => calcCompletion(user), [user]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -105,7 +221,7 @@ export default function ProfileScreen() {
     <View style={[styles.root, { backgroundColor: c.background }]}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+        contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -174,7 +290,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Reference Image 1 Overlay Glass Card */}
-          <View style={[styles.glassCard, { backgroundColor: scheme === 'dark' ? '#141418' : '#FFFFFF', borderColor: c.border }]}>
+          <View style={[styles.glassCard, { backgroundColor: scheme === 'dark' ? '#141418' : '#FFFFFF', borderColor: c.border, minHeight: SCREEN_H - HERO_H + 32 + tabBarHeight, paddingBottom: tabBarHeight + 16 }]}>
             {/* Identity Header */}
             <View style={styles.identityHeader}>
               <View style={styles.nameRow}>
@@ -291,6 +407,27 @@ export default function ProfileScreen() {
               )}
             </View>
 
+            {/* Profile Completion Banner */}
+            {!hideCompletion && completionPct < 100 && (
+              <CompletionBanner
+                pct={completionPct}
+                onEdit={() => router.push('/edit-profile' as any)}
+                onDismiss={() => setHideCompletion(true)}
+                c={c}
+                scheme={scheme}
+              />
+            )}
+
+            {/* Verification Banner */}
+            {!hideVerification && !isVerified && user?.verificationStatus !== 'pending' && (
+              <VerificationBanner
+                onVerify={() => router.push('/verification' as any)}
+                onDismiss={() => setHideVerification(true)}
+                c={c}
+                scheme={scheme}
+              />
+            )}
+
             {/* User Highlights Section */}
             {user && (
               <View style={styles.highlightsContainer}>
@@ -358,7 +495,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: 22,
     paddingTop: 28,
-    paddingBottom: 24,
     gap: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -462,5 +598,61 @@ const styles = StyleSheet.create({
   },
   highlightsContainer: {
     paddingTop: 4,
+  },
+});
+
+const bn = StyleSheet.create({
+  card: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  dismiss: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    padding: 2,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingRight: 20,
+  },
+  emoji: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  pctText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  quip: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  track: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  cta: {
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: -0.1,
   },
 });

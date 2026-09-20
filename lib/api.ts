@@ -172,9 +172,9 @@ export const authApi = {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email' | 'dob' | 'gender' | 'city' | 'institute' | 'hobbies' | 'vibePreferences' | 'favoriteActivities' | 'socialPreference' | 'instagramHandle' | 'linkedinHandle' | 'spotifyHandle' | 'photos' | 'occupation' | 'sleepType' | 'spontaneity' | 'foodPersonality' | 'timeRespect' | 'distanceTolerance' | 'availabilityPattern' | 'intentSync' | 'pingPitch' | 'funTruth'>>) =>
+  updateMe: (data: Partial<Pick<User, 'displayName' | 'username' | 'bio' | 'avatarUrl' | 'email' | 'dob' | 'gender' | 'city' | 'institute' | 'hobbies' | 'vibePreferences' | 'favoriteActivities' | 'socialPreference' | 'instagramHandle' | 'snapchatHandle' | 'linkedinHandle' | 'spotifyHandle' | 'photos' | 'occupation' | 'sleepType' | 'spontaneity' | 'foodPersonality' | 'timeRespect' | 'distanceTolerance' | 'availabilityPattern' | 'intentSync' | 'pingPitch' | 'funTruth'>>) =>
     patch<{ ok: boolean; user: User }>('/users/me', data),
-  updatePrivacy: (data: Partial<{ ghostMode: boolean; locationSharing: boolean }>) =>
+  updatePrivacy: (data: Partial<{ ghostMode: boolean; locationSharing: boolean; showSocialHandles: boolean; pingVisibility: 'everyone' | 'friends_only' | 'only_me' }>) =>
     patch<{ ok: boolean; privacy: User['privacy'] }>('/users/me/privacy', data),
   updateLocation: (lat: number, lng: number) =>
     patch('/users/me/location', { lat, lng }),
@@ -210,7 +210,7 @@ export interface CreateActivityPayload {
   title: string;
   type: string;
   visibility: 'public' | 'friends';
-  genderFilter?: 'all' | 'women_only' | 'men_only';
+  genderFilter?: 'all' | 'women_only' | 'men_only' | 'others_only';
   lat: number;
   lng: number;
   durationMinutes?: number;
@@ -354,6 +354,8 @@ export interface User {
     ghostMode: boolean;
     locationSharing: boolean;
     autoShutoffAt: string | null;
+    showSocialHandles: boolean;
+    pingVisibility: 'everyone' | 'friends_only' | 'only_me';
   };
 }
 
@@ -383,7 +385,8 @@ export interface Activity {
   participants: ActivityParticipant[];
   maxParticipants?: number;
   visibility: 'public' | 'friends' | 'squad';
-  genderFilter?: 'all' | 'women_only' | 'men_only';
+  genderFilter?: 'all' | 'women_only' | 'men_only' | 'others_only';
+  markerIcon?: string | null;
   creator?: { _id?: string; displayName?: string; username?: string; avatarUrl?: string; trustRate?: number; ratingCount?: number; createdAt?: string };
   creatorId?: string;
   distance?: number;

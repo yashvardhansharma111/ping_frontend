@@ -5,8 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  ScrollView,
   Platform,
   ActivityIndicator,
   Animated,
@@ -48,12 +46,25 @@ export default function OtpScreen() {
   const boxAnims    = useRef(Array.from({ length: OTP_LENGTH }, () => new Animated.Value(1))).current;
   const safetyScale = useRef(new Animated.Value(0.88)).current;
   const safetyOp    = useRef(new Animated.Value(0)).current;
+  const keyboardY   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (resendSecs <= 0) return;
     const t = setTimeout(() => setResend((sec) => sec - 1), 1000);
     return () => clearTimeout(t);
   }, [resendSecs]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(keyboardY, { toValue: e.endCoordinates.height, duration: 260, useNativeDriver: false }).start();
+    });
+    const hide = Keyboard.addListener(hideEvent, () => {
+      Animated.timing(keyboardY, { toValue: 0, duration: 220, useNativeDriver: false }).start();
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, [keyboardY]);
 
   useEffect(() => {
     if (debugCode && debugCode.length === OTP_LENGTH) {
@@ -140,24 +151,14 @@ export default function OtpScreen() {
   const mutedColor  = isDark ? '#9490C0' : '#6F6866';
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        {/* Top spacer */}
-        <View style={[s.topSpacer, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="arrow-back" size={20} color={textColor} />
-          </TouchableOpacity>
-        </View>
+    // marginBottom tracks keyboard height — entire layout slides up, card stays at bottom
+    <Animated.View style={[s.root, { marginBottom: keyboardY }]}>
+      {/* Hero area fills space above card */}
+      <View style={[s.hero, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="arrow-back" size={20} color={textColor} />
+        </TouchableOpacity>
 
-        {/* Text block */}
         <View style={s.textBlock}>
           <Text style={[
             s.appName,
@@ -179,66 +180,66 @@ export default function OtpScreen() {
             </View>
           ) : null}
         </View>
+      </View>
 
-        {/* Card */}
-        <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
-          <View style={s.pill} />
+      {/* Card — always flush at the bottom of the layout */}
+      <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={s.pill} />
 
-          <Text style={s.cardTitle}>Enter the 6-digit code</Text>
+        <Text style={s.cardTitle}>Enter the 6-digit code</Text>
 
-          {/* OTP boxes */}
-          <View style={s.boxRow}>
-            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-              <View key={i} style={s.boxWrap}>
-                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boxAnims[i] }] }]}>
-                  <TextInput
-                    ref={(el) => { inputs.current[i] = el; }}
-                    style={[s.box, digits[i] ? s.boxFilled : null]}
-                    value={digits[i]}
-                    onChangeText={(v) => handleDigit(i, v)}
-                    onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') handleBackspace(i); }}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    textAlign="center"
-                    autoFocus={i === 0}
-                    selectionColor={PURPLE}
-                  />
-                </Animated.View>
-              </View>
-            ))}
-          </View>
-
-          {/* Verify button */}
-          <TouchableOpacity
-            onPress={() => { Keyboard.dismiss(); verifyOtp(); }}
-            disabled={filled < OTP_LENGTH || loading}
-            activeOpacity={0.88}
-            style={{ borderRadius: 9999, overflow: 'hidden', opacity: filled < OTP_LENGTH ? 0.45 : 1 }}
-          >
-            <LinearGradient
-              colors={[...Gradients.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.btn}
-            >
-              {loading
-                ? <ActivityIndicator color="#FFF" />
-                : <Text style={s.btnText}>Verify code</Text>}
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {/* Resend */}
-          <TouchableOpacity style={s.resendRow} onPress={resend} disabled={resendSecs > 0}>
-            {resendSecs > 0 ? (
-              <Text style={s.resendWait}>
-                Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
-              </Text>
-            ) : (
-              <Text style={s.resendActive}>Resend code</Text>
-            )}
-          </TouchableOpacity>
+        {/* OTP boxes */}
+        <View style={s.boxRow}>
+          {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+            <View key={i} style={s.boxWrap}>
+              <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boxAnims[i] }] }]}>
+                <TextInput
+                  ref={(el) => { inputs.current[i] = el; }}
+                  style={[s.box, digits[i] ? s.boxFilled : null]}
+                  value={digits[i]}
+                  onChangeText={(v) => handleDigit(i, v)}
+                  onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') handleBackspace(i); }}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  textAlign="center"
+                  autoFocus={i === 0}
+                  selectionColor={PURPLE}
+                />
+              </Animated.View>
+            </View>
+          ))}
         </View>
-      </ScrollView>
+
+        {/* Verify button */}
+        <TouchableOpacity
+          onPress={() => { Keyboard.dismiss(); verifyOtp(); }}
+          disabled={filled < OTP_LENGTH || loading}
+          activeOpacity={0.88}
+          style={{ borderRadius: 9999, overflow: 'hidden', opacity: filled < OTP_LENGTH ? 0.45 : 1 }}
+        >
+          <LinearGradient
+            colors={[...Gradients.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.btn}
+          >
+            {loading
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={s.btnText}>Verify code</Text>}
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Resend */}
+        <TouchableOpacity style={s.resendRow} onPress={resend} disabled={resendSecs > 0}>
+          {resendSecs > 0 ? (
+            <Text style={s.resendWait}>
+              Resend in <Text style={{ color: PURPLE, fontWeight: '700' }}>{resendSecs}s</Text>
+            </Text>
+          ) : (
+            <Text style={s.resendActive}>Resend code</Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* Safety / welcome modal */}
       <Modal visible={showSafety} transparent animationType="none" statusBarTranslucent>
@@ -272,7 +273,7 @@ export default function OtpScreen() {
           </Animated.View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
@@ -286,14 +287,20 @@ function makeStyles(isDark: boolean) {
 
   return StyleSheet.create({
     root:  { flex: 1, backgroundColor: bg },
-    scroll: { flexGrow: 1 },
-    topSpacer: { flex: 1, paddingHorizontal: 28 },
+    hero: {
+      flex: 1,
+      paddingHorizontal: 28,
+      justifyContent: 'flex-end',
+      paddingBottom: 32,
+      gap: 16,
+    },
     backBtn: {
       width: 40, height: 40, borderRadius: 20,
       backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       alignItems: 'center', justifyContent: 'center',
+      alignSelf: 'flex-start',
     },
-    textBlock: { paddingHorizontal: 28, paddingBottom: 24, gap: 10 },
+    textBlock: { gap: 10 },
     appName: { fontSize: 52, color: Ping.purpleDim },
     headline: {
       fontSize: 30, fontWeight: '800', color: text,

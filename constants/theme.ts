@@ -2,6 +2,20 @@
  * Ping design system — purple-first palette from brand UI kit.
  * Prefer Colors[scheme] in screens; Ping.* for accents/gradients.
  */
+import { Dimensions, PixelRatio } from 'react-native';
+
+const BASE_WIDTH = 390; // Pixel 7 / iPhone 14 design baseline
+const { width: SCREEN_W } = Dimensions.get('window');
+const _ratio = SCREEN_W / BASE_WIDTH;
+
+/**
+ * Responsive font/size scale.
+ * Scales down linearly on narrow screens, caps upscale at +8%
+ * so large phones don't get oversized text.
+ */
+export function sp(size: number): number {
+  return Math.round(PixelRatio.roundToNearestPixel(size * Math.min(_ratio, 1.08)));
+}
 
 export const Ping = {
   // Brand purples (design board)
@@ -74,16 +88,16 @@ export const Colors = {
   },
 };
 
-/** 8pt spacing scale */
+/** 8pt spacing scale — scaled to screen width */
 export const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
-  '3xl': 64,
-  '4xl': 80,
+  xs:  sp(4),
+  sm:  sp(8),
+  md:  sp(16),
+  lg:  sp(22),
+  xl:  sp(30),
+  xxl: sp(44),
+  '3xl': sp(58),
+  '4xl': sp(72),
 };
 
 export const Radius = {
@@ -95,26 +109,26 @@ export const Radius = {
   full: 9999,
 };
 
-/** Plus Jakarta Sans metrics — pair with loaded fontFamily in app */
+/** System font — Rookey on Motorola, Roboto on stock Android, SF Pro on iOS */
 export const Fonts = {
-  regular: 'PlusJakartaSans_400Regular',
-  medium: 'PlusJakartaSans_500Medium',
-  semiBold: 'PlusJakartaSans_600SemiBold',
-  bold: 'PlusJakartaSans_700Bold',
+  regular:  undefined,
+  medium:   undefined,
+  semiBold: undefined,
+  bold:     undefined,
 };
 
 export const Typography = {
-  display: { fontSize: 34, fontWeight: '700' as const, lineHeight: 40, letterSpacing: -0.34 },
-  h1:      { fontSize: 28, fontWeight: '700' as const, lineHeight: 34, letterSpacing: -0.28 },
-  h2:      { fontSize: 22, fontWeight: '600' as const, lineHeight: 28, letterSpacing: -0.22 },
-  h3:      { fontSize: 18, fontWeight: '600' as const, lineHeight: 24, letterSpacing: -0.1 },
-  h4:      { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
-  body:    { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
-  bodyMed: { fontSize: 16, fontWeight: '500' as const, lineHeight: 24 },
-  bodySm:  { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
-  caption: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
-  label:   { fontSize: 11, fontWeight: '600' as const, lineHeight: 14, letterSpacing: 0.4, textTransform: 'uppercase' as const },
-  micro:   { fontSize: 10, fontWeight: '500' as const, lineHeight: 13 },
+  display: { fontSize: sp(32), fontWeight: '700' as const, lineHeight: sp(38), letterSpacing: -0.3 },
+  h1:      { fontSize: sp(26), fontWeight: '700' as const, lineHeight: sp(32), letterSpacing: -0.25 },
+  h2:      { fontSize: sp(20), fontWeight: '600' as const, lineHeight: sp(26), letterSpacing: -0.2 },
+  h3:      { fontSize: sp(17), fontWeight: '600' as const, lineHeight: sp(22), letterSpacing: -0.1 },
+  h4:      { fontSize: sp(14), fontWeight: '600' as const, lineHeight: sp(20) },
+  body:    { fontSize: sp(14), fontWeight: '400' as const, lineHeight: sp(21) },
+  bodyMed: { fontSize: sp(14), fontWeight: '500' as const, lineHeight: sp(21) },
+  bodySm:  { fontSize: sp(13), fontWeight: '400' as const, lineHeight: sp(18) },
+  caption: { fontSize: sp(11), fontWeight: '400' as const, lineHeight: sp(15) },
+  label:   { fontSize: sp(10), fontWeight: '600' as const, lineHeight: sp(13), letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  micro:   { fontSize: sp(9),  fontWeight: '500' as const, lineHeight: sp(12) },
 };
 
 export const Shadow = {

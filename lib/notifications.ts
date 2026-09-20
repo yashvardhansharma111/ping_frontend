@@ -115,6 +115,57 @@ export async function cancelSafetyReminder(activityId: string): Promise<void> {
   } catch {}
 }
 
+// ── Session usage tracker ─────────────────────────────────────────────────────
+// Schedules local notifications at 20-min intervals: "Used for 20m", "Used for 40m" …
+// Cancel on background / logout.
+
+const SESSION_IDS = ['usage-20','usage-40','usage-60','usage-80','usage-100','usage-120'];
+
+export async function startSessionTracking(): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('usage', {
+        name: 'Session usage',
+        importance: Notifications.AndroidImportance.LOW,
+        vibrationPattern: [0],
+        sound: null,
+      });
+    }
+
+    // Cancel any leftover ones first
+    await stopSessionTracking();
+
+    const intervals = [20, 40, 60, 80, 100, 120];
+    const now = Date.now();
+    for (let i = 0; i < intervals.length; i++) {
+      const mins = intervals[i];
+      const fireAt = new Date(now + mins * 60 * 1000);
+      await Notifications.scheduleNotificationAsync({
+        identifier: SESSION_IDS[i],
+        content: {
+          title: `Used for ${mins}m`,
+          body: mins < 60
+            ? 'You\'re still on Ping. Don\'t forget to look up! 👀'
+            : `${mins} mins on Ping — time flies when you're finding your people.`,
+          data: { type: 'session_usage' },
+          sound: null,
+          ...(Platform.OS === 'android' ? { channelId: 'usage' } : {}),
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
+      });
+    }
+  } catch {}
+}
+
+export async function stopSessionTracking(): Promise<void> {
+  try {
+    await Promise.all(SESSION_IDS.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+  } catch {}
+}
+
 export type NotificationPayload = {
   type: 'ping_join' | 'ping_cancel' | 'friend_accept' | 'friend_reject' | 'friend_request' | 'participant_nearby' | 'ping_starting' | 'ping_new' | 'chat_message';
   activityId?: string;

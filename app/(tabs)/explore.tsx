@@ -11,12 +11,14 @@ import {
   Animated,
   ScrollView,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { activitiesApi, type Activity } from '@/lib/api';
 import { useLocation } from '@/hooks/useLocation';
 import ActivityCard from '@/components/ActivityCard';
+import ActivityDetailSheet from '@/components/ActivityDetailSheet';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EmptyState } from '@/components/ui';
@@ -59,6 +61,7 @@ export default function ActivitiesScreen() {
 
   const [searchOpen,  setSearchOpen]  = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const searchRef = useRef<TextInput>(null);
 
   const pageScrollRef = useRef<ScrollView>(null);
@@ -194,6 +197,7 @@ export default function ActivitiesScreen() {
           renderItem={({ item }) => (
             <ActivityCard
               activity={item}
+              onPress={() => setSelectedActivity(item)}
               onJoin={() => {
                 setData((prev) => prev.filter((a) => a._id !== item._id));
                 reload();
@@ -307,6 +311,38 @@ export default function ActivitiesScreen() {
           {FILTERS.map((f) => cloneElement(renderPage(f.key), { key: f.key }))}
         </ScrollView>
       </View>
+
+      {/* Activity detail bottom sheet modal */}
+      {selectedActivity && (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={() => setSelectedActivity(null)}
+        >
+          <View style={styles.detailOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setSelectedActivity(null)}
+            />
+            <View style={[styles.detailSheet, { paddingBottom: insets.bottom + 8 }]}>
+              <View style={styles.detailHandle} />
+              <ActivityDetailSheet
+                activity={selectedActivity}
+                onRefresh={() => {
+                  loadNearby();
+                  loadJoined();
+                  loadMine();
+                }}
+                onDismiss={() => setSelectedActivity(null)}
+                onActivityUpdate={(updated) => setSelectedActivity(updated)}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -357,4 +393,25 @@ const styles = StyleSheet.create({
   chipLabel: { ...Typography.bodySm, fontWeight: '600', fontSize: 13 },
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 130, gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  detailOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  detailSheet: {
+    height: '88%',
+    backgroundColor: '#111111',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+  },
+  detailHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
 });

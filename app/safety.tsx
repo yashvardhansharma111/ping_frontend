@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Linking, Share, TextInput, Platform, ActivityIndicator, Modal,
+  Linking, Share, TextInput, Platform, ActivityIndicator, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
@@ -82,6 +82,7 @@ function AddContactSheet({ visible, onClose, onSaved, c }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <View style={acs.overlay}>
         <TouchableOpacity style={acs.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={[acs.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + Spacing.md }]}>
@@ -97,6 +98,7 @@ function AddContactSheet({ visible, onClose, onSaved, c }: {
           </TouchableOpacity>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

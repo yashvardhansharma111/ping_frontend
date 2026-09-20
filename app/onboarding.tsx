@@ -1,253 +1,279 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  Animated,
-  Easing,
-  Image,
+  View, Text, StyleSheet, TouchableOpacity,
+  Dimensions, Animated, PanResponder, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ping, Spacing, Radius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+const { width: W, height: H } = Dimensions.get('window');
+const HERO_H = Math.round(H * 0.56);
 
-const { width: W } = Dimensions.get('window');
+// ── Photo bank ────────────────────────────────────────────────────────────────
 
-// ── Slide definitions ─────────────────────────────────────────────────────────
-
-type InfoSlide = {
-  kind: 'info';
-  slideIcon: IoniconName;
-  title: string;
-  subtitle: string;
-  btnLabel: string;
+const PX = {
+  a: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=220&h=280&fit=crop&crop=faces',
+  b: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=190&h=245&fit=crop&crop=faces',
+  c: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=190&h=245&fit=crop&crop=faces',
+  d: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=170&h=215&fit=crop&crop=faces',
+  e: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=170&h=215&fit=crop&crop=faces',
+  f: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=160&h=205&fit=crop&crop=faces',
+  g: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=180&h=230&fit=crop&crop=faces',
+  h: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=160&h=205&fit=crop&crop=faces',
 };
 
-type PermSlide = {
-  kind: 'perm';
-  slideIcon: IoniconName;
+// ── Slide data ────────────────────────────────────────────────────────────────
+
+type PhotoDef = {
+  uri: string;
+  w: number; h: number; rot: number;
+  pos: { top?: number; bottom?: number; left?: number; right?: number };
+};
+type Decor = { emoji: string; top?: number; bottom?: number; left?: number; right?: number };
+
+type SlideData = {
+  grad: readonly [string, string, string];
+  darkGrad: readonly [string, string, string];
+  photos: PhotoDef[];
+  decor?: Decor[];
   title: string;
   subtitle: string;
-  points: { icon: IoniconName; text: string }[];
   btnLabel: string;
   skipLabel?: string;
-  onAllow: () => Promise<void>;
+  onAction?: () => Promise<void>;
+  isPro?: true;
 };
 
-type Slide = InfoSlide | PermSlide;
-
-const SLIDES: Slide[] = [
+const SLIDES: SlideData[] = [
   {
-    kind: 'info',
-    slideIcon: 'location',
-    title: 'Discover Nearby',
+    grad:     ['#FDF6EE', '#F8EEF5', '#EEF3FB'],
+    darkGrad: ['#1A1208', '#1A0C14', '#080E1A'],
+    photos: [
+      { uri: PX.a, w: 118, h: 152, rot: -8,  pos: { top: 0.08, left: 0.03 } },
+      { uri: PX.b, w:  96, h: 124, rot:  6,  pos: { top: 0.05, right: 0.08 } },
+      { uri: PX.c, w:  96, h: 124, rot:  9,  pos: { bottom: 0.08, left: 0.22 } },
+      { uri: PX.d, w:  82, h: 105, rot: -5,  pos: { bottom: 0.06, right: 0.04 } },
+    ],
+    decor: [
+      { emoji: '✨', top: 0.04, right: 0.36 },
+      { emoji: '💜', bottom: 0.22, left: 0.04 },
+    ],
+    title: 'Discover What\'s\nHappening Near You.',
     subtitle: 'See walks, hangouts, game nights and more — happening right around you.',
-    btnLabel: 'Next',
+    btnLabel: 'Continue',
   },
   {
-    kind: 'info',
-    slideIcon: 'people',
-    title: 'Meet Real People',
-    subtitle: 'Join pings, meet your neighbors, and build your local crew one activity at a time.',
-    btnLabel: 'Next',
+    grad:     ['#EEF5FB', '#F5EEFD', '#FDF6EE'],
+    darkGrad: ['#080E1A', '#0E0818', '#1A1208'],
+    photos: [
+      { uri: PX.e, w: 118, h: 152, rot:  5,  pos: { top: 0.06, right: 0.06 } },
+      { uri: PX.f, w:  96, h: 124, rot: -7,  pos: { top: 0.10, left: 0.05 } },
+      { uri: PX.g, w:  96, h: 124, rot:  8,  pos: { bottom: 0.06, right: 0.18 } },
+      { uri: PX.h, w:  82, h: 105, rot: -4,  pos: { bottom: 0.08, left: 0.04 } },
+    ],
+    decor: [
+      { emoji: '⭐', top: 0.03, left: 0.42 },
+      { emoji: '🤝', bottom: 0.24, right: 0.04 },
+    ],
+    title: 'Meet Real People\nNear You.',
+    subtitle: 'Join pings, meet your neighbours, and build your local crew one activity at a time.',
+    btnLabel: 'Continue',
   },
   {
-    kind: 'info',
-    slideIcon: 'flash',
-    title: 'Drop Your Ping',
+    grad:     ['#F5EEFD', '#EEF3FB', '#FDF0EE'],
+    darkGrad: ['#0E0818', '#080E1A', '#1A0C08'],
+    photos: [
+      { uri: PX.b, w: 118, h: 152, rot: -6,  pos: { top: 0.08, left: 0.06 } },
+      { uri: PX.a, w:  96, h: 124, rot:  7,  pos: { top: 0.04, right: 0.05 } },
+      { uri: PX.d, w:  96, h: 124, rot: -9,  pos: { bottom: 0.07, right: 0.06 } },
+      { uri: PX.h, w:  82, h: 105, rot:  5,  pos: { bottom: 0.06, left: 0.24 } },
+    ],
+    decor: [
+      { emoji: '⚡', top: 0.04, left: 0.38 },
+      { emoji: '🎯', bottom: 0.26, left: 0.04 },
+    ],
+    title: 'Drop a Ping.\nSee Who Shows Up.',
     subtitle: 'Host your own events. See who shows up nearby. Make something happen.',
     btnLabel: 'Continue',
   },
   {
-    kind: 'perm',
-    slideIcon: 'location',
-    title: 'Know What\'s Around You',
-    subtitle: 'Location access lets us show you what\'s happening nearby — in real time.',
-    points: [
-      { icon: 'navigate-outline',        text: 'See activities within walking distance' },
-      { icon: 'shield-checkmark-outline', text: 'Location never shared without your consent' },
-      { icon: 'phone-portrait-outline',  text: 'Works only while the app is open' },
+    grad:     ['#EEF8F0', '#EEF3FB', '#F5F5EE'],
+    darkGrad: ['#081408', '#080E1A', '#141408'],
+    photos: [
+      { uri: PX.g, w: 118, h: 152, rot:  7,  pos: { top: 0.06, right: 0.05 } },
+      { uri: PX.f, w:  96, h: 124, rot: -8,  pos: { top: 0.08, left: 0.04 } },
+      { uri: PX.c, w:  96, h: 124, rot:  6,  pos: { bottom: 0.07, left: 0.20 } },
+      { uri: PX.e, w:  82, h: 105, rot: -5,  pos: { bottom: 0.06, right: 0.06 } },
     ],
-    btnLabel: 'Allow Location Access',
-    onAllow: async () => {
-      await Location.requestForegroundPermissionsAsync();
-    },
+    decor: [
+      { emoji: '📍', top: 0.03, right: 0.38 },
+      { emoji: '🗺️', bottom: 0.26, right: 0.04 },
+    ],
+    title: 'Know What\'s\nAround You.',
+    subtitle: 'Location access lets us show you what\'s happening nearby — in real time.',
+    btnLabel: 'Allow Location',
+    onAction: async () => { await Location.requestForegroundPermissionsAsync(); },
   },
   {
-    kind: 'perm',
-    slideIcon: 'people',
-    title: 'Find Friends on Ping',
-    subtitle: 'See which of your contacts are already using Ping.',
-    points: [
-      { icon: 'person-add-outline',  text: 'Instantly connect with friends on Ping' },
-      { icon: 'lock-closed-outline', text: 'Contacts are never uploaded or stored' },
-      { icon: 'flash-outline',       text: 'Start pings with people you already know' },
+    grad:     ['#F5EEFD', '#FEEEF5', '#EEF3FB'],
+    darkGrad: ['#0E0818', '#180810', '#080E1A'],
+    photos: [
+      { uri: PX.a, w: 118, h: 152, rot: -7,  pos: { top: 0.07, left: 0.04 } },
+      { uri: PX.c, w:  96, h: 124, rot:  6,  pos: { top: 0.05, right: 0.06 } },
+      { uri: PX.b, w:  96, h: 124, rot:  8,  pos: { bottom: 0.07, right: 0.18 } },
+      { uri: PX.f, w:  82, h: 105, rot: -4,  pos: { bottom: 0.06, left: 0.06 } },
     ],
+    decor: [
+      { emoji: '💌', top: 0.04, left: 0.40 },
+      { emoji: '👥', bottom: 0.26, right: 0.04 },
+    ],
+    title: 'Find Friends\nAlready on Ping.',
+    subtitle: 'See which of your contacts are already using Ping. Connect instantly.',
     btnLabel: 'Find My Friends',
     skipLabel: 'Skip for now',
-    onAllow: async () => {
-      // expo-contacts not installed — advances automatically
-    },
+  },
+  {
+    isPro: true,
+    grad:     ['#F0EEFF', '#EAE0FF', '#E0EEFF'],
+    darkGrad: ['#0C0020', '#080020', '#00081A'],
+    photos: [
+      { uri: PX.e, w: 118, h: 152, rot:  5,  pos: { top: 0.06, left: 0.05 } },
+      { uri: PX.g, w:  96, h: 124, rot: -8,  pos: { top: 0.08, right: 0.05 } },
+      { uri: PX.h, w:  96, h: 124, rot:  7,  pos: { bottom: 0.06, right: 0.06 } },
+      { uri: PX.d, w:  82, h: 105, rot: -6,  pos: { bottom: 0.08, left: 0.22 } },
+    ],
+    decor: [
+      { emoji: '💎', top: 0.04, right: 0.40 },
+      { emoji: '⭐', bottom: 0.26, left: 0.04 },
+    ],
+    title: 'Go Pro — Free\nFor New Users.',
+    subtitle: 'Get 1 month of Ping Pro with full features — on us. No payment needed today.',
+    btnLabel: 'Claim Free Pro',
+    skipLabel: 'Start for free',
   },
 ];
 
-// ── Hero component ─────────────────────────────────────────────────────────────
+// ── PhotoCollage ──────────────────────────────────────────────────────────────
 
-function Hero({
-  p1, p2, iconScale, slideIcon, isDark,
-}: {
-  p1: Animated.Value;
-  p2: Animated.Value;
-  iconScale: Animated.Value;
-  slideIcon: IoniconName;
-  isDark: boolean;
-}) {
-  const r1Scale   = p1.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] });
-  const r1Opacity = p1.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.22, 0.08, 0] });
-  const r2Scale   = p2.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] });
-  const r2Opacity = p2.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.14, 0.05, 0] });
-
-  const cardBg     = isDark ? '#18182A' : '#FFFFFF';
-  const badgeBg    = isDark ? 'rgba(143,99,244,0.15)' : 'rgba(143,99,244,0.1)';
-  const badgeBorder = 'rgba(143,99,244,0.3)';
-
+function PhotoCollage({ slide, isDark, floatAnim }: { slide: SlideData; isDark: boolean; floatAnim: Animated.Value }) {
   return (
-    <View style={hero.container}>
-      {/* Pulse rings */}
-      <Animated.View style={[hero.ring, { backgroundColor: Ping.purple, transform: [{ scale: r1Scale }], opacity: r1Opacity }]} />
-      <Animated.View style={[hero.ring, { backgroundColor: Ping.purple, transform: [{ scale: r2Scale }], opacity: r2Opacity }]} />
+    <View style={{ flex: 1, position: 'relative' }}>
+      {/* Photos */}
+      {slide.photos.map((p, i) => {
+        const pos: any = {};
+        if (p.pos.top    !== undefined) pos.top    = Math.round(HERO_H * p.pos.top);
+        if (p.pos.bottom !== undefined) pos.bottom = Math.round(HERO_H * p.pos.bottom);
+        if (p.pos.left   !== undefined) pos.left   = Math.round(W * p.pos.left);
+        if (p.pos.right  !== undefined) pos.right  = Math.round(W * p.pos.right);
 
-      {/* Outer static ring */}
-      <View style={[hero.staticRing, { borderColor: isDark ? 'rgba(143,99,244,0.12)' : 'rgba(143,99,244,0.15)' }]} />
+        const ty = floatAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [i % 2 === 0 ? 0 : 5, i % 2 === 0 ? -8 : -3],
+        });
 
-      {/* Center card */}
-      <Animated.View
-        style={[
-          hero.card,
-          {
-            backgroundColor: cardBg,
-            transform: [{ scale: iconScale }],
-            shadowColor: Ping.purple,
-          },
-        ]}
-      >
-        <Image source={require('../assets/images/icon.png')} style={hero.icon} resizeMode="contain" />
-        {/* Slide-specific icon badge */}
-        <View style={[hero.badge, { backgroundColor: badgeBg, borderColor: badgeBorder }]}>
-          <Ionicons name={slideIcon} size={14} color={Ping.purpleLight} />
-        </View>
-      </Animated.View>
+        return (
+          <Animated.View
+            key={i}
+            style={[
+              ph.frame,
+              pos,
+              {
+                width: p.w + 8,
+                height: p.h + 8,
+                transform: [{ rotate: `${p.rot}deg` }, { translateY: ty }],
+                shadowColor: isDark ? '#000' : '#2A1850',
+                zIndex: i === 0 ? 4 : i === 1 ? 3 : i === 2 ? 2 : 1,
+              },
+            ]}
+          >
+            <Image
+              source={{ uri: p.uri }}
+              style={{ width: p.w, height: p.h, borderRadius: 18 }}
+              resizeMode="cover"
+            />
+          </Animated.View>
+        );
+      })}
+
+      {/* Decorators */}
+      {(slide.decor ?? []).map((d, i) => {
+        const pos: any = { position: 'absolute', zIndex: 10 };
+        if (d.top    !== undefined) pos.top    = Math.round(HERO_H * d.top);
+        if (d.bottom !== undefined) pos.bottom = Math.round(HERO_H * d.bottom);
+        if (d.left   !== undefined) pos.left   = Math.round(W * d.left);
+        if (d.right  !== undefined) pos.right  = Math.round(W * d.right);
+        return (
+          <Text key={i} style={[ph.decor, pos]}>{d.emoji}</Text>
+        );
+      })}
     </View>
   );
 }
 
-const hero = StyleSheet.create({
-  container: {
-    width: 260,
-    height: 260,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ring: {
+const ph = StyleSheet.create({
+  frame: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  staticRing: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 1,
-  },
-  card: {
-    width: 96,
-    height: 96,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    padding: 4,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 16,
-    overflow: 'visible',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
   },
-  icon: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
-  },
-  badge: {
-    position: 'absolute',
-    bottom: -8,
-    right: -8,
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  decor: { fontSize: 22, position: 'absolute' },
 });
 
-// ── Main screen ────────────────────────────────────────────────────────────────
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function OnboardingScreen() {
-  const router    = useRouter();
-  const insets    = useSafeAreaInsets();
-  const scheme    = useColorScheme() ?? 'dark';
-  const isDark    = scheme === 'dark';
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [slide, setSlide] = useState(0);
 
-  const opacity   = useRef(new Animated.Value(1)).current;
+  const fadeAnim  = useRef(new Animated.Value(1)).current;
   const slideX    = useRef(new Animated.Value(0)).current;
-  const iconScale = useRef(new Animated.Value(1)).current;
-  const p1        = useRef(new Animated.Value(0)).current;
-  const p2        = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const btnScale  = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.loop(
-      Animated.timing(p1, { toValue: 1, duration: 3200, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: 1, duration: 2600, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 2600, useNativeDriver: true }),
+      ]),
     ).start();
-    setTimeout(() => {
-      Animated.loop(
-        Animated.timing(p2, { toValue: 1, duration: 3200, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ).start();
-    }, 1600);
   }, []);
 
-  const bg      = isDark ? '#0C0C14' : '#F5F4FF';
-  const textCol = isDark ? '#F1F0FF' : '#0D0B1E';
-  const muted   = isDark ? 'rgba(209,207,240,0.5)' : 'rgba(26,23,80,0.45)';
-  const pointTextCol = isDark ? 'rgba(209,207,240,0.75)' : 'rgba(26,23,80,0.7)';
-  const iconBg  = isDark ? 'rgba(143,99,244,0.14)' : 'rgba(143,99,244,0.1)';
-  const skipCol = isDark ? 'rgba(187,146,255,0.35)' : 'rgba(100,69,217,0.35)';
-  const dotInactive = isDark ? 'rgba(187,146,255,0.18)' : 'rgba(100,69,217,0.18)';
-  const dotDone     = isDark ? 'rgba(187,146,255,0.45)' : 'rgba(100,69,217,0.4)';
+  const cur    = SLIDES[slide];
+  const isLast = slide === SLIDES.length - 1;
+
+  // Detect dark background based on slide grad
+  const isDark = cur.grad[0].startsWith('#F') ? false : true;
+  // Always use light mode visuals — the gradients are all light
+  const bgIsDark = false;
+
+  const textCol  = '#0D0B1E';
+  const subCol   = 'rgba(26,23,60,0.5)';
+  const dotInact = 'rgba(0,0,0,0.12)';
+  const dotDone  = 'rgba(0,0,0,0.32)';
 
   function goTo(next: number) {
+    if (next < 0 || next >= SLIDES.length) return;
+    const dir = next > slide ? -24 : 24;
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 0, duration: 140, useNativeDriver: true }),
-      Animated.timing(slideX,  { toValue: -24, duration: 140, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
+      Animated.timing(slideX,   { toValue: dir, duration: 110, useNativeDriver: true }),
     ]).start(() => {
       setSlide(next);
-      slideX.setValue(24);
+      slideX.setValue(-dir);
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 240, useNativeDriver: true }),
-        Animated.spring(slideX,  { toValue: 0, damping: 24, stiffness: 260, useNativeDriver: true }),
-      ]).start();
-      Animated.sequence([
-        Animated.spring(iconScale, { toValue: 0.82, damping: 20, stiffness: 500, useNativeDriver: true }),
-        Animated.spring(iconScale, { toValue: 1, damping: 12, stiffness: 180, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(slideX,   { toValue: 0, damping: 22, stiffness: 260, useNativeDriver: true }),
       ]).start();
     });
   }
@@ -258,79 +284,118 @@ export default function OnboardingScreen() {
   }
 
   async function handleAction() {
-    const cur = SLIDES[slide];
-    if (cur.kind === 'perm') await cur.onAllow();
-    if (slide < SLIDES.length - 1) goTo(slide + 1);
+    Animated.sequence([
+      Animated.spring(btnScale, { toValue: 0.95, damping: 20, stiffness: 500, useNativeDriver: true }),
+      Animated.spring(btnScale, { toValue: 1,    damping: 14, stiffness: 220, useNativeDriver: true }),
+    ]).start();
+    if (cur.onAction) await cur.onAction();
+    if (!isLast) goTo(slide + 1);
     else await finish();
   }
 
-  const cur    = SLIDES[slide];
-  const isLast = slide === SLIDES.length - 1;
-  const showSkip = cur.kind === 'info' ? slide < 2 : !!(cur as PermSlide).skipLabel;
-  const skipAction = cur.kind === 'perm' && (cur as PermSlide).skipLabel
-    ? finish
-    : () => (isLast ? finish() : goTo(slide + 1));
-  const skipText = cur.kind === 'perm' && (cur as PermSlide).skipLabel
-    ? (cur as PermSlide).skipLabel!
-    : cur.kind === 'info' ? 'Skip' : 'Maybe later';
+  const slideRef = useRef(slide);
+  useEffect(() => { slideRef.current = slide; }, [slide]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8,
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -40 && slideRef.current < SLIDES.length - 1) goTo(slideRef.current + 1);
+        else if (g.dx > 40 && slideRef.current > 0) goTo(slideRef.current - 1);
+      },
+    })
+  ).current;
+
+  const showSkip  = slide < SLIDES.length - 1;
+  const skipLabel = cur.skipLabel ?? 'Skip';
+  const skipAction = cur.skipLabel ? finish : () => goTo(slide + 1);
 
   return (
-    <View style={[s.root, { backgroundColor: bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
 
-      {/* Hero */}
-      <View style={s.heroWrap}>
-        <Hero p1={p1} p2={p2} iconScale={iconScale} slideIcon={cur.slideIcon} isDark={isDark} />
+      {/* ── Hero: full-width gradient with floating photos ── */}
+      <View style={s.hero} {...panResponder.panHandlers}>
+        <LinearGradient
+          colors={cur.grad}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Top bar */}
+        <View style={s.topBar}>
+          {slide > 0 ? (
+            <TouchableOpacity onPress={() => goTo(slide - 1)} hitSlop={14} activeOpacity={0.7} style={s.backBtn}>
+              <Text style={s.backArrow}>‹</Text>
+            </TouchableOpacity>
+          ) : <View style={s.backBtn} />}
+
+          {showSkip && (
+            <TouchableOpacity onPress={skipAction} hitSlop={10} activeOpacity={0.7}>
+              <Text style={s.skipText}>SKIP</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Photos */}
+        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+          <PhotoCollage slide={cur} isDark={false} floatAnim={floatAnim} />
+        </Animated.View>
       </View>
 
-      {/* Content */}
-      <Animated.View style={[s.content, { opacity, transform: [{ translateX: slideX }] }]}>
-        <Text style={[s.eyebrow, { color: Ping.purpleLight }]}>PING</Text>
-        <Text style={[s.title, { color: textCol }]}>{cur.title}</Text>
-        <Text style={[s.subtitle, { color: muted }]}>{cur.subtitle}</Text>
-
-        {cur.kind === 'perm' && (
-          <View style={s.points}>
-            {(cur as PermSlide).points.map((pt, i) => (
-              <View key={i} style={s.pointRow}>
-                <View style={[s.pointIconWrap, { backgroundColor: iconBg }]}>
-                  <Ionicons name={pt.icon} size={16} color={Ping.purpleLight} />
-                </View>
-                <Text style={[s.pointText, { color: pointTextCol }]}>{pt.text}</Text>
-              </View>
-            ))}
+      {/* ── Content ── */}
+      <View style={s.body}>
+        {/* Pro coupon */}
+        {cur.isPro && (
+          <View style={s.proRow}>
+            <View style={s.couponBadge}>
+              <Text style={s.couponText}>🎁  WELCOME0 — ₹0 for 30 days</Text>
+            </View>
+            <Text style={s.priceRow}>
+              <Text style={s.strikePrice}>₹99</Text>
+              {'  '}
+              <Text style={s.freePrice}>FREE</Text>
+            </Text>
           </View>
         )}
-      </Animated.View>
 
-      {/* Dots */}
-      <View style={s.dotsRow}>
-        {SLIDES.map((_, i) => (
-          <TouchableOpacity key={i} onPress={() => i < slide && goTo(i)} activeOpacity={0.7}>
-            <View
-              style={[
-                s.dot,
-                i === slide
-                  ? [s.dotActive, { backgroundColor: Ping.purple }]
-                  : i < slide
-                    ? { width: 8, height: 6, borderRadius: 3, backgroundColor: dotDone }
-                    : { width: 6, height: 6, borderRadius: 3, backgroundColor: dotInactive },
-              ]}
-            />
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateX: slideX }] }}>
+          <Text style={[s.title, { color: textCol }]}>{cur.title}</Text>
+          <Text style={[s.subtitle, { color: subCol }]}>{cur.subtitle}</Text>
+        </Animated.View>
+
+        {/* Dots */}
+        <View style={s.dotsRow}>
+          {SLIDES.map((_, i) => (
+            <TouchableOpacity key={i} onPress={() => goTo(i)} hitSlop={8}>
+              <View
+                style={[
+                  s.dot,
+                  i === slide
+                    ? [s.dotActive, { backgroundColor: Ping.purple }]
+                    : i < slide
+                      ? { backgroundColor: dotDone }
+                      : { backgroundColor: dotInact },
+                ]}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Button */}
+        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+          <TouchableOpacity
+            style={[s.btn, { backgroundColor: cur.isPro ? Ping.purple : '#111111' }]}
+            onPress={handleAction}
+            activeOpacity={0.88}
+          >
+            <Text style={s.btnText}>{cur.btnLabel}</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        </Animated.View>
 
-      {/* Footer */}
-      <View style={s.footer}>
-        <TouchableOpacity style={s.btn} onPress={handleAction} activeOpacity={0.86}>
-          {cur.kind === 'perm' && <Ionicons name={cur.slideIcon} size={18} color="#FFF" />}
-          <Text style={s.btnText}>{cur.btnLabel}</Text>
-          {cur.kind === 'info' && <Ionicons name="arrow-forward" size={16} color="#FFF" />}
-        </TouchableOpacity>
-
-        {showSkip && (
-          <TouchableOpacity onPress={skipAction} activeOpacity={0.6} style={s.skipBtn}>
-            <Text style={[s.skipText, { color: skipCol }]}>{skipText}</Text>
+        {cur.isPro && (
+          <TouchableOpacity onPress={finish} hitSlop={8} activeOpacity={0.7}>
+            <Text style={[s.skipAlt, { color: subCol }]}>Start for free instead</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -341,117 +406,77 @@ export default function OnboardingScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center',
+  root: { flex: 1, backgroundColor: '#FAFAFA' },
+
+  hero: {
+    height: HERO_H,
+    overflow: 'hidden',
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
   },
 
-  heroWrap: {
-    flex: 1,
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+    zIndex: 20,
+  },
+  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  backArrow: { fontSize: 28, fontWeight: '300', color: 'rgba(0,0,0,0.40)', lineHeight: 34 },
+  skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(0,0,0,0.38)' },
+
+  body: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    gap: 0,
   },
 
-  content: {
-    width: W,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xs,
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 4,
-    textTransform: 'uppercase',
-    opacity: 0.7,
-    marginBottom: 4,
-  },
+  // Pro
+  proRow:      { alignItems: 'flex-start', gap: 6, marginBottom: 10 },
+  couponBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.full, backgroundColor: `${Ping.purple}18`, borderWidth: 1, borderColor: `${Ping.purple}40` },
+  couponText:  { fontSize: 11, fontWeight: '700', color: Ping.purpleLight, letterSpacing: 0.3 },
+  priceRow:    { fontSize: 17, fontWeight: '600', color: '#111' },
+  strikePrice: { textDecorationLine: 'line-through', color: '#999', fontWeight: '400' },
+  freePrice:   { color: Ping.purple, fontWeight: '800' },
+
+  // Content
   title: {
     fontSize: 28,
     fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.4,
-    lineHeight: 34,
+    letterSpacing: -0.6,
+    lineHeight: 35,
+    marginBottom: 10,
   },
   subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 21,
-    maxWidth: 300,
-    marginTop: 4,
-  },
-
-  // Permission points
-  points: {
-    width: '100%',
-    gap: 10,
-    marginTop: Spacing.md,
-  },
-  pointRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  pointIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  pointText: {
-    fontSize: 14,
-    flex: 1,
+    fontSize: 13,
     lineHeight: 20,
+    fontWeight: '400',
+    maxWidth: 300,
+    marginBottom: 20,
   },
 
   // Dots
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginVertical: Spacing.md,
-  },
-  dot: { borderRadius: 3 },
-  dotActive: { width: 22, height: 6 },
+  dotsRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 20 },
+  dot:       { width: 6, height: 6, borderRadius: 3 },
+  dotActive: { width: 22, height: 6, borderRadius: 3 },
 
-  // Footer
-  footer: {
-    width: W,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  // Button
   btn: {
-    width: '100%',
     height: 54,
     borderRadius: Radius.full,
-    backgroundColor: Ping.purple,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+    marginBottom: 12,
   },
-  btnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
-    letterSpacing: 0.2,
-  },
-  skipBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  skipText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  btnText: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 0.1 },
+  skipAlt: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
 });

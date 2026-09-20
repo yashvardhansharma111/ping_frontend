@@ -210,7 +210,7 @@ export default function PingDropAnimation({
           }}
         >
           <Image
-            source={require('../assets/images/icon.png')}
+            source={require('../assets/images/ping.png')}
             style={s.iconImg}
             resizeMode="contain"
           />

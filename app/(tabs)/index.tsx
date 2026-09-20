@@ -14,6 +14,7 @@ import {
   FlatList,
   PanResponder,
   BackHandler,
+  Modal,
   type AppStateStatus,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
@@ -58,14 +59,15 @@ const TYPE_CFG: Record<string, { icon: MCIName; color: string; label: string }> 
 
 // ── Filter chips ──────────────────────────────────────────────────────────────
 const FILTER_TYPES: { key: string; label: string; icon: MCIName; color: string }[] = [
-  { key: '',        label: 'All',     icon: 'view-grid',          color: '#BB92FF' },
-  { key: 'sport',   label: 'Sport',   icon: 'dumbbell',           color: '#6545D9' },
-  { key: 'food',    label: 'Food',    icon: 'food-fork-drink',    color: '#8F63F4' },
-  { key: 'music',   label: 'Music',   icon: 'music-note',         color: '#BB92FF' },
-  { key: 'study',   label: 'Study',   icon: 'book-open-variant',  color: '#7B5CFF' },
-  { key: 'outdoor', label: 'Outdoor', icon: 'hiking',             color: '#9B7AFF' },
-  { key: 'gaming',  label: 'Gaming',  icon: 'gamepad-variant',    color: '#C8A8FF' },
-  { key: 'meetup',  label: 'Meetup',  icon: 'account-group',      color: '#6545D9' },
+  { key: '',        label: 'All',     icon: 'view-grid',              color: '#BB92FF' },
+  { key: 'sport',   label: 'Sport',   icon: 'dumbbell',               color: '#6545D9' },
+  { key: 'food',    label: 'Food',    icon: 'food-fork-drink',        color: '#8F63F4' },
+  { key: 'music',   label: 'Music',   icon: 'music-note',             color: '#BB92FF' },
+  { key: 'study',   label: 'Study',   icon: 'book-open-variant',      color: '#7B5CFF' },
+  { key: 'outdoor', label: 'Outdoor', icon: 'hiking',                 color: '#9B7AFF' },
+  { key: 'gaming',  label: 'Gaming',  icon: 'gamepad-variant',        color: '#C8A8FF' },
+  { key: 'meetup',  label: 'Meetup',  icon: 'account-group',          color: '#6545D9' },
+  { key: 'custom',  label: 'Custom',  icon: 'star-four-points-outline', color: '#F97316' },
 ];
 
 // ── Advanced filter options ───────────────────────────────────────────────────
@@ -614,9 +616,10 @@ function SearchOverlay({
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'people' | 'nearby'>('people');
   const [results, setResults] = useState<User[]>([]);
-  const [nearbyUsers, setNearbyUsers] = useState<User[]>([]);
+  const [nearbyPings, setNearbyPings] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [selectedPing, setSelectedPing] = useState<Activity | null>(null);
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -635,8 +638,8 @@ function SearchOverlay({
   useEffect(() => {
     if (!visible || tab !== 'nearby') return;
     setNearbyLoading(true);
-    usersApi.nearby(userCoords.latitude, userCoords.longitude)
-      .then((r) => setNearbyUsers(r.users))
+    activitiesApi.nearby(userCoords.latitude, userCoords.longitude)
+      .then((r) => setNearbyPings(r.activities ?? []))
       .catch(() => {})
       .finally(() => setNearbyLoading(false));
   }, [visible, tab]);
@@ -656,7 +659,6 @@ function SearchOverlay({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, tab]);
 
-  const displayList = tab === 'nearby' ? nearbyUsers : results;
   const isLoading = tab === 'nearby' ? nearbyLoading : loading;
 
   if (!visible) return null;
@@ -716,9 +718,9 @@ function SearchOverlay({
       {/* Results */}
       {isLoading ? (
         <ActivityIndicator color={Ping.purpleLight} style={{ marginTop: 40 }} />
-      ) : (
+      ) : tab === 'people' ? (
         <FlatList
-          data={displayList}
+          data={results}
           keyExtractor={(item) => String(item._id)}
           renderItem={({ item }) => (
             <UserResultCard
@@ -728,29 +730,84 @@ function SearchOverlay({
           )}
           ListEmptyComponent={
             <View style={so.empty}>
-              <Ionicons
-                name={tab === 'people' ? 'search-outline' : 'people-outline'}
-                size={40}
-                color="#4B4B6E"
-              />
+              <Ionicons name="search-outline" size={40} color="#4B4B6E" />
               <Text style={so.emptyTitle}>
-                {tab === 'people'
-                  ? query.length < 2 ? 'Start typing to search…' : 'No users found'
-                  : 'No users spotted nearby'}
+                {query.length < 2 ? 'Start typing to search…' : 'No users found'}
               </Text>
-              {tab === 'people' && query.length < 2 && (
-                <Text style={so.emptyHint}>Enter at least 2 characters</Text>
-              )}
+              {query.length < 2 && <Text style={so.emptyHint}>Enter at least 2 characters</Text>}
             </View>
           }
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         />
+      ) : (
+        <>
+          <FlatList
+            data={nearbyPings}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={so.pingRow}
+                onPress={() => setSelectedPing(item)}
+                activeOpacity={0.8}
+              >
+                <View style={[so.pingDot, { backgroundColor: PING_TYPE_COLOR[item.type] ?? Ping.purple }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={so.pingTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={so.pingSub} numberOfLines={1}>
+                    {item.placeName ?? ''}
+                    {item.distance !== undefined && item.distance !== null
+                      ? `${item.placeName ? ' · ' : ''}${item.distance < 1000 ? `${Math.round(item.distance)}m` : `${(item.distance / 1000).toFixed(1)}km`} away`
+                      : ''}
+                  </Text>
+                </View>
+                <View style={[so.pingBadge, { backgroundColor: `${PING_TYPE_COLOR[item.type] ?? Ping.purple}20` }]}>
+                  <Text style={[so.pingBadgeText, { color: PING_TYPE_COLOR[item.type] ?? Ping.purpleLight }]}>
+                    {item.type}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={so.empty}>
+                <Ionicons name="location-outline" size={40} color="#4B4B6E" />
+                <Text style={so.emptyTitle}>No pings near you</Text>
+                <Text style={so.emptyHint}>Be the first to drop one!</Text>
+              </View>
+            }
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          />
+          {selectedPing && (
+            <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSelectedPing(null)}>
+              <View style={so.detailOverlay}>
+                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSelectedPing(null)} />
+                <View style={so.detailSheet}>
+                  <View style={so.detailHandle} />
+                  <ActivityDetailSheet
+                    activity={selectedPing}
+                    onRefresh={() => {
+                      activitiesApi.nearby(userCoords.latitude, userCoords.longitude)
+                        .then((r) => setNearbyPings(r.activities ?? [])).catch(() => {});
+                    }}
+                    onDismiss={() => setSelectedPing(null)}
+                    onActivityUpdate={(updated) => setSelectedPing(updated)}
+                  />
+                </View>
+              </View>
+            </Modal>
+          )}
+        </>
       )}
     </Animated.View>
   );
 }
+
+const PING_TYPE_COLOR: Record<string, string> = {
+  sport: '#22C55E', food: '#F59E0B', music: '#A78BFA',
+  study: '#60A5FA', outdoor: '#34D399', gaming: '#F472B6', meetup: '#FB923C',
+};
 
 function makeSoStyles(isDark: boolean) {
   return StyleSheet.create({
@@ -827,6 +884,28 @@ function makeSoStyles(isDark: boolean) {
       backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)',
       borderColor: isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)',
     },
+    pingRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingHorizontal: Spacing.lg, paddingVertical: 13,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: isDark ? 'rgba(187,146,255,0.08)' : 'rgba(143,99,244,0.06)',
+    },
+    pingDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+    pingTitle: { color: isDark ? '#F1F0FF' : '#1A1730', fontWeight: '700', fontSize: 14 },
+    pingSub: { color: isDark ? '#6B7280' : '#6B6080', fontSize: 12, marginTop: 2 },
+    pingBadge: {
+      paddingHorizontal: 9, paddingVertical: 4, borderRadius: Radius.full,
+    },
+    pingBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
+    detailOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+    detailSheet: {
+      height: '88%', backgroundColor: isDark ? '#111111' : '#FFFFFF',
+      borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden',
+    },
+    detailHandle: {
+      width: 36, height: 4, borderRadius: 2,
+      backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginTop: 10, marginBottom: 4,
+    },
   });
 }
 
@@ -883,14 +962,17 @@ export default function MapScreen() {
   const [vibeFilter, setVibeFilter] = useState<string>('');
   const [distanceFilter, setDistanceFilter] = useState<number>(0);
   const [timeFilter, setTimeFilter] = useState<string>('');
+  const [genderFilter, setGenderFilter] = useState<string>('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   // Draft values while the sheet is open — applied on "Show results"
   const [draftDistance, setDraftDistance] = useState(0);
   const [draftVibe, setDraftVibe] = useState('');
   const [draftTime, setDraftTime] = useState('');
   const [draftType, setDraftType] = useState('');
+  const [draftGender, setDraftGender] = useState('');
   const distanceFilterRef = useRef(0);
-  const [myActivePing, setMyActivePing] = useState<Activity | null>(null);
+  const [myActivePings, setMyActivePings] = useState<Activity[]>([]);
+  const [showPingList, setShowPingList] = useState(false);
   const [mapPois, setMapPois] = useState<MapPoi[]>([]);
   const [selectedPoi, setSelectedPoi] = useState<MapPoi | null>(null);
   const { user } = useAuthStore();
@@ -958,18 +1040,19 @@ export default function MapScreen() {
   async function loadMyActivePing() {
     try {
       const r = await activitiesApi.mine('live');
-      setMyActivePing(r.activities[0] ?? null);
+      setMyActivePings(r.activities ?? []);
     } catch {
       // non-fatal
     }
   }
 
 
-  async function handleCancelMyPing() {
-    if (!myActivePing) return;
+  async function handleCancelMyPing(pingId?: string) {
+    const id = pingId ?? myActivePings[0]?._id;
+    if (!id) return;
     try {
-      await activitiesApi.cancel(myActivePing._id);
-      setMyActivePing(null);
+      await activitiesApi.cancel(id);
+      setMyActivePings((prev) => prev.filter((p) => p._id !== id));
       loadNearby(true);
       Toast.show({ type: 'success', text1: 'Ping cancelled.', text2: 'Your ping has been removed.' });
     } catch (err: any) {
@@ -1046,6 +1129,7 @@ export default function MapScreen() {
     setDraftVibe(vibeFilter);
     setDraftTime(timeFilter);
     setDraftType(typeFilter);
+    setDraftGender(genderFilter);
     setShowFilterPanel(true);
   }
 
@@ -1056,6 +1140,7 @@ export default function MapScreen() {
     setVibeFilter(draftVibe);
     setTimeFilter(draftTime);
     setTypeFilter(draftType);
+    setGenderFilter(draftGender);
     setShowFilterPanel(false);
     if (distanceChanged) loadNearby(true);
   }
@@ -1066,10 +1151,12 @@ export default function MapScreen() {
     setVibeFilter('');
     setTimeFilter('');
     setTypeFilter('');
+    setGenderFilter('');
     setDraftDistance(0);
     setDraftVibe('');
     setDraftTime('');
     setDraftType('');
+    setDraftGender('');
     setShowFilterPanel(false);
     loadNearby(true);
   }
@@ -1150,26 +1237,26 @@ export default function MapScreen() {
     return () => sub.remove();
   }, [])); // empty — ref always holds current values
 
-  const filteredActivities = activities.filter((a) => {
+  function passesActiveFilters(a: Activity): boolean {
     if (typeFilter && a.type !== typeFilter) return false;
     if (vibeFilter && a.vibe !== vibeFilter) return false;
+    if (genderFilter && (a.genderFilter ?? 'all') !== genderFilter) return false;
     const now = new Date();
-    if (timeFilter === 'now') {
-      return new Date(a.startsAt) <= now && new Date(a.expiresAt) > now;
-    }
+    if (timeFilter === 'now') return new Date(a.startsAt) <= now && new Date(a.expiresAt) > now;
     if (timeFilter === 'today') {
       const start = new Date(); start.setHours(0, 0, 0, 0);
-      const end = new Date(); end.setHours(23, 59, 59, 999);
+      const end   = new Date(); end.setHours(23, 59, 59, 999);
       const startsAt = new Date(a.startsAt);
       return startsAt >= start && startsAt <= end;
     }
-    if (timeFilter === 'later') {
-      return new Date(a.startsAt) > now;
-    }
+    if (timeFilter === 'later') return new Date(a.startsAt) > now;
     return true;
-  });
+  }
 
-  const activeFilterCount = (vibeFilter ? 1 : 0) + (distanceFilter ? 1 : 0) + (timeFilter ? 1 : 0);
+  const filteredActivities    = activities.filter(passesActiveFilters);
+  const filteredMyActivePings = myActivePings.filter(passesActiveFilters);
+
+  const activeFilterCount = (vibeFilter ? 1 : 0) + (distanceFilter ? 1 : 0) + (timeFilter ? 1 : 0) + (genderFilter ? 1 : 0);
   const distanceLabel = DISTANCE_OPTIONS.find((d) => d.value === distanceFilter)?.label;
   const vibeLabel = VIBE_FILTER.find((v) => v.key === vibeFilter)?.label;
   const timeLabel = TIME_OPTIONS.find((t) => t.key === timeFilter)?.label;
@@ -1313,34 +1400,35 @@ export default function MapScreen() {
           </Marker>
         )}
 
-        {/* Own active ping marker */}
-        {myActivePing && (() => {
-          const mLat = myActivePing.location?.coordinates?.[1];
-          const mLng = myActivePing.location?.coordinates?.[0];
+        {/* Own active ping markers — all of them */}
+        {filteredMyActivePings.map((myPing) => {
+          const mLat = myPing.location?.coordinates?.[1];
+          const mLng = myPing.location?.coordinates?.[0];
           if (!mLat || !mLng) return null;
-          const isSelected = selected?._id === myActivePing._id;
+          const isSelected = selected?._id === myPing._id;
           return (
             <Marker
-              key={`my-${myActivePing._id}`}
+              key={`my-${myPing._id}`}
               lngLat={[mLng, mLat]}
               anchor="bottom"
               onPress={() => {
                 suppressMapTapRef.current = true;
-                setTimeout(() => { suppressMapTapRef.current = false; }, 200);
-                // setSelectedAd(null);
-                setSelected((prev) => prev?._id === myActivePing._id ? null : myActivePing);
+                setTimeout(() => { suppressMapTapRef.current = false; }, 300);
+                cameraRef.current?.flyTo({ center: [mLng, mLat], zoom: 14, duration: 400 });
+                setTimeout(() => setSelected((prev) => prev?._id === myPing._id ? null : myPing), 300);
               }}
             >
               <PingMarker
-                type={myActivePing.type}
+                type={myPing.type}
+                markerIcon={myPing.markerIcon}
                 selected={isSelected}
-                count={myActivePing.participants?.length ?? 0}
-                genderFilter={myActivePing.genderFilter}
+                count={myPing.participants?.length ?? 0}
+                genderFilter={myPing.genderFilter}
                 isOwn
               />
             </Marker>
           );
-        })()}
+        })}
 
         {/* Activity ping markers */}
         {filteredActivities.map((a) => {
@@ -1359,14 +1447,16 @@ export default function MapScreen() {
               anchor="bottom"
               onPress={() => {
                 suppressMapTapRef.current = true;
-                setTimeout(() => { suppressMapTapRef.current = false; }, 200);
+                setTimeout(() => { suppressMapTapRef.current = false; }, 300);
                 console.log(`[Marker] onPress FIRED ping ${a._id} type=${a.type}`);
+                cameraRef.current?.flyTo({ center: [mLng, mLat], zoom: 14, duration: 400 });
                 // setSelectedAd(null);
-                setSelected((prev) => prev?._id === a._id ? null : a);
+                setTimeout(() => setSelected((prev) => prev?._id === a._id ? null : a), 300);
               }}
             >
               <PingMarker
                 type={a.type}
+                markerIcon={a.markerIcon}
                 selected={isSelected}
                 count={a.participants?.length ?? 0}
                 genderFilter={a.genderFilter}
@@ -1482,7 +1572,7 @@ export default function MapScreen() {
           onPress={() => router.push('/(tabs)/profile' as any)}
           activeOpacity={0.8}
         >
-          <Image source={require('../../assets/images/icon.png')} style={styles.greetIcon} />
+          <Image source={require('../../assets/images/ping.png')} style={styles.greetIcon} />
           <Text style={styles.greetText}>
             {user?.displayName?.split(' ')[0] ?? 'Hey'}
           </Text>
@@ -1490,16 +1580,20 @@ export default function MapScreen() {
 
         {/* Right: count + filter + search + chat */}
         <View style={styles.topRight}>
-          <View style={styles.countChip}>
+          <TouchableOpacity
+            style={styles.countChip}
+            onPress={() => setShowPingList(true)}
+            activeOpacity={0.75}
+          >
             {refreshing ? (
               <ActivityIndicator size="small" color={Ping.purpleLight} style={{ width: 16 }} />
             ) : (
               <>
                 <View style={styles.liveDot} />
-                <Text style={styles.countText}>{filteredActivities.length + (myActivePing ? 1 : 0)} pings</Text>
+                <Text style={styles.countText}>{filteredActivities.length + filteredMyActivePings.length} pings</Text>
               </>
             )}
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.iconChip}
@@ -1605,24 +1699,6 @@ export default function MapScreen() {
               })}
             </View>
 
-            <Text style={styles.filterPanelLabel}>Vibe</Text>
-            <View style={styles.filterPanelRow}>
-              {VIBE_FILTER.map((v) => {
-                const active = draftVibe === v.key;
-                return (
-                  <TouchableOpacity
-                    key={v.key}
-                    style={[styles.fpChip, active && { backgroundColor: `${v.color}22`, borderColor: v.color }]}
-                    onPress={() => setDraftVibe(active ? '' : v.key)}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons name={v.icon} size={13} color={active ? v.color : (isDark ? '#6B6B9A' : '#8B8499')} />
-                    <Text style={[styles.fpChipText, active && { color: v.color, fontWeight: '700' }]}>{v.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
             <Text style={styles.filterPanelLabel}>When</Text>
             <View style={styles.filterPanelRow}>
               {TIME_OPTIONS.map((t) => {
@@ -1635,6 +1711,29 @@ export default function MapScreen() {
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.fpChipText, active && styles.fpChipTextActive]}>{t.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterPanelLabel}>Gender</Text>
+            <View style={styles.filterPanelRow}>
+              {([
+                { key: '',            label: 'All',     icon: 'earth-outline',         color: Ping.purple },
+                { key: 'women_only',  label: 'Women',   icon: 'female-outline',        color: '#EC4899' },
+                { key: 'men_only',    label: 'Men',     icon: 'male-outline',          color: '#3B82F6' },
+                { key: 'others_only', label: 'Non-binary', icon: 'transgender-outline', color: '#F97316' },
+              ] as { key: string; label: string; icon: string; color: string }[]).map((g) => {
+                const active = draftGender === g.key;
+                return (
+                  <TouchableOpacity
+                    key={g.key || 'all'}
+                    style={[styles.fpChip, active && { backgroundColor: `${g.color}22`, borderColor: g.color }]}
+                    onPress={() => setDraftGender(g.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name={g.icon as any} size={13} color={active ? g.color : (isDark ? '#6B6B9A' : '#8B8499')} />
+                    <Text style={[styles.fpChipText, active && { color: g.color, fontWeight: '700' }]}>{g.label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -1844,6 +1943,126 @@ export default function MapScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Ping list bottom sheet modal */}
+      <Modal
+        visible={showPingList}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShowPingList(false)}
+      >
+        <TouchableOpacity
+          style={styles.pingListBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowPingList(false)}
+        />
+        <View style={[styles.pingListSheet, { paddingBottom: insets.bottom + 16 }]}>
+          {/* Handle */}
+          <View style={styles.pingListHandleArea}>
+            <View style={styles.pingListHandle} />
+          </View>
+          {/* Header */}
+          <View style={styles.pingListHeader}>
+            <View style={styles.pingListHeaderLeft}>
+              <View style={styles.pingListLiveDot} />
+              <Text style={styles.pingListTitle}>
+                {filteredActivities.length + filteredMyActivePings.length} Pings Nearby
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowPingList(false)} hitSlop={12}>
+              <Ionicons name="close" size={20} color={isDark ? '#9490C0' : '#6B6080'} />
+            </TouchableOpacity>
+          </View>
+          {/* List */}
+          <FlatList
+            data={[...filteredMyActivePings, ...filteredActivities]}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={styles.pingListContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const cfg = TYPE_CFG[item.type] ?? TYPE_CFG.default;
+              const isOwn = filteredMyActivePings.some((p) => p._id === item._id);
+              const now = new Date();
+              const startsAt = new Date(item.startsAt);
+              const diff = startsAt.getTime() - now.getTime();
+              const isLive = diff <= 0;
+              const timeLabel = isLive
+                ? 'Live'
+                : diff < 60 * 60_000
+                ? `in ${Math.round(diff / 60_000)}m`
+                : startsAt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+              const distText = item.distance != null
+                ? item.distance < 1000
+                  ? `${Math.round(item.distance)} m`
+                  : `${(item.distance / 1000).toFixed(1)} km`
+                : null;
+
+              return (
+                <TouchableOpacity
+                  style={[styles.pingListRow, { borderColor: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(0,0,0,0.07)' }]}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    setShowPingList(false);
+                    const lat = item.location?.coordinates?.[1];
+                    const lng = item.location?.coordinates?.[0];
+                    if (lat && lng) {
+                      cameraRef.current?.flyTo({ center: [lng, lat], zoom: 15, duration: 600 });
+                    }
+                    setTimeout(() => setSelected(item), 400);
+                  }}
+                >
+                  {/* Type icon */}
+                  <View style={[styles.pingListIcon, { backgroundColor: `${cfg.color}1A` }]}>
+                    <MaterialCommunityIcons name={cfg.icon} size={18} color={cfg.color} />
+                  </View>
+                  {/* Info */}
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.pingListRowTop}>
+                      <Text style={[styles.pingListRowTitle, { color: isDark ? '#F1F0FF' : '#1A1730' }]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {isOwn && (
+                        <View style={styles.pingListOwnBadge}>
+                          <Text style={styles.pingListOwnText}>Mine</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.pingListRowMeta}>
+                      <View style={[styles.pingListTimeBadge, isLive && styles.pingListTimeBadgeLive]}>
+                        {isLive && <View style={styles.pingListMicroDot} />}
+                        <Text style={[styles.pingListTimeText, isLive && styles.pingListTimeTextLive]}>
+                          {timeLabel}
+                        </Text>
+                      </View>
+                      {distText && (
+                        <>
+                          <Text style={[styles.pingListSep, { color: isDark ? '#4B4870' : '#C0BBD8' }]}>·</Text>
+                          <Ionicons name="location-outline" size={11} color={isDark ? '#6B6B9A' : '#9490C0'} />
+                          <Text style={[styles.pingListMetaText, { color: isDark ? '#6B6B9A' : '#9490C0' }]}>{distText}</Text>
+                        </>
+                      )}
+                      {(item.participants?.length ?? 0) > 0 && (
+                        <>
+                          <Text style={[styles.pingListSep, { color: isDark ? '#4B4870' : '#C0BBD8' }]}>·</Text>
+                          <Ionicons name="people-outline" size={11} color={isDark ? '#6B6B9A' : '#9490C0'} />
+                          <Text style={[styles.pingListMetaText, { color: isDark ? '#6B6B9A' : '#9490C0' }]}>{item.participants?.length}</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={isDark ? '#4B4870' : '#C0BBD8'} />
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={styles.pingListEmpty}>
+                <Text style={[styles.pingListEmptyText, { color: isDark ? '#6B6B9A' : '#9490C0' }]}>No pings nearby</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
+
       <SuccessToast
         visible={pingCreatedToast}
         message="Ping dropped. Now hope someone shows up."
@@ -1974,11 +2193,11 @@ function makeStyles(isDark: boolean) {
     },
     filterDot: {
       position: 'absolute',
-      top: 9,
-      right: 9,
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      top: 4,
+      right: 4,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
       backgroundColor: isDark ? Ping.purpleLight : Ping.purple,
       borderWidth: 1.5,
       borderColor: isDark ? 'rgba(8,8,21,0.9)' : 'rgba(255,255,255,0.9)',
@@ -2456,6 +2675,157 @@ function makeStyles(isDark: boolean) {
       fontSize: 13,
       fontWeight: '700',
       color: isDark ? '#D4C7FF' : '#6545D9',
+    },
+
+    // ── Ping list bottom sheet ─────────────────────────────────────────────────
+    pingListBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    pingListSheet: {
+      backgroundColor: isDark ? '#13131F' : '#FFFFFF',
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      maxHeight: SCREEN_H * 0.72,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(167,139,250,0.14)' : 'rgba(0,0,0,0.08)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -6 },
+      shadowOpacity: 0.22,
+      shadowRadius: 20,
+      elevation: 28,
+    },
+    pingListHandleArea: {
+      paddingTop: 10,
+      paddingBottom: 4,
+      alignItems: 'center',
+    },
+    pingListHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(167,139,250,0.28)' : 'rgba(0,0,0,0.14)',
+    },
+    pingListHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 18,
+      paddingTop: 8,
+      paddingBottom: 12,
+    },
+    pingListHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    pingListLiveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: Ping.green,
+      shadowColor: Ping.green,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.9,
+      shadowRadius: 4,
+    },
+    pingListTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: isDark ? '#F1F0FF' : '#1A1730',
+      letterSpacing: -0.3,
+    },
+    pingListContent: {
+      paddingHorizontal: 14,
+      paddingBottom: 8,
+      gap: 8,
+    },
+    pingListRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+    },
+    pingListIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    pingListRowTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 3,
+    },
+    pingListRowTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      flex: 1,
+    },
+    pingListOwnBadge: {
+      backgroundColor: `${Ping.purple}28`,
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    pingListOwnText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: Ping.purpleLight,
+    },
+    pingListRowMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    pingListTimeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+    },
+    pingListTimeBadgeLive: {
+      backgroundColor: isDark ? 'rgba(143,99,244,0.18)' : 'rgba(143,99,244,0.1)',
+    },
+    pingListMicroDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: Ping.purple,
+    },
+    pingListTimeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#9490C0' : '#7B6DAA',
+    },
+    pingListTimeTextLive: {
+      color: Ping.purpleLight,
+    },
+    pingListSep: {
+      fontSize: 11,
+      fontWeight: '400',
+    },
+    pingListMetaText: {
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    pingListEmpty: {
+      paddingVertical: 40,
+      alignItems: 'center',
+    },
+    pingListEmptyText: {
+      fontSize: 14,
+      fontWeight: '500',
     },
   });
 }

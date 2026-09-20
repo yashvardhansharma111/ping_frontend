@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet, AppState, Platform, type AppStateStatus } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 import 'react-native-reanimated';
 import * as SecureStore from 'expo-secure-store';
-import {
-  useFonts,
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-} from '@expo-google-fonts/plus-jakarta-sans';
+
+// Disable system font scaling globally so text stays the same size
+// regardless of Android accessibility large-text settings
+// @ts-ignore
+Text.defaultProps = { ...(Text.defaultProps ?? {}), allowFontScaling: false };
+// @ts-ignore
+TextInput.defaultProps = { ...(TextInput.defaultProps ?? {}), allowFontScaling: false };
 
 import Toast from 'react-native-toast-message';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,8 +23,14 @@ import SplashAnimation from '@/components/SplashAnimation';
 import { toastConfig } from '@/components/ToastConfig';
 import RatePingModal from '@/components/RatePingModal';
 import { activitiesApi, type PendingRating } from '@/lib/api';
-import { setupNotifications, addResponseListener, type NotificationPayload } from '@/lib/notifications';
+import { setupNotifications, addResponseListener, startSessionTracking, stopSessionTracking, type NotificationPayload } from '@/lib/notifications';
 import { Colors, Ping } from '@/constants/theme';
+
+// Set Android window background immediately so the transparent nav bar
+// (edgeToEdgeEnabled: true) never bleeds white before the first React render.
+if (Platform.OS === 'android') {
+  SystemUI.setBackgroundColorAsync('#0F0F12').catch(() => {});
+}
 
 function AuthGuard() {
   const { user, isLoading } = useAuthStore();
@@ -96,23 +103,24 @@ function AuthGuard() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { loadFromStorage, isLoading, user } = useAuthStore();
   const [splashDone, setSplashDone] = useState(false);
   const [ratingItem, setRatingItem] = useState<PendingRating | null>(null);
   const ratingChecked = useRef(false);
   const notifSetupDone = useRef(false);
 
-  const [fontsLoaded] = useFonts({
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-  });
-
   useEffect(() => {
     loadFromStorage();
     useThemeStore.getState().loadPreference();
   }, []);
+
+  // Keep Android window background in sync with theme so the transparent
+  // navigation bar (edgeToEdgeEnabled: true) never shows a white flash
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    SystemUI.setBackgroundColorAsync(c.background).catch(() => {});
+  }, [c.background]);
 
   // Register push token once per login session
   useEffect(() => {
@@ -123,8 +131,25 @@ export default function RootLayout() {
 
   // Reset flag on logout so token gets re-registered on next login
   useEffect(() => {
-    if (!user) notifSetupDone.current = false;
+    if (!user) {
+      notifSetupDone.current = false;
+      stopSessionTracking();
+    }
   }, [user]);
+
+  // Start session usage tracking on login; restart on foreground, stop on background
+  useEffect(() => {
+    if (!user) return;
+    startSessionTracking();
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') startSessionTracking();
+      else stopSessionTracking();
+    });
+    return () => {
+      sub.remove();
+      stopSessionTracking();
+    };
+  }, [!!user]);
 
   // Once the user session is loaded, check for any un-rated ping participants once per session
   useEffect(() => {
@@ -135,7 +160,6 @@ export default function RootLayout() {
       .catch(() => {});
   }, [isLoading, user]);
 
-  const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const navTheme = {
     ...(colorScheme === 'dark' ? DarkTheme : DefaultTheme),
     colors: {
@@ -149,12 +173,8 @@ export default function RootLayout() {
     },
   };
 
-  if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: '#0F0F12' }} />;
-  }
-
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
     <ThemeProvider value={navTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
 

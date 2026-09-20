@@ -39,6 +39,10 @@ import {
 } from '@/lib/placesApi';
 import { Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  Flame, Star, Lightning, Heart, Coffee, MusicNote, Basketball, Smiley, Campfire, GameController,
+} from 'phosphor-react-native';
+import type { Icon } from 'phosphor-react-native';
 import { Map as MapLibreMap, Camera } from '@maplibre/maplibre-react-native';
 import LocationPickerModal from './LocationPickerModal';
 
@@ -65,6 +69,33 @@ const VIBES: { key: string; icon: MCIName; label: string; color: string }[] = [
   { key: 'chill',      icon: 'leaf',            label: 'Chill',      color: '#10B981' },
   { key: 'networking', icon: 'handshake',       label: 'Networking', color: '#3B82F6' },
   { key: 'fitness',    icon: 'arm-flex',        label: 'Fitness',    color: '#22C55E' },
+];
+
+const TYPE_EXAMPLES: Record<string, string[]> = {
+  sport:   ['Cricket match', 'Football kickabout', 'Morning run', 'Badminton game'],
+  food:    ['Chai pe charcha', 'Cafe hopping', 'Street food walk', 'Brunch run'],
+  music:   ['Jam session', 'Open mic hang', 'Music practice', 'Beats & chill'],
+  study:   ['Study together', 'Group study', 'Exam prep session', 'Library gang'],
+  outdoor: ['Park walk', 'Evening stroll', 'Trek planning', 'Stargazing night'],
+  gaming:  ['Gaming session', 'Board games', 'LAN party', 'Carrom night'],
+  meetup:  ['Chai pe charcha', 'Rooftop chill', 'Random hangout', 'Sunday squad'],
+  custom:  ['Sketch walk', 'Photo stroll', 'Language swap', 'Yoga outside'],
+};
+
+const PHOSPHOR_ICON_MAP: Record<string, Icon> = {
+  flame: Flame, star: Star, lightning: Lightning, heart: Heart, coffee: Coffee,
+  musicNote: MusicNote, basketball: Basketball, smiley: Smiley, campfire: Campfire, gameController: GameController,
+};
+const PHOSPHOR_COLORS: Record<string, string> = {
+  flame: '#EF4444', star: '#F59E0B', lightning: '#8B5CF6', heart: '#EC4899', coffee: '#D97706',
+  musicNote: '#7C3AED', basketball: '#F97316', smiley: '#22C55E', campfire: '#EA580C', gameController: '#3B82F6',
+};
+const MARKER_EMOJIS = ['🎉', '🍕', '🎵', '⚽', '📚', '🎮', '🌟', '🎯', '🏃', '🎨'];
+
+const PRIVATE_VENUE_WORDS = [
+  'home', 'house', 'flat', 'apartment', 'bedroom', 'my room', 'pg room',
+  'hostel room', 'my place', 'my flat', 'my home', 'private', 'residence',
+  'my apartment', 'guest room', 'guestroom',
 ];
 
 
@@ -231,8 +262,9 @@ function TimePicker({ value, onChange, isDark }: { value: TimeState; onChange: (
 
 const TYPE_COLS = 4;
 const TYPE_GAP = 8;
+// Subtract a 4px safety margin so sub-pixel rounding never pushes the 4th card to the next row
 const TYPE_CARD_W =
-  (Dimensions.get('window').width - Spacing.lg * 2 - TYPE_GAP * (TYPE_COLS - 1)) / TYPE_COLS;
+  (Dimensions.get('window').width - Spacing.lg * 2 - TYPE_GAP * (TYPE_COLS - 1) - 4) / TYPE_COLS;
 
 function makeTlStyles(isDark: boolean) {
   return StyleSheet.create({
@@ -243,21 +275,19 @@ function makeTlStyles(isDark: boolean) {
     },
     card: {
       width: TYPE_CARD_W,
-      aspectRatio: 0.95,
+      paddingVertical: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 5,
+      gap: 4,
       borderRadius: 14,
       borderWidth: 1.5,
       borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-      paddingVertical: 8,
-      paddingHorizontal: 2,
     },
     iconCircle: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -656,11 +686,37 @@ function makeStyles(isDark: boolean) {
       height: 50,
     },
     iconInputText: { flex: 1, ...Typography.bodyMed, color: text, paddingVertical: 0 },
+    iconPickerBtn: {
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     venueHint: {
       ...Typography.caption,
       marginTop: 8,
       lineHeight: 16,
     },
+    venueWarnText: {
+      ...Typography.caption,
+      color: '#EF4444',
+      marginTop: 5,
+      lineHeight: 16,
+    },
+    // Title example chips
+    exampleRow: { gap: 8, paddingBottom: 2 },
+    exampleChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: Radius.full,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+    },
+    exampleChipActive: { backgroundColor: Ping.purple, borderColor: Ping.purple },
+    exampleChipText: { ...Typography.caption, color: muted, fontWeight: '600', fontSize: 11 },
     // Multi-line
     multiInput: {
       backgroundColor: inputBg,
@@ -851,7 +907,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [details, setDetails]         = useState('');
   const [notes, setNotes]             = useState('');
   const [visibility, setVisibility]   = useState<'public' | 'friends'>('public');
-  const [genderFilter, setGenderFilter] = useState<'all' | 'women_only' | 'men_only'>('all');
+  const [genderFilter, setGenderFilter] = useState<'all' | 'women_only' | 'men_only' | 'others_only'>('all');
   const [maxPeople, setMaxPeople]     = useState('');
   const [isNow, setIsNow]             = useState(true);
   const [scheduledTime, setScheduledTime] = useState<TimeState>(getDefaultTime);
@@ -867,6 +923,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedCoverIdx, setSelectedCoverIdx] = useState<number | null>(null);
+  const [markerIcon, setMarkerIcon] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -997,6 +1054,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
     setImageUrl(null);
     setUploadingImage(false);
     setSelectedCoverIdx(null);
+    setMarkerIcon(null);
     setStep(1);
   }
 
@@ -1091,6 +1149,15 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
       return;
     }
 
+    if (venueIsPrivate) {
+      Toast.show({
+        type: 'error',
+        text1: 'Private venue not allowed',
+        text2: 'Pick a public place — park, café, library, or any public spot.',
+      });
+      return;
+    }
+
     const maxP = maxPeople.trim() ? parseInt(maxPeople, 10) : undefined;
     if (maxP !== undefined && (isNaN(maxP) || maxP < 2 || maxP > 100)) {
       Toast.show({ type: 'error', text1: 'Invalid count', text2: 'Max participants must be between 2 and 100.' });
@@ -1117,6 +1184,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(vibe ? { vibe } : {}),
         ...(imageUrl ? { imageUrl } : {}),
+        ...(markerIcon ? { markerIcon } : {}),
       });
       if (created?.activity?.startsAt) {
         scheduleStartingNotification(
@@ -1150,6 +1218,11 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
   const mutedIconColor = isDark ? '#9490C0' : '#6B6080';
   const hintColor = isDark ? '#5C5A80' : '#8B85A0';
   const placeholderColor = isDark ? '#5C5A80' : '#8B85A0';
+
+  const venueIsPrivate = useMemo(() => {
+    const v = venue.toLowerCase();
+    return PRIVATE_VENUE_WORDS.some((w) => v.includes(w));
+  }, [venue]);
 
   return (
     <>
@@ -1225,6 +1298,26 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                       maxLength={80}
                       returnKeyType="done"
                     />
+                    {TYPE_EXAMPLES[type] && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={s.exampleRow}
+                        style={{ marginTop: 8 }}
+                      >
+                        {TYPE_EXAMPLES[type].map((ex) => (
+                          <TouchableOpacity
+                            key={ex}
+                            style={[s.exampleChip, title === ex && s.exampleChipActive]}
+                            onPress={() => setTitle(title === ex ? '' : ex)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={[s.exampleChipText, title === ex && { color: '#FFF' }]}>{ex}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
 
                   <View style={s.section}>
@@ -1245,6 +1338,60 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                         />
                       </View>
                     )}
+                  </View>
+
+                  <View style={s.section}>
+                    <Text style={s.label}>Marker Icon  <Text style={s.labelOptional}>(optional)</Text></Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+                    >
+                      {Object.keys(PHOSPHOR_ICON_MAP).map((key) => {
+                        const PhIcon = PHOSPHOR_ICON_MAP[key];
+                        const color = PHOSPHOR_COLORS[key];
+                        const active = markerIcon === key;
+                        return (
+                          <TouchableOpacity
+                            key={key}
+                            style={[
+                              s.iconPickerBtn,
+                              { backgroundColor: active ? `${color}30` : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
+                              { borderColor: active ? color : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' },
+                            ]}
+                            onPress={() => setMarkerIcon(active ? null : key)}
+                            activeOpacity={0.75}
+                          >
+                            <PhIcon size={22} color={active ? color : isDark ? '#9CA3AF' : '#6B7280'} weight={active ? 'fill' : 'regular'} />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+                    >
+                      {MARKER_EMOJIS.map((emoji) => {
+                        const active = markerIcon === emoji;
+                        return (
+                          <TouchableOpacity
+                            key={emoji}
+                            style={[
+                              s.iconPickerBtn,
+                              { backgroundColor: active ? `${Ping.purple}22` : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
+                              { borderColor: active ? Ping.purple : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' },
+                            ]}
+                            onPress={() => setMarkerIcon(active ? null : emoji)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={{ fontSize: 20, lineHeight: 24 }}>{emoji}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
                   </View>
 
                   <View style={s.section}>
@@ -1353,6 +1500,11 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                     <Text style={[s.venueHint, { color: hintColor }]}>
                       Choose public places — parks, cafés, lobbies. Avoid private homes.
                     </Text>
+                    {venueIsPrivate && (
+                      <Text style={s.venueWarnText}>
+                        Private places aren't allowed — pick a public spot like a park, café, or library.
+                      </Text>
+                    )}
 
                     {(loadingPlaces || Object.keys(categorizedPlaces).length > 0) && (
                       <View style={s.locSuggestWrap}>
@@ -1486,9 +1638,10 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                         { key: 'all', label: 'Everyone', icon: 'earth-outline' },
                         { key: 'women_only', label: 'Women', icon: 'female-outline' },
                         { key: 'men_only', label: 'Men', icon: 'male-outline' },
+                        { key: 'others_only', label: 'Non-binary', icon: 'transgender-outline' },
                       ] as const).map((g) => {
                         const active = genderFilter === g.key;
-                        const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : Ping.purple;
+                        const color = g.key === 'women_only' ? '#EC4899' : g.key === 'men_only' ? '#3B82F6' : g.key === 'others_only' ? '#F97316' : Ping.purple;
                         return (
                           <TouchableOpacity
                             key={g.key}

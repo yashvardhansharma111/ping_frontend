@@ -492,11 +492,11 @@ function PhotosSection({
         onRequestClose={() => setPhotoMenuIdx(null)}
       >
         <TouchableOpacity style={ph.menuOverlay} activeOpacity={1} onPress={() => setPhotoMenuIdx(null)}>
-          <View style={ph.menuSheet}>
-            <View style={ph.menuHandle} />
-            <Text style={ph.menuTitle}>Photo options</Text>
+          <View style={[ph.menuSheet, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <View style={[ph.menuHandle, { backgroundColor: c.border }]} />
+            <Text style={[ph.menuTitle, { color: c.text }]}>Photo options</Text>
             <TouchableOpacity
-              style={ph.menuBtn}
+              style={[ph.menuBtn, { backgroundColor: c.card, borderColor: c.border }]}
               activeOpacity={0.8}
               onPress={() => {
                 const idx = photoMenuIdx!;
@@ -504,11 +504,11 @@ function PhotosSection({
                 upload(idx);
               }}
             >
-              <Ionicons name="repeat-outline" size={18} color={Ping.purpleLight} />
-              <Text style={ph.menuBtnText}>Replace</Text>
+              <Ionicons name="repeat-outline" size={18} color={c.text} />
+              <Text style={[ph.menuBtnText, { color: c.text }]}>Replace</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[ph.menuBtn, ph.menuBtnDestructive]}
+              style={[ph.menuBtn, ph.menuBtnDestructive, { borderColor: 'rgba(239,68,68,0.22)' }]}
               activeOpacity={0.8}
               onPress={() => {
                 const idx = photoMenuIdx!;
@@ -519,8 +519,8 @@ function PhotosSection({
               <Ionicons name="trash-outline" size={18} color="#EF4444" />
               <Text style={ph.menuBtnTextDestructive}>Remove</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={ph.menuCancelBtn} activeOpacity={0.8} onPress={() => setPhotoMenuIdx(null)}>
-              <Text style={ph.menuCancelText}>Cancel</Text>
+            <TouchableOpacity style={[ph.menuCancelBtn, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.8} onPress={() => setPhotoMenuIdx(null)}>
+              <Text style={[ph.menuCancelText, { color: c.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -546,29 +546,27 @@ const ph = StyleSheet.create({
   hint: { fontSize: 11, textAlign: 'center', lineHeight: 16 },
   menuOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   menuSheet: {
-    backgroundColor: '#11112A', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderTopWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderTopWidth: 1,
     paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: 36, gap: Spacing.sm,
     alignItems: 'center',
   },
-  menuHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(167,139,250,0.3)', marginBottom: Spacing.sm },
-  menuTitle: { ...Typography.bodyMed, fontWeight: '700', color: '#F1F0FF', marginBottom: 4 },
+  menuHandle: { width: 36, height: 4, borderRadius: 2, marginBottom: Spacing.sm },
+  menuTitle: { ...Typography.bodyMed, fontWeight: '700', marginBottom: 4 },
   menuBtn: {
     width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 14, borderRadius: Radius.lg,
-    backgroundColor: 'rgba(167,139,250,0.1)', borderWidth: 1, borderColor: 'rgba(167,139,250,0.2)',
+    gap: 8, paddingVertical: 14, borderRadius: Radius.lg, borderWidth: 1,
   },
   menuBtnDestructive: {
-    backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)',
+    backgroundColor: 'rgba(239,68,68,0.08)',
   },
-  menuBtnText: { ...Typography.bodyMed, color: Ping.purpleLight, fontWeight: '600' },
+  menuBtnText: { ...Typography.bodyMed, fontWeight: '600' },
   menuBtnTextDestructive: { ...Typography.bodyMed, color: '#EF4444', fontWeight: '600' },
   menuCancelBtn: {
     width: '100%', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: Radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.05)', marginTop: 4,
+    paddingVertical: 14, borderRadius: Radius.lg, borderWidth: 1, marginTop: 4,
   },
-  menuCancelText: { ...Typography.bodyMed, color: 'rgba(241,240,255,0.5)', fontWeight: '600' },
+  menuCancelText: { ...Typography.bodyMed, fontWeight: '600' },
 });
 
 // ── Past pings preview ────────────────────────────────────────────────────────
@@ -745,6 +743,7 @@ export default function EditProfileScreen() {
   const [favoriteActivities, setFavoriteActivities] = useState<string[]>(user?.favoriteActivities ?? []);
   const [socialPreference, setSocialPreference] = useState<'introvert' | 'extrovert' | 'ambivert' | ''>(user?.socialPreference ?? '');
   const [instagramHandle, setInstagramHandle]   = useState(user?.instagramHandle ?? '');
+  const [snapchatHandle, setSnapchatHandle]     = useState(user?.snapchatHandle ?? '');
   const [linkedinHandle, setLinkedinHandle]     = useState(user?.linkedinHandle ?? '');
   const [spotifyHandle, setSpotifyHandle]       = useState(user?.spotifyHandle ?? '');
   const [sleepType, setSleepType]               = useState<'night_owl' | 'early_bird' | ''>(user?.sleepType ?? '');
@@ -784,6 +783,7 @@ export default function EditProfileScreen() {
     payload.favoriteActivities = favoriteActivities;
     payload.socialPreference = socialPreference || null;
     payload.instagramHandle = instagramHandle.trim().replace(/^@/, '');
+    payload.snapchatHandle = snapchatHandle.trim().replace(/^@/, '');
     payload.linkedinHandle = linkedinHandle.trim().replace(/^@/, '');
     payload.spotifyHandle = spotifyHandle.trim().replace(/^@/, '');
     payload.sleepType = sleepType || null;
@@ -824,7 +824,7 @@ export default function EditProfileScreen() {
 
   const completionItems: CompletionItem[] = useMemo(() => {
     const hasPhoto = !!(user?.avatarUrl || (user?.photos?.length ?? 0) > 0);
-    const hasSocial = !!(instagramHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim());
+    const hasSocial = !!(instagramHandle.trim() || snapchatHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim());
     const hasInterests = hobbies.length > 0 || favoriteActivities.length > 0;
     return [
       { key: 'photo', label: 'Add a photo', hint: 'First impression — at least one shot', section: 'photos', done: hasPhoto },
@@ -836,11 +836,11 @@ export default function EditProfileScreen() {
       { key: 'city', label: 'Current city', hint: 'Where you hang out now', section: 'personal', done: !!city.trim() },
       { key: 'email', label: 'Email', hint: 'For account & updates', section: 'personal', done: !!email.trim() },
       { key: 'interests', label: 'Hobbies or activities', hint: 'Pick a few you actually do', section: 'hobbies', done: hasInterests },
-      { key: 'social', label: 'A social link', hint: 'Instagram, LinkedIn, or Spotify', section: 'social', done: hasSocial },
+      { key: 'social', label: 'A social link', hint: 'Instagram, Snapchat, LinkedIn, or Spotify', section: 'social', done: hasSocial },
     ];
   }, [
     user?.avatarUrl, user?.photos, displayName, username, bio, dobInput, gender, city, email,
-    hobbies, favoriteActivities, instagramHandle, linkedinHandle, spotifyHandle,
+    hobbies, favoriteActivities, instagramHandle, snapchatHandle, linkedinHandle, spotifyHandle,
   ]);
 
   function jumpToCompletion(section: CompletionSection, _itemKey: string) {
@@ -879,7 +879,7 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
@@ -979,11 +979,12 @@ export default function EditProfileScreen() {
             summary={
               [
                 instagramHandle.trim() ? `IG @${instagramHandle}` : '',
+                snapchatHandle.trim() ? `SC @${snapchatHandle}` : '',
                 linkedinHandle.trim() ? 'LinkedIn' : '',
                 spotifyHandle.trim() ? 'Spotify' : '',
-              ].filter(Boolean).join(' · ') || 'Instagram, LinkedIn & Spotify'
+              ].filter(Boolean).join(' · ') || 'Instagram, Snapchat, LinkedIn & Spotify'
             }
-            hasValue={!!(instagramHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim())}
+            hasValue={!!(instagramHandle.trim() || snapchatHandle.trim() || linkedinHandle.trim() || spotifyHandle.trim())}
             c={c}
             highlighted={highlightSection === 'social'}
             onLayout={rememberY('social')}
@@ -998,6 +999,23 @@ export default function EditProfileScreen() {
                   value={instagramHandle}
                   onChangeText={(t) => setInstagramHandle(t.replace(/^@/, ''))}
                   placeholder="your_handle"
+                  placeholderTextColor={c.icon}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+
+            <View style={fi.wrap}>
+              <Text style={[fi.label, { color: c.textSecondary }]}>Snapchat</Text>
+              <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+                <MaterialCommunityIcons name="snapchat" size={16} color="#FFFC00" style={{ marginRight: 6 }} />
+                <Text style={{ ...Typography.bodyMed, marginRight: 2, color: c.icon }}>@</Text>
+                <TextInput
+                  style={[s.instaInput, { color: c.text }]}
+                  value={snapchatHandle}
+                  onChangeText={(t) => setSnapchatHandle(t.replace(/^@/, ''))}
+                  placeholder="your_username"
                   placeholderTextColor={c.icon}
                   autoCapitalize="none"
                   autoCorrect={false}

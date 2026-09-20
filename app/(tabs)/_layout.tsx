@@ -2,9 +2,11 @@ import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Text } from 'react-native';
 import { useRef, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
+import useNotificationStore from '@/lib/stores/notificationStore';
+import AddFriendModal from '@/components/AddFriendModal';
 import {
   MapTrifold,
   Lightning,
@@ -19,11 +21,13 @@ function TabItem({
   label,
   focused,
   scheme,
+  badge,
 }: {
   IconComp: Icon;
   label: string;
   focused: boolean;
   scheme: 'light' | 'dark';
+  badge?: number;
 }) {
   const anim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
@@ -61,11 +65,18 @@ function TabItem({
         },
       ]}
     >
-      <IconComp
-        size={21}
-        color={focused ? activeColor : inactiveColor}
-        weight={focused ? 'fill' : 'regular'}
-      />
+      <View style={s.iconWrap}>
+        <IconComp
+          size={21}
+          color={focused ? activeColor : inactiveColor}
+          weight={focused ? 'fill' : 'regular'}
+        />
+        {!!badge && badge > 0 && !focused && (
+          <View style={s.badgeDot}>
+            {badge <= 9 && <Text style={s.badgeText}>{badge}</Text>}
+          </View>
+        )}
+      </View>
       {focused && (
         <Animated.Text
           numberOfLines={1}
@@ -95,6 +106,7 @@ const TAB_SCREENS = [
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme() ?? 'dark';
+  const friendRequestCount = useNotificationStore((s) => s.friendRequestCount);
 
   return (
     <View
@@ -137,6 +149,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
               label={cfg.label}
               focused={focused}
               scheme={scheme}
+              badge={route.name === 'friends' ? friendRequestCount : undefined}
             />
           </TouchableOpacity>
         );
@@ -147,16 +160,19 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
 export default function TabLayout() {
   return (
-    <Tabs
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen name="index"   options={{ title: 'Map' }} />
-      <Tabs.Screen name="explore" options={{ title: 'Activities' }} />
-      <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
-      <Tabs.Screen name="events"  options={{ title: 'Events' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-    </Tabs>
+    <View style={{ flex: 1 }}>
+      <Tabs
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tabs.Screen name="index"   options={{ title: 'Map' }} />
+        <Tabs.Screen name="explore" options={{ title: 'Activities' }} />
+        <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
+        <Tabs.Screen name="events"  options={{ title: 'Events' }} />
+        <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      </Tabs>
+      <AddFriendModal />
+    </View>
   );
 }
 
@@ -195,5 +211,28 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  iconWrap: {
+    position: 'relative',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: -4,
+    right: -5,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderWidth: 1.5,
+    borderColor: '#10101A',
+  },
+  badgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#FFF',
+    lineHeight: 10,
   },
 });

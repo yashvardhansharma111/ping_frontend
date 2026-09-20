@@ -196,7 +196,7 @@ export default function SetupScreen() {
       </View>
 
       {/* ── Scrollable body ── */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 80 }]}
@@ -568,8 +568,8 @@ const s = StyleSheet.create({
 
   // DOB
   dobRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dobPart: { flex: 1 },
-  dobYear: { flex: 1.8 },
+  dobPart: { flex: 1, paddingHorizontal: 0, textAlign: 'center' },
+  dobYear: { flex: 1.8, paddingHorizontal: 0, textAlign: 'center' },
   dobSlash: { fontSize: 18, color: DIM, fontWeight: '300' },
 
   // Occupation chips

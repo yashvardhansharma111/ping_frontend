@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "700071478997",
+    "project_id": "ping-6acfe",
+    "storage_bucket": "ping-6acfe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:700071478997:android:bcac145deda48e3bf6045c",
+        "android_client_info": {
+          "package_name": "com.pingnow.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCnVLVXAW7PjeDbyBZNSya1Uh2q5RlGBo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

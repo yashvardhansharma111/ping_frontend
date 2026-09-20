@@ -117,7 +117,12 @@ export default function HighlightsSection({ userId, isOwnProfile, scheme = 'ligh
 
   return (
     <View style={hs.root}>
-      <Text style={hs.sectionLabel}>Highlights</Text>
+      <View style={hs.labelRow}>
+        <Text style={hs.sectionLabel}>Highlights</Text>
+        {isOwnProfile && highlights.length > 0 && (
+          <Text style={hs.holdHint}>Hold to edit or delete</Text>
+        )}
+      </View>
 
       {/* Auto-suggest banner */}
       {isOwnProfile && suggestion && (
@@ -199,10 +204,6 @@ export default function HighlightsSection({ userId, isOwnProfile, scheme = 'ligh
         )}
       </ScrollView>
 
-      {isOwnProfile && highlights.length > 0 && (
-        <Text style={hs.holdHint}>Hold a highlight to edit or delete</Text>
-      )}
-
       <CreateHighlightModal
         visible={showCreate}
         onClose={() => { setShowCreate(false); setEditingHighlight(null); }}
@@ -242,6 +243,7 @@ function makeHsStyles(isDark: boolean) {
   const tint  = isDark ? Ping.purpleLight : Ping.purple;
   return StyleSheet.create({
     root: { gap: Spacing.sm },
+    labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sectionLabel: { ...Typography.caption, color: muted, textTransform: 'uppercase', letterSpacing: 0.6 },
     loadingRow: { height: 100, justifyContent: 'center', alignItems: 'center' },
     suggestBanner: {
@@ -298,6 +300,6 @@ function makeHsStyles(isDark: boolean) {
     },
     emptyRow: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 8 },
     emptyText: { ...Typography.caption, color: dim, textAlign: 'center', maxWidth: 200 },
-    holdHint: { ...Typography.caption, color: dim, fontSize: 10, textAlign: 'center', paddingHorizontal: Spacing.lg },
+    holdHint: { ...Typography.caption, color: dim, fontSize: 10 },
   });
 }

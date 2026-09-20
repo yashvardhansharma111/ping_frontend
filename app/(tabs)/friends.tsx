@@ -7,18 +7,17 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
   ScrollView,
   Animated,
   Dimensions,
   Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useLocation } from '@/hooks/useLocation';
 import { friendsApi, usersApi, type Friendship, type User } from '@/lib/api';
 import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
@@ -27,10 +26,13 @@ import FadeInItem from '@/components/FadeInItem';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAuthStore from '@/lib/stores/authStore';
+import useNotificationStore from '@/lib/stores/notificationStore';
 import SuccessToast from '@/components/SuccessToast';
 import ConfirmSheet from '@/components/ConfirmSheet';
 import AppAvatar from '@/components/AppAvatar';
 import { EmptyState } from '@/components/ui';
+import StoryStrip from '@/components/StoryStrip';
+import CreatePingModal from '@/components/CreatePingModal';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -45,180 +47,6 @@ const TAB_LABELS: Record<Tab, string> = {
 
 const TABS: Tab[] = ['received', 'sent', 'friends', 'discover'];
 
-// ── Add Friend Modal ──────────────────────────────────────────────────────────
-function AddFriendModal({ visible, onClose, onSent, friendIds, pendingIds }: {
-  visible: boolean; onClose: () => void; onSent: () => void;
-  friendIds: Set<string>; pendingIds: Set<string>;
-}) {
-  const scheme = useColorScheme() ?? 'dark';
-  const c = Colors[scheme];
-  const insets = useSafeAreaInsets();
-  const { user: me } = useAuthStore();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<User[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [sending, setSending] = useState<string | null>(null);
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function onQueryChange(text: string) {
-    setQuery(text);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (text.trim().length < 2) { setResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await usersApi.search(text.trim());
-        setResults((res.users ?? []).filter((u) => u._id !== me?._id));
-      } catch {
-        setResults([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 400);
-  }
-
-  async function sendRequest(userId: string) {
-    if (sending || sentIds.has(userId)) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSending(userId);
-    try {
-      await friendsApi.send(userId);
-      setSentIds((prev) => new Set([...prev, userId]));
-      onSent();
-    } catch {
-      // silently ignore
-    } finally {
-      setSending(null);
-    }
-  }
-
-  function close() {
-    setQuery('');
-    setResults([]);
-    setSentIds(new Set());
-    onClose();
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
-      <KeyboardAvoidingView style={m.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={close} />
-        <View style={[m.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + Spacing.md }]}>
-          <View style={[m.handle, { backgroundColor: c.border }]} />
-          <View style={[m.header, { borderBottomColor: c.border }]}>
-            <Text style={[m.headerTitle, { color: c.text }]}>Add Friend</Text>
-            <TouchableOpacity onPress={close} hitSlop={10}>
-              <Ionicons name="close" size={22} color={c.icon} />
-            </TouchableOpacity>
-          </View>
-          <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.md }}>
-            <View style={[m.searchBar, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Ionicons name="search" size={18} color={c.icon} />
-              <TextInput
-                style={[m.searchInput, { color: c.text }]}
-                placeholder="Search by name or @username..."
-                placeholderTextColor={c.textSecondary}
-                value={query}
-                onChangeText={onQueryChange}
-                autoFocus
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-              {searching && <ActivityIndicator size="small" color={Ping.purpleLight} />}
-            </View>
-          </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={m.resultsList} style={{ maxHeight: 380 }}>
-            {results.length === 0 && query.trim().length >= 2 && !searching ? (
-              <View style={m.noResults}>
-                <Ionicons name="person-outline" size={32} color={c.textSecondary} />
-                <Text style={[m.noResultsText, { color: c.textSecondary }]}>No users found</Text>
-              </View>
-            ) : (
-              results.map((u) => {
-                const isFriend   = friendIds.has(u._id);
-                const isPending  = pendingIds.has(u._id) || sentIds.has(u._id);
-                const isLoading  = sending === u._id;
-                const isDisabled = isFriend || isPending || isLoading;
-                return (
-                  <View key={u._id} style={[m.resultRow, { borderBottomColor: c.border }]}>
-                    <AppAvatar uri={u.avatarUrl} name={u.displayName || u.phone} size={44} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[m.resultName, { color: c.text }]} numberOfLines={1}>{u.displayName ?? 'User'}</Text>
-                      {u.username ? <Text style={[m.resultSub, { color: c.textSecondary }]}>@{u.username}</Text> : null}
-                    </View>
-                    {isFriend ? (
-                      <View style={m.friendBadge}>
-                        <Ionicons name="people" size={13} color={Ping.purpleLight} />
-                        <Text style={m.friendBadgeText}>Friends</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[m.addBtn, isPending && m.addBtnSent]}
-                        onPress={() => sendRequest(u._id)}
-                        disabled={isDisabled}
-                        activeOpacity={0.8}
-                      >
-                        {isLoading ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : isPending ? (
-                          <Ionicons name="checkmark" size={16} color={Ping.green} />
-                        ) : (
-                          <Ionicons name="person-add" size={15} color="#FFF" />
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              })
-            )}
-            {query.trim().length < 2 && (
-              <View style={m.hint}>
-                <Ionicons name="information-circle-outline" size={20} color={c.textSecondary} />
-                <Text style={[m.hintText, { color: c.textSecondary }]}>Type at least 2 characters to search</Text>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-const m = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingTop: Spacing.sm },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: Spacing.sm },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
-  headerTitle: { ...Typography.h3 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderRadius: Radius.lg, borderWidth: 1.5, paddingHorizontal: Spacing.md, paddingVertical: 10, marginBottom: Spacing.sm },
-  searchInput: { flex: 1, ...Typography.bodySm },
-  resultsList: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  resultName: { ...Typography.bodyMed },
-  resultSub: { ...Typography.caption, marginTop: 1 },
-  addBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Ping.purple, alignItems: 'center', justifyContent: 'center' },
-  addBtnSent: { backgroundColor: 'rgba(34,197,94,0.15)' },
-  friendBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
-    backgroundColor: `${Ping.purple}18`,
-    borderWidth: 1,
-    borderColor: `${Ping.purpleLight}40`,
-  },
-  friendBadgeText: { color: Ping.purpleLight, fontSize: 11, fontWeight: '700' },
-  noResults: { alignItems: 'center', paddingTop: 32, gap: Spacing.sm },
-  noResultsText: { ...Typography.bodySm },
-  hint: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingTop: Spacing.lg, paddingHorizontal: Spacing.sm },
-  hintText: { ...Typography.caption, flex: 1 },
-});
-
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function FriendsScreen() {
   const scheme = useColorScheme() ?? 'dark';
@@ -226,13 +54,17 @@ export default function FriendsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user: me } = useAuthStore();
+  const { coords } = useLocation();
+  const setFriendRequestCount = useNotificationStore((s) => s.setFriendRequestCount);
+  const setShowAddFriend = useNotificationStore((s) => s.setShowAddFriend);
+  const setFriendSets = useNotificationStore((s) => s.setFriendSets);
+  const setAddFriendOnSent = useNotificationStore((s) => s.setAddFriendOnSent);
 
   const [tabIdx, setTabIdx] = useState(0);
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [received, setReceived] = useState<Friendship[]>([]);
   const [sent, setSent] = useState<Friendship[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
   const [acceptToast, setAcceptToast] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
@@ -247,6 +79,8 @@ export default function FriendsScreen() {
   const [discoverPage, setDiscoverPage] = useState(0);
   const discoverCoordsRef = useRef<{ lat: number; lng: number }>({ lat: 22.7196, lng: 75.8577 });
   const discoverFetched = useRef(false);
+
+  const [showCreate, setShowCreate] = useState(false);
 
   const [confirm, setConfirm] = useState({
     visible: false, title: '', subtitle: '', confirmLabel: 'Confirm', cancelLabel: 'Keep',
@@ -304,9 +138,17 @@ export default function FriendsScreen() {
         friendsApi.requests('received'),
         friendsApi.requests('sent'),
       ]);
-      setFriends((fr.friends ?? []).filter((f) => f.friend && f.friend.displayName !== 'Deleted user'));
-      setReceived(recv.requests ?? []);
-      setSent(snt.requests ?? []);
+      const friendList = (fr.friends ?? []).filter((f) => f.friend && f.friend.displayName !== 'Deleted user');
+      setFriends(friendList);
+      const recvList = recv.requests ?? [];
+      setReceived(recvList);
+      setFriendRequestCount(recvList.length);
+      const sntList = snt.requests ?? [];
+      setSent(sntList);
+      setFriendSets(
+        new Set(friendList.map((f) => f.friend?._id).filter(Boolean) as string[]),
+        new Set(sntList.map((s) => s.friend?._id).filter(Boolean) as string[]),
+      );
     } catch {
       // keep stale
     } finally {
@@ -395,6 +237,7 @@ export default function FriendsScreen() {
 
   useFocusEffect(useCallback(() => {
     load();
+    setAddFriendOnSent(load);
     // Pre-fetch discover in the background so it's ready when user swipes to that tab
     discoverFetched.current = false;
     loadDiscover();
@@ -431,8 +274,11 @@ export default function FriendsScreen() {
     });
   }
 
-  function timeAgo(iso: string) {
-    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  function timeAgo(iso: string | undefined | null) {
+    if (!iso) return '';
+    const ms = new Date(iso).getTime();
+    if (isNaN(ms)) return '';
+    const mins = Math.max(0, Math.round((Date.now() - ms) / 60_000));
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.round(mins / 60);
@@ -520,7 +366,8 @@ export default function FriendsScreen() {
 
   // ── Render: Discover user card ─────────────────────────────────────────────
   function renderDiscoverUser({ item, index }: { item: User; index: number }) {
-    const isSent = discoverSentIds.has(item._id);
+    const isPendingAlready = sent.some((f) => f.friend._id === item._id);
+    const isSent = isPendingAlready || discoverSentIds.has(item._id);
     const isSending = discoverSending === item._id;
     const metaBits = [item.city, item.occupation ? item.occupation : null].filter(Boolean) as string[];
     return (
@@ -540,20 +387,26 @@ export default function FriendsScreen() {
               <Text style={[styles.bio, { color: c.textSecondary }]} numberOfLines={1}>{item.bio}</Text>
             ) : null}
           </View>
-          <TouchableOpacity
-            style={[styles.discoverAddBtn, isSent && styles.discoverAddBtnSent]}
-            onPress={() => sendDiscoverRequest(item._id)}
-            disabled={isSent || !!isSending}
-            activeOpacity={0.8}
-          >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : isSent ? (
-              <Ionicons name="checkmark" size={15} color={Ping.green} />
-            ) : (
-              <Ionicons name="person-add-outline" size={15} color="#FFF" />
-            )}
-          </TouchableOpacity>
+          {isPendingAlready ? (
+            <View style={styles.discoverPendingBadge}>
+              <Text style={styles.discoverPendingText}>Pending</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.discoverAddBtn, isSent && styles.discoverAddBtnSent]}
+              onPress={() => sendDiscoverRequest(item._id)}
+              disabled={isSent || !!isSending}
+              activeOpacity={0.8}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : isSent ? (
+                <Ionicons name="checkmark" size={15} color={Ping.green} />
+              ) : (
+                <Ionicons name="person-add-outline" size={15} color="#FFF" />
+              )}
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </FadeInItem>
     );
@@ -647,7 +500,7 @@ export default function FriendsScreen() {
                 title={empty.title}
                 subtitle={empty.sub}
                 actionLabel={tab === 'friends' || tab === 'received' ? (tab === 'friends' ? 'Add friends' : 'Find people') : undefined}
-                onAction={tab === 'friends' || tab === 'received' ? () => setShowAdd(true) : undefined}
+                onAction={tab === 'friends' || tab === 'received' ? () => setShowAddFriend(true) : undefined}
               />
             }
           />
@@ -675,10 +528,13 @@ export default function FriendsScreen() {
             {friends.length > 0 ? `${friends.length} friend${friends.length === 1 ? '' : 's'}` : 'Find people near you'}
           </Text>
         </View>
-        <TouchableOpacity style={[styles.addBtn, { backgroundColor: Ping.purple }]} onPress={() => setShowAdd(true)} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.addBtn, { backgroundColor: Ping.purple }]} onPress={() => setShowAddFriend(true)} activeOpacity={0.85}>
           <Ionicons name="person-add" size={18} color="#FFF" />
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Stories + Recent Pings strip */}
+      <StoryStrip onCreatePing={() => setShowCreate(true)} />
 
       {/* Tab pills with animated underline */}
       <View style={styles.filterRow}>
@@ -725,14 +581,6 @@ export default function FriendsScreen() {
         </ScrollView>
       </View>
 
-      <AddFriendModal
-        visible={showAdd}
-        onClose={() => setShowAdd(false)}
-        onSent={load}
-        friendIds={new Set(friends.map((f) => f.friend?._id).filter(Boolean) as string[])}
-        pendingIds={new Set(sent.map((s) => s.friend?._id).filter(Boolean) as string[])}
-      />
-
       <ConfirmSheet
         visible={confirm.visible}
         onClose={() => setConfirm((p) => ({ ...p, visible: false }))}
@@ -747,6 +595,14 @@ export default function FriendsScreen() {
 
       <SuccessToast visible={acceptToast} message="Friend request accepted!" subMessage="You're now connected" icon="people" color="#22C55E" onDone={() => setAcceptToast(false)} />
       <SuccessToast visible={!!errorToast} message={errorToast ?? ''} icon="alert-circle" color="#EF4444" onDone={() => setErrorToast(null)} />
+
+      <CreatePingModal
+        visible={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => setShowCreate(false)}
+        lat={coords.latitude}
+        lng={coords.longitude}
+      />
     </View>
   );
 }
@@ -821,4 +677,9 @@ const styles = StyleSheet.create({
     shadowColor: Ping.purple, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 3,
   },
   discoverAddBtnSent: { backgroundColor: 'rgba(34,197,94,0.12)', shadowOpacity: 0 },
+  discoverPendingBadge: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    backgroundColor: `${Ping.purple}20`, borderWidth: 1, borderColor: `${Ping.purple}50`,
+  },
+  discoverPendingText: { fontSize: 11, fontWeight: '600', color: Ping.purpleLight, letterSpacing: 0.2 },
 });

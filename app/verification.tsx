@@ -37,13 +37,24 @@ function pickRandomPose() {
 
 // ── Intro ─────────────────────────────────────────────────────────────────────
 
-function IntroStep({ onStart, onSkip, c }: { onStart: () => void; onSkip: () => void; c: ThemeColors }) {
+function IntroStep({ onStart, onSkip, c, isDark }: { onStart: () => void; onSkip: () => void; c: ThemeColors; isDark: boolean }) {
+  const pulse = useRef(new Animated.Value(0.6)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.6, duration: 1400, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
   return (
     <View style={s.fill}>
       <View style={intro.iconWrap}>
-        <View style={[intro.outerRing, { borderColor: c.primary + '50' }]}>
-          <View style={[intro.iconCircle, { backgroundColor: c.primary }]}>
-            <Ionicons name="checkmark" size={44} color="#FFF" />
+        <Animated.View style={[intro.pulseRing, { opacity: pulse }]} />
+        <View style={[intro.outerRing, { borderColor: `${Ping.purple}50`, backgroundColor: `${Ping.purple}12` }]}>
+          <View style={[intro.iconCircle, { backgroundColor: Ping.purple }]}>
+            <Ionicons name="shield-checkmark" size={38} color="#FFF" />
           </View>
         </View>
       </View>
@@ -53,7 +64,7 @@ function IntroStep({ onStart, onSkip, c }: { onStart: () => void; onSkip: () => 
         Take a quick selfie to confirm it's really you. Verified profiles get more trust and access to women-only pings.
       </Text>
 
-      <View style={intro.bullets}>
+      <View style={[intro.bullets, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(143,99,244,0.05)', borderColor: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(143,99,244,0.1)' }]}>
         <BulletRow text="Takes less than 30 seconds" c={c} />
         <BulletRow text="Selfie is deleted after verification" c={c} />
         <BulletRow text="Only your verified status is stored" c={c} />
@@ -61,10 +72,11 @@ function IntroStep({ onStart, onSkip, c }: { onStart: () => void; onSkip: () => 
 
       <View style={intro.actions}>
         <TouchableOpacity
-          style={[intro.startBtn, { backgroundColor: c.primary }]}
+          style={intro.startBtn}
           onPress={onStart}
           activeOpacity={0.85}
         >
+          <Ionicons name="camera" size={18} color="#FFF" />
           <Text style={intro.startText}>Start Verification</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onSkip} style={intro.skipBtn} activeOpacity={0.6}>
@@ -78,35 +90,45 @@ function IntroStep({ onStart, onSkip, c }: { onStart: () => void; onSkip: () => 
 function BulletRow({ text, c }: { text: string; c: ThemeColors }) {
   return (
     <View style={intro.bulletRow}>
-      <View style={intro.dot} />
+      <Ionicons name="checkmark-circle" size={15} color={GREEN} />
       <Text style={[intro.bulletText, { color: c.text }]}>{text}</Text>
     </View>
   );
 }
 
 const intro = StyleSheet.create({
-  iconWrap: { alignItems: 'center', marginBottom: 28 },
+  iconWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
+  pulseRing: {
+    position: 'absolute',
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: `${Ping.purple}14`,
+  },
   outerRing: {
-    width: 112, height: 112, borderRadius: 56,
-    borderWidth: 2, alignItems: 'center', justifyContent: 'center',
+    width: 110, height: 110, borderRadius: 55,
+    borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
   },
   iconCircle: {
-    width: 88, height: 88, borderRadius: 44,
+    width: 82, height: 82, borderRadius: 41,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Ping.purple, shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
+    shadowColor: Ping.purple, shadowOpacity: 0.55, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
+    elevation: 14,
   },
-  title: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 },
-  sub: { fontSize: 14, textAlign: 'center', lineHeight: 22, paddingHorizontal: 28, marginBottom: 32 },
-  bullets: { width: '100%', paddingHorizontal: 28, gap: 14, marginBottom: 40 },
+  title: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 10, paddingHorizontal: 16, letterSpacing: -0.5 },
+  sub: { fontSize: 14, textAlign: 'center', lineHeight: 22, paddingHorizontal: 24, marginBottom: 24, opacity: 0.8 },
+  bullets: {
+    width: '100%', paddingHorizontal: 20, paddingVertical: 16,
+    gap: 12, marginBottom: 36,
+    borderRadius: 16, borderWidth: 1,
+  },
   bulletRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: GREEN, flexShrink: 0 },
   bulletText: { fontSize: 14, flex: 1 },
   actions: { width: '100%', paddingHorizontal: 20, gap: 10 },
   startBtn: {
-    borderRadius: 14, paddingVertical: 16, alignItems: 'center',
-    shadowColor: Ping.purple, shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 14, paddingVertical: 16,
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple, shadowOpacity: 0.55, shadowRadius: 18, shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   startText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   skipBtn: { alignItems: 'center', paddingVertical: 10 },
@@ -297,7 +319,7 @@ function PreviewStep({
 
       <View style={prev_s.actions}>
         <TouchableOpacity
-          style={[prev_s.submitBtn, { backgroundColor: c.primary }, submitting && { opacity: 0.6 }]}
+          style={[prev_s.submitBtn, submitting && { opacity: 0.6 }]}
           onPress={onSubmit}
           disabled={submitting}
           activeOpacity={0.85}
@@ -329,7 +351,12 @@ const prev_s = StyleSheet.create({
   },
   poseTagText: { fontSize: 13, color: GREEN, textAlign: 'center', fontWeight: '600' },
   actions: { gap: 10 },
-  submitBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  submitBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: 'center',
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 5 },
+    elevation: 9,
+  },
   submitText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   retakeBtn: { alignItems: 'center', paddingVertical: 10 },
   retakeText: { fontSize: 14 },
@@ -337,53 +364,136 @@ const prev_s = StyleSheet.create({
 
 // ── Pending ───────────────────────────────────────────────────────────────────
 
-function PendingStep({ onBack, c }: { onBack: () => void; c: ThemeColors }) {
+function PendingStep({ onBack, c, isDark }: { onBack: () => void; c: ThemeColors; isDark: boolean }) {
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 2800, easing: Easing.linear, useNativeDriver: true })
+    ).start();
+  }, []);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
   return (
     <View style={s.centered}>
-      <View style={[s.iconCircle, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-        <Ionicons name="hourglass" size={44} color="#F59E0B" />
+      <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+        <Animated.View style={[pend_s.spinRing, { transform: [{ rotate }] }]} />
+        <View style={[s.iconCircle, { backgroundColor: 'rgba(245,158,11,0.12)', marginBottom: 0 }]}>
+          <Ionicons name="time-outline" size={44} color="#F59E0B" />
+        </View>
       </View>
       <Text style={[s.h1, { color: c.text }]}>Under Review</Text>
       <Text style={[s.sub, { color: c.textSecondary }]}>
         Your selfie has been submitted and is being reviewed by our team. This typically takes a few hours.
         You'll be notified once it's done.
       </Text>
-      <TouchableOpacity onPress={onBack} style={s.ghostBtn} activeOpacity={0.6}>
-        <Text style={[s.ghostText, { color: c.textSecondary }]}>Back to Profile</Text>
+      <View style={[pend_s.infoCard, {
+        backgroundColor: isDark ? 'rgba(245,158,11,0.06)' : 'rgba(245,158,11,0.05)',
+        borderColor: 'rgba(245,158,11,0.18)',
+      }]}>
+        <Ionicons name="notifications-outline" size={16} color="#F59E0B" />
+        <Text style={[pend_s.infoText, { color: c.textSecondary }]}>We'll notify you when your verification is complete.</Text>
+      </View>
+      <TouchableOpacity onPress={onBack} style={pend_s.backBtn} activeOpacity={0.85}>
+        <Text style={pend_s.backBtnText}>Back to Profile</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
+const pend_s = StyleSheet.create({
+  spinRing: {
+    position: 'absolute',
+    width: 112, height: 112, borderRadius: 56,
+    borderWidth: 2, borderColor: '#F59E0B',
+    borderTopColor: 'transparent', borderLeftColor: 'transparent',
+    opacity: 0.45,
+  },
+  infoCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderRadius: 14, padding: 14, marginBottom: 28, width: '100%',
+    borderWidth: 1,
+  },
+  infoText: { fontSize: 13, lineHeight: 20, flex: 1 },
+  backBtn: {
+    width: '100%', borderRadius: 14, paddingVertical: 16, alignItems: 'center',
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 5 },
+    elevation: 9,
+  },
+  backBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+});
+
 // ── Verified ──────────────────────────────────────────────────────────────────
 
-function VerifiedStep({ onBack, userName, c }: { onBack: () => void; userName?: string; c: ThemeColors }) {
+function VerifiedStep({ onBack, userName, userAvatar, c, isDark }: {
+  onBack: () => void; userName?: string; userAvatar?: string | null; c: ThemeColors; isDark: boolean;
+}) {
+  const pulse1 = useRef(new Animated.Value(0.55)).current;
+  const pulse2 = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse1, { toValue: 1, duration: 1300, useNativeDriver: true }),
+        Animated.timing(pulse1, { toValue: 0.55, duration: 1300, useNativeDriver: true }),
+      ])
+    ).start();
+    setTimeout(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulse2, { toValue: 1, duration: 1300, useNativeDriver: true }),
+          Animated.timing(pulse2, { toValue: 0.35, duration: 1300, useNativeDriver: true }),
+        ])
+      ).start();
+    }, 500);
+  }, []);
+
+  const letter = (userName ?? 'U')[0].toUpperCase();
+
   return (
     <View style={s.centered}>
-      <View style={ver_s.outerCircle}>
-        <View style={ver_s.innerCircle}>
-          <Ionicons name="checkmark" size={44} color="#FFF" />
+      {/* Layered pulse rings + check icon */}
+      <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+        <Animated.View style={[ver_s.pulseRing2, { opacity: pulse2 }]} />
+        <Animated.View style={[ver_s.pulseRing1, { opacity: pulse1 }]} />
+        <View style={ver_s.outerCircle}>
+          <View style={ver_s.innerCircle}>
+            <Ionicons name="checkmark" size={44} color="#FFF" />
+          </View>
         </View>
       </View>
+
       <Text style={[s.h1, { color: c.text }]}>You're verified!</Text>
       <Text style={[s.sub, { color: c.textSecondary }]}>
         Your profile now shows the Verified badge. This unlocks women-only pings and boosts trust with people nearby.
       </Text>
 
-      <View style={[ver_s.userCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={[ver_s.avatar, { backgroundColor: c.primary }]}>
-          <Text style={ver_s.avatarLetter}>{(userName ?? 'U')[0].toUpperCase()}</Text>
+      {/* User card */}
+      <View style={[ver_s.userCard, {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+        borderColor: isDark ? 'rgba(167,139,250,0.22)' : 'rgba(143,99,244,0.18)',
+      }]}>
+        <View style={ver_s.avatarWrap}>
+          {userAvatar ? (
+            <Image source={{ uri: userAvatar }} style={ver_s.avatarImg} />
+          ) : (
+            <View style={[ver_s.avatarFallback, { backgroundColor: `${Ping.purple}33` }]}>
+              <Text style={[ver_s.avatarLetter, { color: Ping.purpleLight }]}>{letter}</Text>
+            </View>
+          )}
+          <View style={ver_s.verifiedDot}>
+            <Ionicons name="checkmark-circle" size={18} color={GREEN} />
+          </View>
         </View>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={[ver_s.userName, { color: c.text }]}>{userName ?? 'You'}</Text>
-          <View style={ver_s.badge}>
-            <Ionicons name="checkmark-circle" size={13} color={GREEN} />
-            <Text style={ver_s.badgeText}>Verified</Text>
+          <View style={ver_s.verifiedPill}>
+            <View style={ver_s.greenDot} />
+            <Text style={ver_s.verifiedPillText}>Verified</Text>
           </View>
         </View>
       </View>
 
-      <TouchableOpacity style={[ver_s.doneBtn, { backgroundColor: c.primary }]} onPress={onBack} activeOpacity={0.85}>
+      <TouchableOpacity style={ver_s.doneBtn} onPress={onBack} activeOpacity={0.85}>
         <Text style={ver_s.doneBtnText}>Done</Text>
       </TouchableOpacity>
     </View>
@@ -391,31 +501,52 @@ function VerifiedStep({ onBack, userName, c }: { onBack: () => void; userName?: 
 }
 
 const ver_s = StyleSheet.create({
+  pulseRing1: {
+    position: 'absolute',
+    width: 160, height: 160, borderRadius: 80,
+    backgroundColor: `${Ping.purple}18`,
+  },
+  pulseRing2: {
+    position: 'absolute',
+    width: 200, height: 200, borderRadius: 100,
+    backgroundColor: `${Ping.purple}0C`,
+  },
   outerCircle: {
-    width: 112, height: 112, borderRadius: 56,
-    backgroundColor: 'rgba(34,197,94,0.12)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+    width: 114, height: 114, borderRadius: 57,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1.5, borderColor: 'rgba(34,197,94,0.28)',
+    alignItems: 'center', justifyContent: 'center',
   },
   innerCircle: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#16A34A',
+    width: 82, height: 82, borderRadius: 41, backgroundColor: '#16A34A',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: GREEN, shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowColor: GREEN, shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   userCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 16, padding: 16, marginTop: 24, marginBottom: 36,
+    borderRadius: 18, padding: 16, marginTop: 22, marginBottom: 32,
     borderWidth: 1, width: '100%',
   },
-  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  avatarLetter: { fontSize: 20, fontWeight: '700', color: '#FFF' },
-  userName: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  badgeText: { fontSize: 12, fontWeight: '600', color: GREEN },
+  avatarWrap: { position: 'relative' },
+  avatarImg: { width: 48, height: 48, borderRadius: 24 },
+  avatarFallback: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  avatarLetter: { fontSize: 20, fontWeight: '800' },
+  verifiedDot: { position: 'absolute', bottom: -3, right: -3 },
+  userName: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  verifiedPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    alignSelf: 'flex-start', backgroundColor: 'rgba(34,197,94,0.1)',
+    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.22)',
+  },
+  greenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN },
+  verifiedPillText: { fontSize: 12, fontWeight: '700', color: GREEN },
   doneBtn: {
     width: '100%', borderRadius: 14, paddingVertical: 16, alignItems: 'center',
-    shadowColor: Ping.purple, shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple, shadowOpacity: 0.55, shadowRadius: 18, shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   doneBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
 });
@@ -439,7 +570,8 @@ function RejectedStep({ reason, onTryAgain, c }: { reason: string | null; onTryA
           Your selfie didn't meet our requirements. Try again with better lighting and follow the pose exactly.
         </Text>
       )}
-      <TouchableOpacity style={[rej_s.tryBtn, { backgroundColor: c.primary }]} onPress={onTryAgain} activeOpacity={0.85}>
+      <TouchableOpacity style={rej_s.tryBtn} onPress={onTryAgain} activeOpacity={0.85}>
+        <Ionicons name="camera-outline" size={18} color="#FFF" />
         <Text style={rej_s.tryBtnText}>Try Again</Text>
       </TouchableOpacity>
     </View>
@@ -448,13 +580,19 @@ function RejectedStep({ reason, onTryAgain, c }: { reason: string | null; onTryA
 
 const rej_s = StyleSheet.create({
   reasonCard: {
-    backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
-    marginBottom: 32, width: '100%',
+    backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)',
+    marginBottom: 28, width: '100%',
   },
   reasonLabel: { fontSize: 11, fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   reasonText: { fontSize: 14, lineHeight: 22 },
-  tryBtn: { width: '100%', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  tryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    width: '100%', borderRadius: 14, paddingVertical: 16, marginTop: 8,
+    backgroundColor: Ping.purple,
+    shadowColor: Ping.purple, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 5 },
+    elevation: 9,
+  },
   tryBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
 });
 
@@ -476,8 +614,9 @@ export default function VerificationScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, setUser } = useAuthStore();
-  const scheme = useColorScheme();
+  const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
+  const isDark = scheme === 'dark';
 
   const [step, setStep] = useState<Step>('loading');
   const [pose, setPose] = useState('');
@@ -546,7 +685,7 @@ export default function VerificationScreen() {
 
   return (
     <View style={[root.wrap, { backgroundColor: c.background }]}>
-      <View style={[root.header, { paddingTop: insets.top + 6, borderBottomColor: c.border }]}>
+      <View style={[root.header, { paddingTop: insets.top + 6 }]}>
         {showBack ? (
           <TouchableOpacity onPress={handleBack} style={root.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="chevron-back" size={24} color={c.text} />
@@ -563,7 +702,7 @@ export default function VerificationScreen() {
           <ActivityIndicator size="large" color={c.primary} />
         </View>
       )}
-      {step === 'intro' && <IntroStep onStart={startFlow} onSkip={goBack} c={c} />}
+      {step === 'intro' && <IntroStep onStart={startFlow} onSkip={goBack} c={c} isDark={isDark} />}
       {step === 'pose' && (
         <PoseStep
           pose={pose}
@@ -581,12 +720,14 @@ export default function VerificationScreen() {
           c={c}
         />
       )}
-      {step === 'pending' && <PendingStep onBack={goBack} c={c} />}
+      {step === 'pending' && <PendingStep onBack={goBack} c={c} isDark={isDark} />}
       {step === 'verified' && (
         <VerifiedStep
           onBack={goBack}
           userName={user?.displayName || user?.username}
+          userAvatar={(user as any)?.avatarUrl ?? null}
           c={c}
+          isDark={isDark}
         />
       )}
       {step === 'rejected' && (
@@ -604,9 +745,8 @@ const root = StyleSheet.create({
   wrap: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16, paddingBottom: 14,
   },
   backBtn: { width: 36 },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700' },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
 });

@@ -1,14 +1,14 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  ScrollView,
   Platform,
   ActivityIndicator,
+  Animated,
+  Keyboard,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +33,20 @@ export default function PhoneScreen() {
 
   const [fontsLoaded] = useFonts({ Pacifico_400Regular });
 
+  const keyboardY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => {
+      Animated.timing(keyboardY, { toValue: e.endCoordinates.height, duration: 260, useNativeDriver: false }).start();
+    });
+    const hide = Keyboard.addListener(hideEvt, () => {
+      Animated.timing(keyboardY, { toValue: 0, duration: 220, useNativeDriver: false }).start();
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, [keyboardY]);
+
   const isValid = INDIA_PHONE_RE.test(phone.trim());
 
   async function handleSend() {
@@ -50,91 +64,83 @@ export default function PhoneScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        <View style={{ flex: 1, minHeight: insets.top + 24 }} />
+    // marginBottom tracks keyboard height — entire layout slides up, card stays at bottom
+    <Animated.View style={[s.root, { marginBottom: keyboardY }]}>
 
-        <View style={s.textBlock}>
-          <Text style={[
-            s.appName,
-            fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
-          ]}>
-            Ping
-          </Text>
-          <Text style={s.headline}>
-            Drop a ping,{'\n'}find your people.
-          </Text>
-          <Text style={s.subtitle}>
-            Real plans, real humans — not just profiles you'll never swipe right on.
-          </Text>
-        </View>
+      {/* Hero text — flex:1 fills space above the card */}
+      <View style={[s.hero, { paddingTop: insets.top + 28 }]}>
+        <Text style={[
+          s.appName,
+          fontsLoaded ? { fontFamily: 'Pacifico_400Regular' } : { fontStyle: 'italic', fontWeight: '700' },
+        ]}>
+          Ping
+        </Text>
+        <Text style={s.headline}>
+          Drop a ping,{'\n'}find your people.
+        </Text>
+        <Text style={s.subtitle}>
+          Real plans, real humans — not just profiles you'll never swipe right on.
+        </Text>
+      </View>
 
-        <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
-          <View style={s.pill} />
+      {/* Card — always flush at the bottom of the layout */}
+      <View style={[s.card, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={s.pill} />
 
-          <Text style={s.cardTitle}>Enter your mobile number</Text>
-          <Text style={s.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
+        <Text style={s.cardTitle}>Enter your mobile number</Text>
+        <Text style={s.cardSub}>We'll send you a code. One code. Try not to lose it.</Text>
 
-          <TouchableOpacity
-            style={[s.inputWrap, isValid && s.inputWrapFocus]}
-            activeOpacity={1}
-            onPress={() => inputRef.current?.focus()}
+        <TouchableOpacity
+          style={[s.inputWrap, isValid && s.inputWrapFocus]}
+          activeOpacity={1}
+          onPress={() => inputRef.current?.focus()}
+        >
+          <Text style={s.flag}>🇮🇳</Text>
+          <Text style={s.prefix}>+91</Text>
+          <View style={s.divider} />
+          <TextInput
+            ref={inputRef}
+            style={s.input}
+            placeholder="98765 43210"
+            placeholderTextColor={isDark ? '#555570' : '#A6A6B0'}
+            keyboardType="phone-pad"
+            maxLength={10}
+            value={phone}
+            onChangeText={(t) => setPhone(t.replace(/\D/g, ''))}
+            returnKeyType="send"
+            onSubmitEditing={handleSend}
+            autoFocus
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleSend}
+          disabled={!isValid || loading}
+          activeOpacity={0.88}
+          style={{ borderRadius: 9999, overflow: 'hidden', opacity: (!isValid || loading) ? 0.55 : 1 }}
+        >
+          <LinearGradient
+            colors={[...Gradients.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.btn}
           >
-            <Text style={s.flag}>🇮🇳</Text>
-            <Text style={s.prefix}>+91</Text>
-            <View style={s.divider} />
-            <TextInput
-              ref={inputRef}
-              style={s.input}
-              placeholder="98765 43210"
-              placeholderTextColor={isDark ? '#555570' : '#A6A6B0'}
-              keyboardType="phone-pad"
-              maxLength={10}
-              value={phone}
-              onChangeText={(t) => setPhone(t.replace(/\D/g, ''))}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-              autoFocus
-            />
-          </TouchableOpacity>
+            {loading
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={s.btnText}>Send OTP</Text>
+            }
+          </LinearGradient>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={!isValid || loading}
-            activeOpacity={0.88}
-            style={{ borderRadius: 9999, overflow: 'hidden', opacity: (!isValid || loading) ? 0.55 : 1 }}
-          >
-            <LinearGradient
-              colors={[...Gradients.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.btn}
-            >
-              {loading
-                ? <ActivityIndicator color="#FFF" />
-                : <Text style={s.btnText}>Send OTP</Text>
-              }
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <Text style={s.legal}>
-            By continuing, you agree to our{' '}
-            <Text style={s.legalLink}>Terms & Conditions</Text>
-            {' '}and{' '}
-            <Text style={s.legalLink}>Privacy Policy</Text>
-            .
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Text style={s.legal}>
+          By continuing, you agree to our{' '}
+          <Text style={s.legalLink}>Terms & Conditions</Text>
+          {' '}and{' '}
+          <Text style={s.legalLink}>Privacy Policy</Text>
+          .
+        </Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -147,15 +153,19 @@ function makeStyles(isDark: boolean) {
   const inputBg = isDark ? 'rgba(255,255,255,0.05)' : Ping.soft;
 
   return StyleSheet.create({
-    root:  { flex: 1, backgroundColor: bg },
-    scroll: { flexGrow: 1 },
-    textBlock: { paddingHorizontal: 28, paddingBottom: 24, gap: 10 },
-    appName: { fontSize: 52, color: Ping.purpleDim },
+    root: { flex: 1, backgroundColor: bg },
+    hero: {
+      flex: 1,
+      paddingHorizontal: 28,
+      justifyContent: 'flex-end',
+      paddingBottom: 32,
+    },
+    appName: { fontSize: 52, color: Ping.purpleDim, marginBottom: 2 },
     headline: {
       fontSize: 30, fontWeight: '800', color: text,
       lineHeight: 38, letterSpacing: -0.5, marginTop: 4,
     },
-    subtitle: { fontSize: 14, color: muted, lineHeight: 21, maxWidth: 300 },
+    subtitle: { fontSize: 14, color: muted, lineHeight: 21, maxWidth: 300, marginTop: 8 },
     card: {
       backgroundColor: surface,
       borderTopLeftRadius: 32,

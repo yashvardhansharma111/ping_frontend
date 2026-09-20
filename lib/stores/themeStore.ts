@@ -10,7 +10,7 @@ interface ThemeState {
 }
 
 const useThemeStore = create<ThemeState>((set) => ({
-  preference: 'light',
+  preference: 'dark',
 
   loadPreference: async () => {
     try {

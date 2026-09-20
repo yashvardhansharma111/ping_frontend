@@ -26,6 +26,7 @@ import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
 import PaywallModal from '@/components/PaywallModal';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -78,10 +79,12 @@ function PhotoCarousel({
   photos,
   initials,
   height = PHOTO_H,
+  insetTop = 0,
 }: {
   photos: string[];
   initials: string;
   height?: number;
+  insetTop?: number;
 }) {
   const [active, setActive] = useState(0);
 
@@ -103,16 +106,12 @@ function PhotoCarousel({
         onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
         renderItem={({ item }) => (
           <View style={[pc.photoWrap, { height }]}>
-            {/* Blurred fill — same photo scaled to cover the slot */}
-            <Image source={{ uri: item }} style={StyleSheet.absoluteFillObject} resizeMode="cover" blurRadius={22} />
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
-            {/* Crisp photo on top */}
-            <Image source={{ uri: item }} style={pc.photoContain} resizeMode="contain" />
+            <Image source={{ uri: item }} style={pc.photoFill} resizeMode="cover" />
           </View>
         )}
       />
       {photos.length > 1 && (
-        <View style={pc.dots}>
+        <View style={[pc.dots, { top: insetTop + 12 }]}>
           {photos.map((_, i) => (
             <View key={i} style={[pc.dot, i === active && pc.dotActive]} />
           ))}
@@ -125,13 +124,11 @@ function PhotoCarousel({
 const pc = StyleSheet.create({
   wrap: { width: SCREEN_W },
   photoWrap: { width: SCREEN_W, overflow: 'hidden' },
-  photo: { width: SCREEN_W },
-  photoContain: { width: SCREEN_W, flex: 1 },
+  photoFill: { width: SCREEN_W, flex: 1 },
   single: { width: SCREEN_W, alignItems: 'center', justifyContent: 'center' },
   initials: { fontSize: 80, fontWeight: '800', color: '#FFF' },
   dots: {
     position: 'absolute',
-    top: 20,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -210,21 +207,22 @@ type SocialItem = { label: string; color: string; url: string | null };
 
 function SocialBtn({ link }: { link: SocialItem }) {
   const active = !!link.url;
+  const btnBg = active ? link.color : 'rgba(128,128,128,0.25)';
   return (
     <TouchableOpacity
       onPress={active ? () => Linking.openURL(link.url!) : undefined}
-      style={[gal.socialBtn, !active && { opacity: 0.22 }]}
+      style={[gal.socialBtn, { backgroundColor: btnBg }, !active && { opacity: 0.4 }]}
       activeOpacity={active ? 0.75 : 1}
       disabled={!active}
     >
       {link.label === 'Snapchat' ? (
-        <MaterialCommunityIcons name="snapchat" size={20} color={link.color} />
+        <MaterialCommunityIcons name="snapchat" size={22} color={active ? '#FFF' : link.color} />
       ) : link.label === 'Instagram' ? (
-        <Ionicons name="logo-instagram" size={20} color={link.color} />
+        <Ionicons name="logo-instagram" size={22} color={active ? '#FFF' : link.color} />
       ) : link.label === 'LinkedIn' ? (
-        <Ionicons name="logo-linkedin" size={20} color={link.color} />
+        <Ionicons name="logo-linkedin" size={22} color={active ? '#FFF' : link.color} />
       ) : (
-        <Ionicons name="musical-notes-outline" size={20} color={link.color} />
+        <Ionicons name="musical-notes-outline" size={22} color={active ? '#FFF' : link.color} />
       )}
     </TouchableOpacity>
   );
@@ -394,6 +392,7 @@ function PhotoGallery({ photos }: { photos: string[] }) {
         data={photos}
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={{ height: THUMB }}
         contentContainerStyle={{ gap: GALLERY_GAP }}
         onMomentumScrollEnd={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / (THUMB + GALLERY_GAP));
@@ -454,10 +453,9 @@ const gal = StyleSheet.create({
   navDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.18)', marginHorizontal: 4 },
   socialRow: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
   socialBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1011,7 +1009,14 @@ export default function UserProfileScreen() {
 
     return (
       <View style={s.root}>
-        <PhotoCarousel photos={allPhotos} initials={initials} />
+        <PhotoCarousel photos={allPhotos} initials={initials} insetTop={insets.top} />
+
+        {/* Bottom gradient — blends photo into card */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.72)']}
+          style={s.photoGradient}
+          pointerEvents="none"
+        />
 
         <View style={[s.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={handleBack} hitSlop={12} style={s.headerBtn}>
@@ -1070,7 +1075,7 @@ export default function UserProfileScreen() {
     ctaText:    isDark ? '#000'                       : '#FFF',
     barBg:      isDark ? 'rgba(0,0,0,0.82)'           : 'rgba(246,243,239,0.96)',
     barBorder:  isDark ? 'rgba(255,255,255,0.10)'     : 'rgba(0,0,0,0.08)',
-    socialBg:   isDark ? 'rgba(255,255,255,0.07)'     : 'rgba(0,0,0,0.04)',
+    socialBg:   isDark ? 'rgba(255,255,255,0.10)'     : 'rgba(0,0,0,0.06)',
     headerBtn:  isDark ? 'rgba(0,0,0,0.45)'           : 'rgba(0,0,0,0.10)',
     headerText: isDark ? '#FFF'                       : '#111111',
   };
@@ -1300,6 +1305,13 @@ const s = StyleSheet.create({
   },
   headerHandle: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
+  photoGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 240,
+  },
   previewSheetWrap: {
     position: 'absolute',
     left: 0,

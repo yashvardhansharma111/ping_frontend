@@ -14,6 +14,7 @@ import {
   Modal,
   Share,
   Image,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,7 +33,6 @@ import {
   getMyParticipant,
   participantCount,
   getTimeStatus,
-  formatStartTime,
   STATUS_CONFIG,
 } from './ActivityCard';
 import PingFullCelebration from './PingFullCelebration';
@@ -49,6 +49,8 @@ const TYPE_OPENERS: Record<string, string> = {
   meetup:  "Look at us, actual humans meeting in real life. Wild. 👋",
   default: "Hey everyone! Your creator has entered the chat. No pressure. 😄",
 };
+
+const AVATAR_COLORS = ['#7C3AED', '#F97316', '#22C55E', '#3B82F6', '#EC4899', '#10B981'];
 
 const JOIN_TAUNTS = [
   'showed up — respect. 🫡',
@@ -75,6 +77,21 @@ const TYPE_META: Record<string, { icon: IoniconName; color: string }> = {
   meetup:  { icon: 'people-outline',          color: Ping.purple },
   default: { icon: 'location-outline',        color: Ping.purple },
 };
+
+function formatDateTimeLine(startsAt: string, expiresAt?: string): string {
+  const start = new Date(startsAt);
+  const isToday = start.toDateString() === new Date().toDateString();
+  const datePart = isToday ? 'Today' : start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const startT = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  if (!expiresAt) return `${datePart}, ${startT}`;
+  const endT = new Date(expiresAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${datePart}, ${startT} - ${endT}`;
+}
+
+function memberSince(createdAt: string): string {
+  const months = Math.floor((Date.now() - new Date(createdAt).getTime()) / (30 * 24 * 3600 * 1000));
+  return months < 1 ? 'New' : `${months}mo ago`;
+}
 
 function ParticipantAvatar({
   participant,
@@ -188,6 +205,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
   const [mutualCount, setMutualCount] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<{ names: string[]; count: number } | null>(null);
   const [connectSent, setConnectSent] = useState<Record<string, boolean>>({});
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
 
   // Destructive confirm states
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -207,6 +225,16 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       .then((r) => setMutualCount(r.count))
       .catch(() => setMutualCount(0));
   }, [a._id]);
+
+  // Load current friends so profile menu can show correct state
+  useEffect(() => {
+    friendsApi.list()
+      .then((r) => {
+        const ids = new Set<string>(r.friends.map((f) => f.friend._id));
+        setFriendIds(ids);
+      })
+      .catch(() => {});
+  }, []);
 
   // Always load full activity (populated participants + image) when sheet opens
   useEffect(() => {
@@ -403,7 +431,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
     <>
     <ScrollView
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={[styles.root, { paddingBottom: insets.bottom + 80 }]}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={32}
       scrollEnabled={scrollEnabled}
@@ -418,450 +446,443 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       }}
       key={a._id}
     >
-      {/* Cover image */}
+      {/* 1. Cover photo — full width, no border radius */}
       {a.imageUrl ? (
-        <Image source={{ uri: a.imageUrl }} style={styles.coverImage} resizeMode="cover" />
-      ) : null}
-
-      {/* Gradient header strip */}
-      <View style={[styles.gradientHeader, { backgroundColor: `${typeCfg.color}18` }]}>
-        <View style={[styles.gradientHeaderAccent, { backgroundColor: typeCfg.color }]} />
-        <View style={[styles.headerIconWrap, { backgroundColor: `${typeCfg.color}33` }]}>
-          <Ionicons name={typeCfg.icon} size={22} color={typeCfg.color} />
+        <Image source={{ uri: a.imageUrl }} style={styles.coverPhoto} resizeMode="cover" />
+      ) : (
+        <View style={[styles.coverPhotoPlaceholder, { backgroundColor: `${typeCfg.color}18` }]}>
+          <Ionicons name={typeCfg.icon} size={44} color={`${typeCfg.color}66`} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTitle, { color: typeCfg.color }]} numberOfLines={1}>{a.title}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg, alignSelf: 'flex-start' }]}>
-            <View style={[styles.statusDot, { backgroundColor: statusCfg.dot }]} />
-            <Text style={[styles.statusText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
+      )}
+
+      {/* 2. Content area */}
+      <View style={styles.contentPad}>
+
+        {/* Title + status badge */}
+        <View style={styles.titleRow}>
+          <Text style={[styles.pingTitle, { color: isDark ? '#F1F0FF' : '#111111' }]} numberOfLines={3}>{a.title}</Text>
+          <View style={[styles.liveBadge, { backgroundColor: statusCfg.bg }]}>
+            {timeStatus === 'live' && <View style={[styles.liveDot, { backgroundColor: statusCfg.dot }]} />}
+            <Text style={[styles.liveBadgeText, { color: statusCfg.text }]}>{statusCfg.label.toUpperCase()}</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.shareIconBtn, { backgroundColor: `${typeCfg.color}22` }]}
-          onPress={() => {
-            const HOOKS: Record<string, string> = {
-              food: "We're eating. Come hungry or don't come at all.",
-              sport: 'Moving our bodies like functioning humans. Join.',
-              music: 'The aux is open. Bring your actual taste.',
-              study: "Group delusion that we'll be productive. You in?",
-              outdoor: "Outside. On purpose. It'll be worth it.",
-              gaming: 'We play, we argue, we do it again. Classic.',
-              meetup: 'Real people. IRL. In this economy. Wild.',
-            };
-            const emoji = ({ sport: '🏃', food: '🍜', music: '🎧', study: '📖', outdoor: '🌿', gaming: '🎮', meetup: '👋' } as Record<string,string>)[a.type] ?? '📍';
-            const hook  = HOOKS[a.type];
-            const place = (a as any).placeName as string | undefined;
-            const time  = new Date(a.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-            const date  = new Date(a.startsAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-            const body  = [a.description?.trim() || null, place ? `📍 ${place}` : null, `🕐 ${date}, ${time}`].filter(Boolean).join('\n');
-            const msg   = [`${emoji} ${a.title}`, '', hook ?? body, ...(hook ? ['', body] : []), '', 'Get on Ping and join → https://pingnow.in'].join('\n');
-            Share.share({ message: msg });
-          }}
-          hitSlop={8}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="share-outline" size={18} color={typeCfg.color} />
-        </TouchableOpacity>
-      </View>
 
-      {/* Meta row (time / place / distance) */}
-      <View style={styles.metaBlock}>
-        <View style={styles.metaRow}>
-          <Ionicons name="time-outline" size={13} color={c.icon} />
-          <Text style={[styles.metaText, { color: timeStatus === 'live' ? Ping.purpleLight : c.textSecondary }]}>
-            {timeStatus === 'live' ? 'Happening now' : formatStartTime(a.startsAt)}
-          </Text>
+        {/* Gender chip + share */}
+        <View style={styles.subRow}>
+          {a.genderFilter && a.genderFilter !== 'all' && (
+            <View style={[styles.genderChip, { backgroundColor: 'rgba(143,99,244,0.12)', borderColor: `${Ping.purple}60` }]}>
+              <Ionicons name={a.genderFilter === 'women_only' ? 'female' : a.genderFilter === 'men_only' ? 'male' : 'transgender-outline'} size={11} color={Ping.purpleLight} />
+              <Text style={[styles.genderChipText, { color: Ping.purpleLight }]}>
+                {a.genderFilter === 'women_only' ? 'Women only' : a.genderFilter === 'men_only' ? 'Men only' : 'Non-binary only'}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.shareSmallBtn}
+            onPress={() => {
+              const HOOKS: Record<string, string> = {
+                food: "We're eating. Come hungry or don't come at all.",
+                sport: 'Moving our bodies like functioning humans. Join.',
+                music: 'The aux is open. Bring your actual taste.',
+                study: "Group delusion that we'll be productive. You in?",
+                outdoor: "Outside. On purpose. It'll be worth it.",
+                gaming: 'We play, we argue, we do it again. Classic.',
+                meetup: 'Real people. IRL. In this economy. Wild.',
+              };
+              const emoji = ({ sport: '🏃', food: '🍜', music: '🎧', study: '📖', outdoor: '🌿', gaming: '🎮', meetup: '👋' } as Record<string,string>)[a.type] ?? '📍';
+              const hook = HOOKS[a.type];
+              const place = (a as any).placeName as string | undefined;
+              const time = new Date(a.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+              const date = new Date(a.startsAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+              const body = [a.description?.trim() || null, place ? `📍 ${place}` : null, `🕐 ${date}, ${time}`].filter(Boolean).join('\n');
+              const msg = [`${emoji} ${a.title}`, '', hook ?? body, ...(hook ? ['', body] : []), '', 'Get on Ping and join → https://pingnow.in'].join('\n');
+              Share.share({ message: msg });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="share-outline" size={16} color={isDark ? 'rgba(241,240,255,0.5)' : '#6B7280'} />
+          </TouchableOpacity>
         </View>
-        {a.placeName ? (
-          <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={13} color={c.icon} />
-            <Text style={[styles.metaText, { color: c.textSecondary }]}>{a.placeName}</Text>
-          </View>
-        ) : null}
-        {a.distance !== undefined && a.distance !== null && (
-          <View style={styles.metaRow}>
-            <Ionicons name="navigate-outline" size={13} color={c.icon} />
-            <Text style={[styles.metaText, { color: c.textSecondary }]}>
-              {a.distance < 1000 ? `${Math.round(a.distance)}m away` : `${(a.distance / 1000).toFixed(1)}km away`}
+
+        {/* Bullet meta — 2-col grid */}
+        <View style={styles.metaGrid}>
+          <View style={styles.metaCell}>
+            <Ionicons name="calendar-outline" size={13} color={Ping.purpleLight} />
+            <Text style={[styles.metaCellText, { color: isDark ? 'rgba(241,240,255,0.75)' : '#374151' }]} numberOfLines={2}>
+              {formatDateTimeLine(a.startsAt, a.expiresAt)}
             </Text>
           </View>
-        )}
-      </View>
-
-      {/* Gender filter badge */}
-      {a.genderFilter && a.genderFilter !== 'all' && (
-        <View style={[
-          styles.genderBadge,
-          { backgroundColor: 'rgba(143,99,244,0.12)', borderColor: `${Ping.purple}60` },
-        ]}>
-          <Ionicons
-            name={a.genderFilter === 'women_only' ? 'female' : 'male'}
-            size={13}
-            color={Ping.purpleLight}
-          />
-          <Text style={[styles.genderBadgeText, { color: Ping.purpleLight }]}>
-            {a.genderFilter === 'women_only' ? 'Women only' : 'Men only'}
-          </Text>
+          <View style={styles.metaCell}>
+            <Ionicons name="location-outline" size={13} color={Ping.purpleLight} />
+            <Text style={[styles.metaCellText, { color: isDark ? 'rgba(241,240,255,0.75)' : '#374151' }]} numberOfLines={2}>
+              {a.placeName
+                ? a.distance !== undefined && a.distance !== null
+                  ? `${a.placeName} · ${a.distance < 1000 ? `${Math.round(a.distance)}m` : `${(a.distance / 1000).toFixed(1)}km`}`
+                  : a.placeName
+                : a.distance !== undefined && a.distance !== null
+                  ? a.distance < 1000 ? `${Math.round(a.distance)}m away` : `${(a.distance / 1000).toFixed(1)}km away`
+                  : 'Location not set'}
+            </Text>
+          </View>
         </View>
-      )}
 
-      {/* Description */}
-      {a.description ? (
-        <Text style={[styles.description, { color: c.textSecondary }]}>{a.description}</Text>
-      ) : null}
+        {/* People count */}
+        <Text style={[styles.peopleCount, { color: isDark ? 'rgba(241,240,255,0.4)' : '#9CA3AF' }]}>
+          {count > 0 ? `${count} ${count === 1 ? 'person' : 'people'} interested` : 'Be the first to join'}
+          {a.maxParticipants ? ` · ${Math.max(0, a.maxParticipants - count)} spots left` : ''}
+        </Text>
 
-      {/* Creator Safety Card (shown before joining a stranger's ping) */}
-      {a.creator?.displayName && (
-        <TouchableOpacity
-          style={[styles.creatorRow, { backgroundColor: c.surface, borderColor: c.border }]}
-          onPress={() => {
-            if (!creatorId) return;
-            if (isCreator) { router.push(`/user/${creatorId}`); return; }
-            const name = a.creator!.displayName!;
-            const alreadySent = connectSent[creatorId] ?? false;
-            setProfileMenu({ userId: creatorId, name, sent: alreadySent });
-          }}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.creatorAvatar, { backgroundColor: `${Ping.purple}44` }]}>
-            {a.creator.avatarUrl ? (
-              <Image source={{ uri: a.creator.avatarUrl }} style={styles.creatorAvatarImg} />
-            ) : (
-              <Text style={styles.creatorInitial}>
-                {a.creator.displayName[0].toUpperCase()}
-              </Text>
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.creatorName, { color: c.text }]}>{a.creator.displayName}</Text>
-            <View style={styles.creatorMeta}>
-              {/* Trust Rate — only shown once the creator has real ratings */}
-              {a.creator.ratingCount != null && a.creator.ratingCount > 0 && a.creator.trustRate !== undefined && (
-                <View style={styles.trustChip}>
-                  <View style={[styles.trustDot, { backgroundColor: Ping.purpleLight }]} />
-                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
-                    {a.creator.trustRate}% trust
-                  </Text>
+        {/* ── Host card ── */}
+        {a.creator?.displayName && (
+          <TouchableOpacity
+            style={[styles.hostCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB', borderColor: isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.07)' }]}
+            onPress={() => {
+              if (!creatorId) return;
+              if (isCreator) { router.push(`/user/${creatorId}`); return; }
+              const name = a.creator!.displayName!;
+              const alreadySent = connectSent[creatorId] ?? false;
+              setProfileMenu({ userId: creatorId, name, sent: alreadySent });
+            }}
+            activeOpacity={0.75}
+          >
+            <View style={styles.hostTop}>
+              <View style={[styles.hostAvatar, { backgroundColor: `${Ping.purple}44` }]}>
+                {a.creator.avatarUrl ? (
+                  <Image source={{ uri: a.creator.avatarUrl }} style={styles.hostAvatarImg} />
+                ) : (
+                  <Text style={styles.hostInitial}>{a.creator.displayName[0].toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.hostNameRow}>
+                  <Text style={[styles.hostName, { color: isDark ? '#F1F0FF' : '#111111' }]}>{a.creator.displayName}</Text>
+                  <Ionicons name="checkmark-circle" size={14} color={Ping.purpleLight} />
                 </View>
-              )}
-              {/* Mutual friends */}
-              {mutualCount !== null && mutualCount > 0 && (
-                <View style={styles.trustChip}>
-                  <Ionicons name="people-outline" size={10} color={Ping.purpleLight} />
-                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
-                    {mutualCount} mutual
-                  </Text>
-                </View>
-              )}
-              {/* Account age */}
-              {a.creator.createdAt && (
-                <View style={styles.trustChip}>
-                  <Ionicons name="calendar-outline" size={10} color={c.icon} />
-                  <Text style={[styles.trustText, { color: c.textSecondary }]}>
-                    {(() => {
-                      const months = Math.floor((Date.now() - new Date(a.creator.createdAt!).getTime()) / (30 * 24 * 3600 * 1000));
-                      return months < 1 ? 'New member' : `${months}mo ago`;
-                    })()}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-          {creatorId && <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />}
-        </TouchableOpacity>
-      )}
-
-      {/* Participants */}
-      {count > 0 && (() => {
-        const others = a.participants.filter((p) => {
-          const uid = typeof p.userId === 'string' ? p.userId : String((p.userId as any)?._id ?? p.userId ?? '');
-          return uid && uid !== myId;
-        });
-        const soloOwner = isCreator && others.length === 0;
-
-        return (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>
-                {soloOwner
-                  ? 'Just you so far'
-                  : `${count} going${a.maxParticipants ? ` · ${Math.max(0, a.maxParticipants - count)} spots left` : ''}`}
-              </Text>
-              {!soloOwner && others.length > 0 && (
-                <View style={styles.tapHint}>
-                  <Ionicons name="person-add-outline" size={11} color={Ping.purpleLight} />
-                  <Text style={[styles.tapHintText, { color: Ping.purpleLight }]}>tap to connect</Text>
-                </View>
-              )}
-            </View>
-
-            {soloOwner ? (
-              <View style={[styles.soloBox, { backgroundColor: `${typeCfg.color}12`, borderColor: `${typeCfg.color}28` }]}>
-                <Ionicons name="people-outline" size={18} color={typeCfg.color} />
-                <Text style={[styles.soloText, { color: c.textSecondary }]}>
-                  Waiting for others to join. Share this ping to fill it up.
+                <Text style={[styles.hostSub, { color: isDark ? 'rgba(241,240,255,0.4)' : '#9CA3AF' }]}>
+                  Host{a.creator.trustRate != null && a.creator.ratingCount != null && a.creator.ratingCount > 0
+                    ? ` · ${a.creator.trustRate}% Trust` : ''}
+                  {a.creator.createdAt ? ` · ${memberSince(a.creator.createdAt)}` : ''}
                 </Text>
               </View>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.participantsRow}>
-                {a.participants.slice(0, 12).map((p, i) => {
-                  const uid = typeof p.userId === 'string'
-                    ? p.userId
-                    : String((p.userId as any)?._id ?? (p.userId as any)?.id ?? '');
-                  const isSelf = !!uid && uid === myId;
-                  const alreadySent = uid ? connectSent[uid] : false;
-                  const name = p.displayName ?? p.username ?? 'this person';
-                  return (
-                    <ParticipantAvatar
-                      key={uid || i}
-                      index={i}
-                      participant={p}
-                      isSelf={isSelf}
-                      onPress={() => {
-                        if (!uid) {
-                          Toast.show({ type: 'error', text1: 'Unavailable', text2: 'Could not open this profile.' });
-                          return;
-                        }
-                        if (isSelf) {
-                          router.push(`/user/${uid}`);
-                          return;
-                        }
-                        setProfileMenu({ userId: uid, name, sent: alreadySent });
-                      }}
-                    />
-                  );
-                })}
-                {count > 12 && (
-                  <View style={[av.circle, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, marginTop: 4 }]}>
-                    <Text style={[av.letter, { color: c.textSecondary, fontSize: 12 }]}>+{count - 12}</Text>
-                  </View>
-                )}
-              </ScrollView>
-            )}
-          </View>
-        );
-      })()}
-
-      {/* Pre-meetup safety banner — shown when joined and starting within 30 min */}
-      {isJoined && !isCreator && a.startsAt && (() => {
-        const msUntil = new Date(a.startsAt).getTime() - Date.now();
-        return (timeStatus === 'live' || (msUntil > 0 && msUntil <= 30 * 60 * 1000));
-      })() && (
-        <TouchableOpacity
-          style={styles.safetyBanner}
-          onPress={() => router.push('/safety' as any)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.safetyBannerIcon}>
-            <Ionicons name="shield-checkmark" size={18} color="#22C55E" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.safetyBannerTitle}>Safety reminder</Text>
-            <Text style={styles.safetyBannerSub}>Share your location with a trusted contact before you meet.</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={14} color="#22C55E" />
-        </TouchableOpacity>
-      )}
-
-      {/* ── Action buttons ── */}
-      <View style={styles.actionsGrid}>
-        {/* Not joined yet */}
-        {!isJoined && !isCreator && (
-          <>
-            <TouchableOpacity
-              style={[styles.btnPrimary, isExpired && styles.btnDisabled]}
-              onPress={() => setShowJoinConfirm(true)}
-              disabled={joining || isExpired}
-              activeOpacity={0.85}
-            >
-              {joining ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name="add-circle" size={18} color="#FFF" />
-                  <Text style={styles.btnPrimaryText}>{isExpired ? 'Ping Ended' : 'Join Ping'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {!isExpired && (
-              <View style={styles.safetyNotice}>
-                <Ionicons name="shield-checkmark" size={15} color="#F59E0B" style={{ marginTop: 1 }} />
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={styles.safetyNoticeTitle}>1 registration = 1 person only</Text>
-                  <Text style={styles.safetyNoticeBody}>
-                    Bringing uninvited guests is a violation of Ping's community guidelines. If we detect attendance fraud — extra people joining under one registration — your account will be permanently suspended without appeal.
-                  </Text>
+              {creatorId && <Ionicons name="chevron-forward" size={16} color={isDark ? 'rgba(241,240,255,0.3)' : '#9CA3AF'} />}
+            </View>
+            {mutualCount !== null && mutualCount > 0 && (
+              <View style={styles.hostChipsRow}>
+                <View style={[styles.hostChip, { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)' }]}>
+                  <Ionicons name="people-outline" size={10} color="#22C55E" />
+                  <Text style={[styles.hostChipText, { color: '#22C55E' }]}>{mutualCount} mutual friend{mutualCount > 1 ? 's' : ''}</Text>
                 </View>
               </View>
             )}
-          </>
-        )}
-
-        {/* Joined actions */}
-        {isJoined && !isCreator && (
-          <>
-            <TouchableOpacity
-              style={styles.btnPrimary}
-              onPress={handleOpenChat}
-              disabled={chatLoading}
-              activeOpacity={0.85}
-            >
-              {chatLoading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name="chatbubbles" size={18} color="#FFF" />
-                  <Text style={styles.btnPrimaryText}>Open Chat</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.btnRow}>
-              {!myParticipant?.onMyWayAt && (
-                <TouchableOpacity
-                  style={styles.btnSecondary}
-                  onPress={handleOnMyWay}
-                  disabled={onMyWayLoading}
-                  activeOpacity={0.8}
-                >
-                  {onMyWayLoading ? (
-                    <ActivityIndicator size="small" color={Ping.purpleLight} />
-                  ) : (
-                    <>
-                      <Ionicons name="walk-outline" size={15} color={Ping.purpleLight} />
-                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              {!myParticipant?.arrivedAt && (
-                <TouchableOpacity
-                  style={[styles.btnSecondary, { borderColor: 'rgba(34,197,94,0.4)', backgroundColor: 'rgba(34,197,94,0.07)' }]}
-                  onPress={handleArrived}
-                  disabled={arrivedLoading}
-                  activeOpacity={0.8}
-                >
-                  {arrivedLoading ? (
-                    <ActivityIndicator size="small" color="#22C55E" />
-                  ) : (
-                    <>
-                      <Ionicons name="pin" size={15} color="#22C55E" />
-                      <Text style={[styles.btnSecondaryText, { color: '#22C55E' }]}>I'm Here</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.btnSecondary, styles.btnDanger]}
-                onPress={handleLeave}
-                disabled={leaving}
-                activeOpacity={0.8}
-              >
-                {leaving ? (
-                  <ActivityIndicator size="small" color="#EF4444" />
-                ) : (
-                  <>
-                    <Ionicons name="exit-outline" size={15} color="#EF4444" />
-                    <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Leave</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Discreet exit + report row */}
-            <View style={styles.safetyRow}>
-              <TouchableOpacity
-                style={styles.safetyBtn}
-                onPress={handleLeaveQuietly}
-                disabled={leavingQuietly}
-                activeOpacity={0.7}
-              >
-                {leavingQuietly ? (
-                  <ActivityIndicator size="small" color="#9490C0" />
-                ) : (
-                  <>
-                    <Ionicons name="eye-off-outline" size={13} color="#9490C0" />
-                    <Text style={styles.safetyBtnText}>Leave Quietly</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.safetyBtn} onPress={handleReport} activeOpacity={0.7}>
-                <Ionicons name="flag-outline" size={13} color="#9490C0" />
-                <Text style={styles.safetyBtnText}>Report</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {/* Not joined — report button */}
-        {!isJoined && !isCreator && (
-          <TouchableOpacity style={[styles.safetyRow, { justifyContent: 'flex-end' }]} onPress={handleReport} activeOpacity={0.7}>
-            <Ionicons name="flag-outline" size={13} color="#9490C0" />
-            <Text style={styles.safetyBtnText}>Report this ping</Text>
           </TouchableOpacity>
         )}
 
-        {/* Creator actions */}
-        {isCreator && (
-          <>
-            <TouchableOpacity
-              style={styles.btnPrimary}
-              onPress={handleOpenChat}
-              disabled={chatLoading}
-              activeOpacity={0.85}
-            >
-              {chatLoading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Ionicons name="chatbubbles" size={18} color="#FFF" />
-                  <Text style={styles.btnPrimaryText}>Open Chat</Text>
-                </>
-              )}
-            </TouchableOpacity>
+        {/* ── Event Details card ── */}
+        <View style={[styles.detailsCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(167,139,250,0.1)' : 'rgba(0,0,0,0.06)' }]}>
+          <Text style={[styles.detailsHeader, { color: isDark ? 'rgba(241,240,255,0.45)' : '#6B7280' }]}>EVENT DETAILS</Text>
+          {a.description ? (
+            <Text style={[styles.detailsDesc, { color: isDark ? 'rgba(241,240,255,0.8)' : '#374151' }]}>{a.description}</Text>
+          ) : (
+            <Text style={[styles.detailsDesc, { color: isDark ? 'rgba(241,240,255,0.3)' : '#9CA3AF' }]}>No description added.</Text>
+          )}
 
-            <View style={styles.btnRow}>
-              {!myParticipant?.onMyWayAt && (
-                <TouchableOpacity
-                  style={styles.btnSecondary}
-                  onPress={handleOnMyWay}
-                  disabled={onMyWayLoading}
-                  activeOpacity={0.8}
-                >
-                  {onMyWayLoading ? (
-                    <ActivityIndicator size="small" color={Ping.purpleLight} />
-                  ) : (
-                    <>
-                      <Ionicons name="walk-outline" size={15} color={Ping.purpleLight} />
-                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
+          {(() => {
+            const others = a.participants.filter((p) => {
+              const uid = typeof p.userId === 'string' ? p.userId : String((p.userId as any)?._id ?? p.userId ?? '');
+              return uid && uid !== myId;
+            });
+            const soloOwner = isCreator && others.length === 0;
+            return (
+              <>
+                <Text style={[styles.attendeesLabel, { color: isDark ? 'rgba(241,240,255,0.4)' : '#9CA3AF' }]}>
+                  {soloOwner ? 'Just you so far' : `Attendees: ${count} so far`}
+                </Text>
+                {!soloOwner && count > 0 && (
+                  <View style={styles.avatarStack}>
+                    {a.participants.slice(0, 5).map((p, i) => {
+                      const uid = typeof p.userId === 'string' ? p.userId : String((p.userId as any)?._id ?? '');
+                      const isSelf = !!uid && uid === myId;
+                      const name = p.displayName ?? p.username ?? '';
+                      const letter = name ? name[0].toUpperCase() : `${i + 1}`;
+                      const bg = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                      return (
+                        <TouchableOpacity
+                          key={uid || i}
+                          style={[styles.stackAvatar, { backgroundColor: `${bg}44`, borderColor: `${bg}88`, marginLeft: i === 0 ? 0 : -10, zIndex: 10 - i }]}
+                          onPress={() => {
+                            if (!uid) return;
+                            if (isSelf) { router.push(`/user/${uid}`); return; }
+                            setProfileMenu({ userId: uid, name: name || 'User', sent: connectSent[uid] ?? false });
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          {p.avatarUrl ? (
+                            <Image source={{ uri: p.avatarUrl }} style={styles.stackAvatarImg} />
+                          ) : (
+                            <Text style={[styles.stackAvatarLetter, { color: bg }]}>{isSelf ? 'Y' : letter}</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {count > 5 && (
+                      <View style={[styles.stackAvatar, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', marginLeft: -10, zIndex: 0 }]}>
+                        <Text style={[styles.stackAvatarLetter, { color: isDark ? 'rgba(241,240,255,0.6)' : '#6B7280', fontSize: 10 }]}>+{count - 5}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+                {soloOwner && (
+                  <View style={[styles.soloBox, { backgroundColor: `${typeCfg.color}10`, borderColor: `${typeCfg.color}25` }]}>
+                    <Ionicons name="people-outline" size={16} color={typeCfg.color} />
+                    <Text style={[styles.soloText, { color: isDark ? 'rgba(241,240,255,0.5)' : '#9CA3AF' }]}>Waiting for others to join</Text>
+                  </View>
+                )}
+              </>
+            );
+          })()}
+        </View>
+
+        {/* ── Map / location card ── */}
+        {(a.location?.coordinates || a.placeName) && (
+          <View style={[styles.mapCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F3F4F6', borderColor: isDark ? 'rgba(167,139,250,0.1)' : 'rgba(0,0,0,0.06)' }]}>
+            <View style={styles.mapCardLeft}>
+              <View style={[styles.mapIconWrap, { backgroundColor: `${Ping.purple}20` }]}>
+                <Ionicons name="map-outline" size={20} color={Ping.purple} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.mapVenue, { color: isDark ? '#F1F0FF' : '#111111' }]} numberOfLines={1}>
+                  {a.placeName ?? 'Location set'}
+                </Text>
+                <Text style={[styles.mapCity, { color: isDark ? 'rgba(241,240,255,0.4)' : '#9CA3AF' }]}>
+                  {a.distance !== undefined && a.distance !== null
+                    ? (a.distance < 1000 ? `${Math.round(a.distance)}m away` : `${(a.distance / 1000).toFixed(1)}km away`)
+                    : 'Tap for directions'}
+                </Text>
+              </View>
+            </View>
+            {a.location?.coordinates && (
+              <TouchableOpacity
+                style={[styles.directionsBtn, { backgroundColor: Ping.purple }]}
+                onPress={() => {
+                  const [lng, lat] = a.location!.coordinates;
+                  const label = encodeURIComponent(a.placeName ?? a.title);
+                  Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${label}`);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="navigate" size={13} color="#FFF" />
+                <Text style={styles.directionsBtnText}>Directions</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Safety banner — shown when joined + starting within 30 min */}
+        {isJoined && !isCreator && a.startsAt && (() => {
+          const msUntil = new Date(a.startsAt).getTime() - Date.now();
+          return (timeStatus === 'live' || (msUntil > 0 && msUntil <= 30 * 60 * 1000));
+        })() && (
+          <TouchableOpacity
+            style={styles.safetyBanner}
+            onPress={() => router.push('/safety' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.safetyBannerIcon}>
+              <Ionicons name="shield-checkmark" size={18} color="#22C55E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.safetyBannerTitle}>Safety reminder</Text>
+              <Text style={styles.safetyBannerSub}>Share your location with a trusted contact before you meet.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color="#22C55E" />
+          </TouchableOpacity>
+        )}
+
+        {/* ── Action buttons ── */}
+        <View style={styles.actionsGrid}>
+          {/* Not joined yet */}
+          {!isJoined && !isCreator && (
+            <>
+              <TouchableOpacity
+                style={[styles.btnPrimary, isExpired && styles.btnDisabled]}
+                onPress={() => setShowJoinConfirm(true)}
+                disabled={joining || isExpired}
+                activeOpacity={0.85}
+              >
+                {joining ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="add-circle" size={18} color="#FFF" />
+                    <Text style={styles.btnPrimaryText}>{isExpired ? 'Ping Ended' : 'Join Ping'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
               {!isExpired && (
+                <View style={styles.safetyNotice}>
+                  <Ionicons name="shield-checkmark" size={15} color="#F59E0B" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.safetyNoticeTitle}>1 registration = 1 person only</Text>
+                    <Text style={styles.safetyNoticeBody}>
+                      Bringing uninvited guests is a violation of Ping's community guidelines. If we detect attendance fraud — extra people joining under one registration — your account will be permanently suspended without appeal.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* Joined actions */}
+          {isJoined && !isCreator && (
+            <>
+              <TouchableOpacity
+                style={styles.btnPrimary}
+                onPress={handleOpenChat}
+                disabled={chatLoading}
+                activeOpacity={0.85}
+              >
+                {chatLoading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubbles" size={18} color="#FFF" />
+                    <Text style={styles.btnPrimaryText}>• Open Chat ({count})</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.btnRow}>
+                {!myParticipant?.onMyWayAt && (
+                  <TouchableOpacity
+                    style={styles.btnSecondary}
+                    onPress={handleOnMyWay}
+                    disabled={onMyWayLoading}
+                    activeOpacity={0.8}
+                  >
+                    {onMyWayLoading ? (
+                      <ActivityIndicator size="small" color={Ping.purpleLight} />
+                    ) : (
+                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {!myParticipant?.arrivedAt && (
+                  <TouchableOpacity
+                    style={[styles.btnSecondary, { borderColor: 'rgba(34,197,94,0.4)', backgroundColor: 'rgba(34,197,94,0.07)' }]}
+                    onPress={handleArrived}
+                    disabled={arrivedLoading}
+                    activeOpacity={0.8}
+                  >
+                    {arrivedLoading ? (
+                      <ActivityIndicator size="small" color="#22C55E" />
+                    ) : (
+                      <Text style={[styles.btnSecondaryText, { color: '#22C55E' }]}>I'm Here</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                   style={[styles.btnSecondary, styles.btnDanger]}
-                  onPress={handleCancel}
-                  disabled={cancelling}
+                  onPress={handleLeave}
+                  disabled={leaving}
                   activeOpacity={0.8}
                 >
-                  {cancelling ? (
+                  {leaving ? (
                     <ActivityIndicator size="small" color="#EF4444" />
                   ) : (
+                    <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Leave</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Discreet exit + report row */}
+              <View style={styles.safetyRow}>
+                <TouchableOpacity
+                  style={styles.safetyBtn}
+                  onPress={handleLeaveQuietly}
+                  disabled={leavingQuietly}
+                  activeOpacity={0.7}
+                >
+                  {leavingQuietly ? (
+                    <ActivityIndicator size="small" color="#9490C0" />
+                  ) : (
                     <>
-                      <Ionicons name="close-circle-outline" size={15} color="#EF4444" />
-                      <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Cancel Ping</Text>
+                      <Ionicons name="eye-off-outline" size={13} color="#9490C0" />
+                      <Text style={styles.safetyBtnText}>Leave Quietly</Text>
                     </>
                   )}
                 </TouchableOpacity>
-              )}
-            </View>
-          </>
-        )}
+                <TouchableOpacity style={styles.safetyBtn} onPress={handleReport} activeOpacity={0.7}>
+                  <Ionicons name="flag-outline" size={13} color="#9490C0" />
+                  <Text style={styles.safetyBtnText}>Report</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* Not joined — report button */}
+          {!isJoined && !isCreator && (
+            <TouchableOpacity style={[styles.safetyRow, { justifyContent: 'flex-end' }]} onPress={handleReport} activeOpacity={0.7}>
+              <Ionicons name="flag-outline" size={13} color="#9490C0" />
+              <Text style={styles.safetyBtnText}>Report this ping</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Creator actions */}
+          {isCreator && (
+            <>
+              <TouchableOpacity
+                style={styles.btnPrimary}
+                onPress={handleOpenChat}
+                disabled={chatLoading}
+                activeOpacity={0.85}
+              >
+                {chatLoading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubbles" size={18} color="#FFF" />
+                    <Text style={styles.btnPrimaryText}>• Open Chat ({count})</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.btnRow}>
+                {!myParticipant?.onMyWayAt && (
+                  <TouchableOpacity
+                    style={styles.btnSecondary}
+                    onPress={handleOnMyWay}
+                    disabled={onMyWayLoading}
+                    activeOpacity={0.8}
+                  >
+                    {onMyWayLoading ? (
+                      <ActivityIndicator size="small" color={Ping.purpleLight} />
+                    ) : (
+                      <Text style={[styles.btnSecondaryText, { color: Ping.purpleLight }]}>On My Way</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {!isExpired && (
+                  <TouchableOpacity
+                    style={[styles.btnSecondary, styles.btnDanger]}
+                    onPress={handleCancel}
+                    disabled={cancelling}
+                    activeOpacity={0.8}
+                  >
+                    {cancelling ? (
+                      <ActivityIndicator size="small" color="#EF4444" />
+                    ) : (
+                      <Text style={[styles.btnSecondaryText, { color: '#EF4444' }]}>Cancel Ping</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          )}
+        </View>
       </View>
     </ScrollView>
 
@@ -1076,7 +1097,12 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
             <Text style={rpt.optionText}>View Profile</Text>
             <Ionicons name="chevron-forward" size={14} color="rgba(241,240,255,0.3)" />
           </TouchableOpacity>
-          {profileMenu.sent ? (
+          {friendIds.has(profileMenu.userId) ? (
+            <View style={[rpt.option, { opacity: 0.6 }]}>
+              <Text style={rpt.optionText}>Already Friends</Text>
+              <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
+            </View>
+          ) : profileMenu.sent ? (
             <View style={[rpt.option, { opacity: 0.5 }]}>
               <Text style={rpt.optionText}>Request Sent</Text>
               <Ionicons name="checkmark" size={14} color="#22C55E" />
@@ -1093,7 +1119,14 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
                     setConnectSent((prev) => ({ ...prev, [uid]: true }));
                     Toast.show({ type: 'success', text1: 'Request sent', text2: `Friend request sent to ${profileMenu.name}` });
                   })
-                  .catch((e: any) => Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send request' }));
+                  .catch((e: any) => {
+                    if (e.code === 'already_friends' || e.message?.includes('Already friends')) {
+                      setFriendIds((prev) => new Set([...prev, uid]));
+                      Toast.show({ type: 'success', text1: 'Already friends', text2: `You and ${profileMenu.name} are already friends.` });
+                    } else {
+                      Toast.show({ type: 'error', text1: 'Error', text2: e.message || 'Could not send request' });
+                    }
+                  });
               }}
             >
               <Text style={rpt.optionText}>Send Friend Request</Text>
@@ -1111,117 +1144,153 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 }
 
 const styles = StyleSheet.create({
-  root: { paddingBottom: Spacing.lg, gap: Spacing.md },
-  coverImage: {
+  coverPhoto: {
     width: '100%',
-    height: 160,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.sm,
+    height: 220,
   },
-  gradientHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  gradientHeaderAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: Radius.lg,
-    borderBottomLeftRadius: Radius.lg,
-  },
-  shareIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  coverPhotoPlaceholder: {
+    width: '100%',
+    height: 180,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  headerIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginLeft: 4,
+  contentPad: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 14,
   },
-  headerTitle: { ...Typography.bodyMed, fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  metaBlock: { gap: 4 },
-  title: { ...Typography.bodyMed, flex: 1, fontSize: 17 },
-  statusBadge: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  pingTitle: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    lineHeight: 28,
+  },
+  liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 4,
+    flexShrink: 0,
   },
-  statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
-  metaText: { ...Typography.caption, fontSize: 12 },
-  description: { ...Typography.bodySm, lineHeight: 20 },
-  genderBadge: {
+  liveDot: { width: 5, height: 5, borderRadius: 3 },
+  liveBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  genderChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: Radius.full,
     borderWidth: 1,
   },
-  genderBadgeText: { ...Typography.caption, fontWeight: '700', fontSize: 12 },
-  creatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
+  genderChipText: { fontSize: 11, fontWeight: '700' },
+  shareSmallBtn: { marginLeft: 'auto' as any, padding: 6 },
+  metaGrid: { flexDirection: 'row', gap: 10 },
+  metaCell: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  metaCellText: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 },
+  peopleCount: { fontSize: 13, fontWeight: '500' },
+  hostCard: {
+    borderRadius: 16,
     borderWidth: 1,
+    padding: 14,
+    gap: 10,
   },
-  creatorAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  hostTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hostAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  creatorAvatarImg: { width: 36, height: 36, borderRadius: 18 },
-  creatorInitial: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  creatorName: { ...Typography.bodyMed, fontSize: 14 },
-  creatorLabel: { ...Typography.caption, marginTop: 1 },
-  creatorMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  trustChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  trustDot: { width: 6, height: 6, borderRadius: 3 },
-  trustText: { ...Typography.caption, fontSize: 11 },
-  safetyRow: {
+  hostAvatarImg: { width: 52, height: 52, borderRadius: 26 },
+  hostInitial: { color: '#FFF', fontWeight: '700', fontSize: 20 },
+  hostNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  hostName: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+  hostSub: { fontSize: 12, marginTop: 3 },
+  hostChipsRow: { flexDirection: 'row', gap: 8 },
+  hostChip: {
     flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 4,
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
   },
-  safetyBtn: {
+  hostChipText: { fontSize: 11, fontWeight: '600' },
+  detailsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  detailsHeader: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
+  detailsDesc: { fontSize: 14, lineHeight: 22 },
+  attendeesLabel: { fontSize: 13, fontWeight: '500' },
+  avatarStack: { flexDirection: 'row', alignItems: 'center' },
+  stackAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  stackAvatarImg: { width: 32, height: 32, borderRadius: 16 },
+  stackAvatarLetter: { fontWeight: '700', fontSize: 12 },
+  soloBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  soloText: { fontSize: 13, fontWeight: '500', flex: 1 },
+  mapCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mapCardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mapIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  mapVenue: { fontSize: 14, fontWeight: '600' },
+  mapCity: { fontSize: 12, marginTop: 2 },
+  directionsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(148,144,192,0.18)',
-    backgroundColor: 'rgba(148,144,192,0.07)',
+    flexShrink: 0,
   },
-  safetyBtnText: { fontSize: 12, color: '#9490C0', fontWeight: '600', letterSpacing: 0.1 },
+  directionsBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   safetyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1242,22 +1311,6 @@ const styles = StyleSheet.create({
   },
   safetyBannerTitle: { ...Typography.bodyMed, color: '#22C55E', fontSize: 13, fontWeight: '700' },
   safetyBannerSub: { ...Typography.caption, color: '#22C55E', opacity: 0.8, marginTop: 1 },
-  section: { gap: 8 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionLabel: { ...Typography.caption, textTransform: 'uppercase', letterSpacing: 0.5 },
-  tapHint: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  tapHintText: { fontSize: 10, fontWeight: '600' },
-  participantsRow: { gap: Spacing.sm, paddingVertical: 4 },
-  soloBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  soloText: { ...Typography.bodySm, flex: 1, lineHeight: 18 },
   actionsGrid: { gap: Spacing.sm },
   safetyNotice: {
     flexDirection: 'row',
@@ -1269,17 +1322,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
   },
-  safetyNoticeTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#F59E0B',
-    letterSpacing: 0.1,
-  },
-  safetyNoticeBody: {
-    fontSize: 11.5,
-    color: 'rgba(245,158,11,0.75)',
-    lineHeight: 17,
-  },
+  safetyNoticeTitle: { fontSize: 12, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.1 },
+  safetyNoticeBody: { fontSize: 11.5, color: 'rgba(245,158,11,0.75)', lineHeight: 17 },
   btnPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1314,35 +1358,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.07)',
   },
   btnSecondaryText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.1 },
-  chatTeaser: {
+  safetyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  safetyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.3)',
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderColor: 'rgba(148,144,192,0.18)',
+    backgroundColor: 'rgba(148,144,192,0.07)',
   },
-  chatTeaserLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  chatTeaserIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(124,58,237,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatTeaserTitle: { ...Typography.bodySm, color: '#E8E0FF', fontWeight: '700', fontSize: 13 },
-  chatTeaserSub: { ...Typography.caption, color: '#9490C0', fontSize: 11, marginTop: 2 },
-  chatTeaserLock: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(148,144,192,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  safetyBtnText: { fontSize: 12, color: '#9490C0', fontWeight: '600', letterSpacing: 0.1 },
 });
 
 // ── Report / Profile menu sheet styles ───────────────────────────────────────
