@@ -23,7 +23,7 @@ import SplashAnimation from '@/components/SplashAnimation';
 import { toastConfig } from '@/components/ToastConfig';
 import RatePingModal from '@/components/RatePingModal';
 import { activitiesApi, type PendingRating } from '@/lib/api';
-import { setupNotifications, addResponseListener, startSessionTracking, stopSessionTracking, type NotificationPayload } from '@/lib/notifications';
+import { setupNotifications, clearPushToken, addResponseListener, startSessionTracking, stopSessionTracking, type NotificationPayload } from '@/lib/notifications';
 import { Colors, Ping } from '@/constants/theme';
 
 // Set Android window background immediately so the transparent nav bar
@@ -133,6 +133,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (!user) {
       notifSetupDone.current = false;
+      clearPushToken();
       stopSessionTracking();
     }
   }, [user]);
