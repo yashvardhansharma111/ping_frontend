@@ -2100,7 +2100,7 @@ function makeStyles(isDark: boolean) {
       position: 'absolute',
       top: 0,
       left: Spacing.md,
-      right: 20,
+      right: 6,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
@@ -2135,7 +2135,7 @@ function makeStyles(isDark: boolean) {
     topRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 5,
     },
     countChip: {
       backgroundColor: isDark ? 'rgba(8,8,21,0.88)' : 'rgba(255,255,255,0.95)',
@@ -2172,9 +2172,9 @@ function makeStyles(isDark: boolean) {
       fontWeight: '700',
     },
     iconChip: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       backgroundColor: isDark ? 'rgba(8,8,21,0.88)' : 'rgba(255,255,255,0.95)',
       borderWidth: 1,
       borderColor: isDark ? 'rgba(187,146,255,0.28)' : 'rgba(143,99,244,0.18)',

@@ -12,11 +12,12 @@ import {
   FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { ChartBar } from 'phosphor-react-native';
+import { ChartBar, ShieldCheck } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
@@ -114,8 +115,10 @@ function VerificationBanner({
   scheme: 'light' | 'dark';
 }) {
   const isDark = scheme === 'dark';
-  const bg = isDark ? 'rgba(251,191,36,0.10)' : 'rgba(245,158,11,0.08)';
-  const border = isDark ? 'rgba(251,191,36,0.28)' : 'rgba(245,158,11,0.22)';
+  const bg = isDark ? 'rgba(139,92,246,0.10)' : 'rgba(139,92,246,0.07)';
+  const border = isDark ? 'rgba(139,92,246,0.28)' : 'rgba(139,92,246,0.20)';
+  const titleColor = isDark ? '#C4B5FD' : '#7C3AED';
+  const btnColor = isDark ? '#7C3AED' : '#6D28D9';
 
   return (
     <View style={[bn.card, { backgroundColor: bg, borderColor: border }]}>
@@ -124,9 +127,11 @@ function VerificationBanner({
       </TouchableOpacity>
 
       <View style={bn.row}>
-        <Text style={bn.emoji}>✅</Text>
+        <View style={[bn.iconWrap, { backgroundColor: isDark ? 'rgba(139,92,246,0.18)' : 'rgba(139,92,246,0.12)' }]}>
+          <ShieldCheck size={22} color={titleColor} weight="fill" />
+        </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[bn.pctText, { color: '#D97706' }]}>Get verified</Text>
+          <Text style={[bn.pctText, { color: titleColor }]}>Get verified</Text>
           <Text style={[bn.quip, { color: c.textSecondary }]} numberOfLines={2}>
             You're out here unverified like a WhatsApp forward. Get the badge before someone vibes with a catfish instead.
           </Text>
@@ -134,7 +139,7 @@ function VerificationBanner({
       </View>
 
       <TouchableOpacity
-        style={[bn.cta, { backgroundColor: '#D97706' }]}
+        style={[bn.cta, { backgroundColor: btnColor }]}
         onPress={onVerify}
         activeOpacity={0.85}
       >
@@ -233,6 +238,8 @@ export default function ProfileScreen() {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
+                getItemLayout={(_, index) => ({ length: SCREEN_W, offset: SCREEN_W * index, index })}
                 onMomentumScrollEnd={(e) =>
                   setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))
                 }
@@ -252,9 +259,24 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Blur layer — soft frost across the whole image */}
+            <BlurView
+              intensity={18}
+              tint="dark"
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+            {/* Purple-black gradient overlay — strong top + bottom, open middle */}
             <LinearGradient
-              colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.6)']}
-              locations={[0, 0.3, 1]}
+              colors={[
+                'rgba(8,2,20,0.88)',
+                'rgba(15,5,35,0.55)',
+                'rgba(15,5,35,0.10)',
+                'transparent',
+                'rgba(10,3,25,0.50)',
+                'rgba(8,2,20,0.92)',
+              ]}
+              locations={[0, 0.18, 0.35, 0.50, 0.75, 1]}
               style={StyleSheet.absoluteFillObject}
               pointerEvents="none"
             />
@@ -621,9 +643,12 @@ const bn = StyleSheet.create({
     gap: 10,
     paddingRight: 20,
   },
-  emoji: {
-    fontSize: 22,
-    lineHeight: 28,
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pctText: {
     fontSize: 14,
