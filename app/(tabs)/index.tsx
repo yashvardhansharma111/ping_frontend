@@ -1328,23 +1328,39 @@ export default function MapScreen() {
         sheetAnim.setValue(Math.max(0, base + dy));
       },
       onPanResponderRelease: (_, { dy, vy }) => {
-        const base = sheetExpandedRef.current ? 0 : SHEET_PEEK_Y;
-        const finalY = base + dy;
-        if (vy > 0.7 || finalY > SCREEN_H * 0.62) {
-          Animated.timing(sheetAnim, { toValue: SCREEN_H, duration: 260, useNativeDriver: true })
-            .start(() => {
-              setSelected(null);
-              setSheetActivity(null);
-              prevSheetIdRef.current = null;
-              sheetExpandedRef.current = false;
-              setSheetExpanded(false);
-            });
-        } else if (vy < -0.5 || dy < -60) {
-          sheetExpandedRef.current = true;
-          setSheetExpanded(true);
-          Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+        if (sheetExpandedRef.current) {
+          // ── From EXPANDED state ──
+          // Down swipe → snap to PEEK (not close)
+          if (vy > 0.3 || dy > 50) {
+            sheetExpandedRef.current = false;
+            setSheetExpanded(false);
+            Animated.spring(sheetAnim, { toValue: SHEET_PEEK_Y, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+          } else {
+            // Cancel / small drag → stay expanded
+            Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+          }
         } else {
-          Animated.spring(sheetAnim, { toValue: base, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+          // ── From PEEK state ──
+          const finalY = SHEET_PEEK_Y + dy;
+          if (vy < -0.5 || dy < -60) {
+            // Up swipe → EXPAND
+            sheetExpandedRef.current = true;
+            setSheetExpanded(true);
+            Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+          } else if (vy > 0.7 || finalY > SCREEN_H * 0.70) {
+            // Down swipe → CLOSE
+            Animated.timing(sheetAnim, { toValue: SCREEN_H, duration: 260, useNativeDriver: true })
+              .start(() => {
+                setSelected(null);
+                setSheetActivity(null);
+                prevSheetIdRef.current = null;
+                sheetExpandedRef.current = false;
+                setSheetExpanded(false);
+              });
+          } else {
+            // Cancel → snap back to PEEK
+            Animated.spring(sheetAnim, { toValue: SHEET_PEEK_Y, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+          }
         }
       },
     })

@@ -64,8 +64,8 @@ export async function scheduleStartingNotification(
   title: string,
   startsAt: Date,
 ): Promise<void> {
-  const triggerMs = startsAt.getTime() - 15 * 60 * 1000;
-  if (triggerMs <= Date.now()) return;
+  const secsUntil = Math.floor((startsAt.getTime() - 15 * 60 * 1000 - Date.now()) / 1000);
+  if (secsUntil <= 0) return;
 
   try {
     await Notifications.scheduleNotificationAsync({
@@ -76,7 +76,11 @@ export async function scheduleStartingNotification(
         data: { type: 'ping_starting', activityId },
         sound: 'default',
       },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(triggerMs) },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: secsUntil,
+        repeats: false,
+      },
     });
   } catch {}
 }
@@ -92,8 +96,8 @@ export async function scheduleSafetyReminder(
   title: string,
   startsAt: Date,
 ): Promise<void> {
-  const triggerMs = startsAt.getTime() - 30 * 60 * 1000;
-  if (triggerMs <= Date.now()) return;
+  const secsUntil = Math.floor((startsAt.getTime() - 30 * 60 * 1000 - Date.now()) / 1000);
+  if (secsUntil <= 0) return;
 
   try {
     await Notifications.scheduleNotificationAsync({
@@ -104,7 +108,11 @@ export async function scheduleSafetyReminder(
         data: { type: 'ping_starting', activityId },
         sound: 'default',
       },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(triggerMs) },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: secsUntil,
+        repeats: false,
+      },
     });
   } catch {}
 }
@@ -139,22 +147,25 @@ export async function startSessionTracking(): Promise<void> {
     await stopSessionTracking();
 
     const intervals = [20, 40, 60, 80, 100, 120];
-    const now = Date.now();
     for (let i = 0; i < intervals.length; i++) {
       const mins = intervals[i];
-      const fireAt = new Date(now + mins * 60 * 1000);
       await Notifications.scheduleNotificationAsync({
         identifier: SESSION_IDS[i],
         content: {
           title: `Used for ${mins}m`,
           body: mins < 60
-            ? 'You\'re still on Ping. Don\'t forget to look up! 👀'
+            ? "You're still on Ping. Don't forget to look up! 👀"
             : `${mins} mins on Ping — time flies when you're finding your people.`,
           data: { type: 'session_usage' },
           sound: null,
           ...(Platform.OS === 'android' ? { channelId: 'usage' } : {}),
         },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
+        // TIME_INTERVAL avoids SCHEDULE_EXACT_ALARM permission requirement on Android 12+
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: mins * 60,
+          repeats: false,
+        },
       });
     }
   } catch {}
