@@ -40,7 +40,7 @@ import ShareSheet from '@/components/ShareSheet';
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const PHOTO_H = SCREEN_H;
+const PHOTO_H = Math.round(SCREEN_W * 1.25); // fallback until image is measured
 const THUMB = 92;
 const GALLERY_GAP = 12;
 
@@ -78,37 +78,66 @@ const TYPE_CFG: Record<string, { icon: MCIName; color: string }> = {
 function PhotoCarousel({
   photos,
   initials,
-  height = PHOTO_H,
   insetTop = 0,
 }: {
   photos: string[];
   initials: string;
-  height?: number;
   insetTop?: number;
 }) {
   const [active, setActive] = useState(0);
+  // measured natural height per URI
+  const [imgHeights, setImgHeights] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    photos.forEach((uri) => {
+      Image.getSize(
+        uri,
+        (w, h) => {
+          const natural = Math.min(Math.round(SCREEN_W * h / w), Math.round(SCREEN_H * 0.88));
+          setImgHeights((prev) => ({ ...prev, [uri]: natural }));
+        },
+        () => setImgHeights((prev) => ({ ...prev, [uri]: PHOTO_H })),
+      );
+    });
+  }, [photos]);
+
+  // carousel height = tallest measured photo; fall back to PHOTO_H while loading
+  const allMeasured = photos.every((u) => imgHeights[u] != null);
+  const carouselH = allMeasured && photos.length > 0
+    ? Math.max(...photos.map((u) => imgHeights[u]!))
+    : PHOTO_H;
 
   if (photos.length === 0) {
     return (
-      <View style={[pc.single, { height, backgroundColor: '#141414' }]}>
+      <View style={[pc.single, { height: PHOTO_H, backgroundColor: '#141414' }]}>
         <Text style={pc.initials}>{initials}</Text>
       </View>
     );
   }
 
   return (
-    <View style={[pc.wrap, { height }]}>
+    <View style={[pc.wrap, { height: carouselH }]}>
       <FlatList
         data={photos}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        style={{ flex: 1 }}
+        getItemLayout={(_, index) => ({ length: SCREEN_W, offset: SCREEN_W * index, index })}
         onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
-        renderItem={({ item }) => (
-          <View style={[pc.photoWrap, { height }]}>
-            <Image source={{ uri: item }} style={pc.photoFill} resizeMode="cover" />
-          </View>
-        )}
+        keyExtractor={(uri, i) => `${uri}-${i}`}
+        renderItem={({ item }) => {
+          const imgH = imgHeights[item] ?? carouselH;
+          return (
+            <View style={{ width: SCREEN_W, height: carouselH, backgroundColor: '#000' }}>
+              <Image
+                source={{ uri: item }}
+                style={{ width: SCREEN_W, height: imgH }}
+                resizeMode="cover"
+              />
+            </View>
+          );
+        }}
       />
       {photos.length > 1 && (
         <View style={[pc.dots, { top: insetTop + 12 }]}>
@@ -122,9 +151,7 @@ function PhotoCarousel({
 }
 
 const pc = StyleSheet.create({
-  wrap: { width: SCREEN_W },
-  photoWrap: { width: SCREEN_W, overflow: 'hidden' },
-  photoFill: { width: SCREEN_W, flex: 1 },
+  wrap: { width: SCREEN_W, overflow: 'hidden' },
   single: { width: SCREEN_W, alignItems: 'center', justifyContent: 'center' },
   initials: { fontSize: 80, fontWeight: '800', color: '#FFF' },
   dots: {
