@@ -813,7 +813,7 @@ function makeSoStyles(isDark: boolean) {
   return StyleSheet.create({
     overlay: {
       position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: isDark ? '#080815' : '#FFFFFF',
+      backgroundColor: isDark ? '#0F0F12' : '#FFFFFF',
       zIndex: 200,
     },
     header: {
@@ -1229,13 +1229,14 @@ export default function MapScreen() {
   useFocusEffect(useCallback(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       const { showFilterPanel: fp, selected: sel, sheetActivity: sheet } = overlayStateRef.current;
-      if (fp)   { setShowFilterPanel(false); return true; }
-      if (sel)  { setSelected(null); return true; }
-      if (sheet){ dismissSheet(); return true; }
+      if (showSearch) { setShowSearch(false); return true; }
+      if (fp)         { setShowFilterPanel(false); return true; }
+      if (sel)        { setSelected(null); return true; }
+      if (sheet)      { dismissSheet(); return true; }
       return false; // let system handle (exit app / go back)
     });
     return () => sub.remove();
-  }, [])); // empty — ref always holds current values
+  }, [showSearch])); // re-subscribe when showSearch changes
 
   function passesActiveFilters(a: Activity): boolean {
     if (typeFilter && a.type !== typeFilter) return false;
