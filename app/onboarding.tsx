@@ -252,15 +252,11 @@ export default function OnboardingScreen() {
   const cur    = SLIDES[slide];
   const isLast = slide === SLIDES.length - 1;
 
-  // Detect dark background based on slide grad
-  const isDark = cur.grad[0].startsWith('#F') ? false : true;
-  // Always use light mode visuals — the gradients are all light
-  const bgIsDark = false;
-
-  const textCol  = '#0D0B1E';
-  const subCol   = 'rgba(26,23,60,0.5)';
-  const dotInact = 'rgba(0,0,0,0.12)';
-  const dotDone  = 'rgba(0,0,0,0.32)';
+  const isDark   = true;
+  const textCol  = '#F0EAFF';
+  const subCol   = 'rgba(240,230,255,0.55)';
+  const dotInact = 'rgba(255,255,255,0.14)';
+  const dotDone  = 'rgba(255,255,255,0.38)';
 
   function goTo(next: number) {
     if (next < 0 || next >= SLIDES.length) return;
@@ -317,7 +313,7 @@ export default function OnboardingScreen() {
       {/* ── Hero: full-width gradient with floating photos ── */}
       <View style={s.hero} {...panResponder.panHandlers}>
         <LinearGradient
-          colors={cur.grad}
+          colors={cur.darkGrad}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
@@ -339,7 +335,7 @@ export default function OnboardingScreen() {
 
         {/* Photos */}
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-          <PhotoCollage slide={cur} isDark={false} floatAnim={floatAnim} />
+          <PhotoCollage slide={cur} isDark={true} floatAnim={floatAnim} />
         </Animated.View>
       </View>
 
@@ -385,7 +381,7 @@ export default function OnboardingScreen() {
         {/* Button */}
         <Animated.View style={{ transform: [{ scale: btnScale }] }}>
           <TouchableOpacity
-            style={[s.btn, { backgroundColor: cur.isPro ? Ping.purple : '#111111' }]}
+            style={[s.btn, { backgroundColor: Ping.purple }]}
             onPress={handleAction}
             activeOpacity={0.88}
           >
@@ -406,7 +402,7 @@ export default function OnboardingScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FAFAFA' },
+  root: { flex: 1, backgroundColor: '#080815' },
 
   hero: {
     height: HERO_H,
@@ -425,8 +421,8 @@ const s = StyleSheet.create({
     zIndex: 20,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backArrow: { fontSize: 28, fontWeight: '300', color: 'rgba(0,0,0,0.40)', lineHeight: 34 },
-  skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(0,0,0,0.38)' },
+  backArrow: { fontSize: 28, fontWeight: '300', color: 'rgba(255,255,255,0.40)', lineHeight: 34 },
+  skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.38)' },
 
   body: {
     flex: 1,
@@ -439,8 +435,8 @@ const s = StyleSheet.create({
   proRow:      { alignItems: 'flex-start', gap: 6, marginBottom: 10 },
   couponBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.full, backgroundColor: `${Ping.purple}18`, borderWidth: 1, borderColor: `${Ping.purple}40` },
   couponText:  { fontSize: 11, fontWeight: '700', color: Ping.purpleLight, letterSpacing: 0.3 },
-  priceRow:    { fontSize: 17, fontWeight: '600', color: '#111' },
-  strikePrice: { textDecorationLine: 'line-through', color: '#999', fontWeight: '400' },
+  priceRow:    { fontSize: 17, fontWeight: '600', color: '#F0EAFF' },
+  strikePrice: { textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.35)', fontWeight: '400' },
   freePrice:   { color: Ping.purple, fontWeight: '800' },
 
   // Content
