@@ -467,6 +467,9 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   hero: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     width: SCREEN_W,
     backgroundColor: '#111',
     overflow: 'hidden',
@@ -513,7 +516,6 @@ const styles = StyleSheet.create({
   dotActive: { width: 16, backgroundColor: '#FFF' },
 
   glassCard: {
-    marginTop: -32,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 22,
