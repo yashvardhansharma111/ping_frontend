@@ -36,37 +36,41 @@ function AuthGuard() {
   const { user, isLoading } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
-  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
-
   useEffect(() => {
-    SecureStore.getItemAsync('onboardingDone').then((v) => setOnboardingDone(!!v));
-  }, [segments]);
+    if (isLoading) return;
+    let cancelled = false;
 
-  useEffect(() => {
-    if (isLoading || onboardingDone === null) return;
+    // Read the flag inside the effect: deciding on a cached value while the
+    // segments are mid-transition caused replace() ping-pong (onboarding ⇄ auth).
+    SecureStore.getItemAsync('onboardingDone').then((v) => {
+      if (cancelled) return;
+      const onboardingDone = !!v;
 
-    const seg0           = segments[0] as string | undefined;
-    const seg1           = segments[1] as string | undefined;
-    const inOnboarding   = seg0 === 'onboarding';
-    const inAuth         = seg0 === '(auth)';
-    const inVerification = seg0 === 'verification';
+      const seg0           = segments[0] as string | undefined;
+      const seg1           = segments[1] as string | undefined;
+      const inOnboarding   = seg0 === 'onboarding';
+      const inAuth         = seg0 === '(auth)';
+      const inVerification = seg0 === 'verification';
 
-    const inSetupFlow = inAuth && ['otp', 'setup'].includes(seg1 ?? '');
-    const needsSetup  = !!(user && !(user as any)?.displayName);
+      const inSetupFlow = inAuth && ['otp', 'setup'].includes(seg1 ?? '');
+      const needsSetup  = !!(user && !(user as any)?.displayName);
 
-    if (!onboardingDone) {
-      if (!inOnboarding) router.replace('/onboarding');
-      return;
-    }
+      if (!onboardingDone) {
+        if (!inOnboarding) router.replace('/onboarding');
+        return;
+      }
 
-    if (!user && !inAuth) {
-      router.replace('/(auth)/phone');
-    } else if (user && inAuth && !inSetupFlow) {
-      router.replace('/(tabs)');
-    } else if (user && needsSetup && !inAuth && !inVerification) {
-      router.replace('/(auth)/setup' as any);
-    }
-  }, [user, isLoading, segments, onboardingDone]);
+      if (!user && !inAuth) {
+        router.replace('/(auth)/phone');
+      } else if (user && inAuth && !inSetupFlow) {
+        router.replace('/(tabs)');
+      } else if (user && needsSetup && !inAuth && !inVerification) {
+        router.replace('/(auth)/setup' as any);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [user, isLoading, segments]);
 
   // Handle notification taps — must live inside the navigator so router works
   useEffect(() => {
