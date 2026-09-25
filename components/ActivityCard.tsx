@@ -143,6 +143,7 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
   const timeStatus = getTimeStatus(a.startsAt, a.expiresAt);
   const statusCfg = STATUS_CONFIG[timeStatus];
   const isExpired = timeStatus === 'expired';
+  const canChat = isJoined && !isExpired;
 
   const ink = isDark ? c.text : '#111111';
   const muted = isDark ? c.textSecondary : '#6F6866';
@@ -292,12 +293,12 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
                   Animated.spring(btnScale, { toValue: 0.94, damping: 20, stiffness: 500, useNativeDriver: true }),
                   Animated.spring(btnScale, { toValue: 1, damping: 14, stiffness: 220, useNativeDriver: true }),
                 ]).start();
-                isJoined ? handleOpenChat() : handleJoin();
+                handleJoin();
               }}
-              disabled={joining || openingChat || isExpired}
+              disabled={joining || isExpired || isJoined}
               activeOpacity={0.85}
             >
-              {joining || openingChat ? (
+              {joining ? (
                 <ActivityIndicator size="small" color={isExpired ? muted : '#FFF'} />
               ) : isExpired ? (
                 <>
@@ -306,8 +307,8 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
                 </>
               ) : isJoined ? (
                 <>
-                  <ChatCircle size={15} color="#FFF" weight="fill" />
-                  <Text style={s.mainBtnText}>Open Chat</Text>
+                  <CheckCircle size={15} color="#FFF" weight="fill" />
+                  <Text style={s.mainBtnText}>Joined</Text>
                 </>
               ) : (
                 <>
@@ -318,8 +319,24 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
             </TouchableOpacity>
           </Animated.View>
 
+          {/* Chat — only usable once you're in the ping */}
           <TouchableOpacity
-            style={[s.shareBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5' }]}
+            style={[
+              s.iconBtn,
+              { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', backgroundColor: canChat ? accentMist : (isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5') },
+              !canChat && { opacity: 0.45 },
+            ]}
+            onPress={handleOpenChat}
+            disabled={!canChat || openingChat}
+            activeOpacity={0.8}
+          >
+            {openingChat
+              ? <ActivityIndicator size="small" color={accent} />
+              : <ChatCircle size={17} color={canChat ? accent : muted} weight={canChat ? 'fill' : 'bold'} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.iconBtn, s.shareBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5' }]}
             onPress={handleShare}
             activeOpacity={0.8}
           >
@@ -437,13 +454,13 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 44, flex: 0.86, paddingHorizontal: 20, borderRadius: 12,
+    height: 44, flex: 0.86, paddingHorizontal: 25, borderRadius: 15,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   mainBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  shareBtn: {
-    width: 40, height: 40, borderRadius: 10, borderWidth: 1,
+  iconBtn: {
+    width: 44, height: 44, borderRadius: 12, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
-    marginRight: 10,
   },
+  shareBtn: { marginRight: 10 },
 });
