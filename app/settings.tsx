@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import ComingSoonSheet from '@/components/ComingSoonSheet';
 import ScreenHeader from '@/components/ScreenHeader';
 import AppAvatar from '@/components/AppAvatar';
 import UIRow, { UICard } from '@/components/UIRow';
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, refreshToken, logout } = useAuthStore();
   const [showLogout, setShowLogout] = useState(false);
+  const [showAdsSoon, setShowAdsSoon] = useState(false);
 
   const verificationStatus = user?.verificationStatus ?? 'none';
 
@@ -61,7 +63,7 @@ export default function SettingsScreen() {
             <UIRow icon="person-outline" label="Edit Profile" onPress={() => router.push('/edit-profile' as any)} separator />
             <UIRow icon="diamond-outline" label="Ping Plus" onPress={() => router.push('/subscription' as any)} iconColor={Ping.purple} separator />
             <UIRow icon="flash-outline" label="My Activity" onPress={() => router.push('/my-activity' as any)} separator />
-            <UIRow icon="megaphone-outline" label="My Ads" onPress={() => Alert.alert('Coming Soon', 'Ad management will be available in the next update.')} />
+            <UIRow icon="megaphone-outline" label="My Ads" onPress={() => setShowAdsSoon(true)} />
           </UICard>
         </View>
 
@@ -126,6 +128,14 @@ export default function SettingsScreen() {
 
         <Text style={[styles.version, { color: c.icon }]}>Ping v1.0.0</Text>
       </ScrollView>
+
+      <ComingSoonSheet
+        visible={showAdsSoon}
+        onClose={() => setShowAdsSoon(false)}
+        icon="megaphone"
+        title="Ads are almost here"
+        subtitle="Promote your café, gig or store to people right around you. Local micro-ads land in the next update."
+      />
 
       <ConfirmSheet
         visible={showLogout}
