@@ -84,8 +84,9 @@
       "expo-updates"
     ],
     "updates": {
-      "url": "https://u.expo.dev/04768189-03f7-478e-92d3-6d30fb5f68b9",
-      "checkAutomatically": "ON_LOAD"
+      "url": "https://u.expo.dev/b38efb15-2d7b-4392-ab8b-720a7a2a83f3",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 8000
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -95,10 +96,11 @@
     },
     "extra": {
       "apiUrl": "https://ytterbic-tammy-yashvardhan-2deb3c9f.koyeb.app",
+      "router": {},
       "eas": {
-        "projectId": "04768189-03f7-478e-92d3-6d30fb5f68b9"
-      },
-      "router": {}
-    }
+        "projectId": "b38efb15-2d7b-4392-ab8b-720a7a2a83f3"
+      }
+    },
+    "owner": "yashvardhan001-2"
   }
 }

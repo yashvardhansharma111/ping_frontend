@@ -23,6 +23,7 @@ import SplashAnimation from '@/components/SplashAnimation';
 import { toastConfig } from '@/components/ToastConfig';
 import { useFonts } from 'expo-font';
 import { APP_FONTS, applyGlobalFont, setFontsReady } from '@/lib/fonts';
+import { applyPendingUpdateOnLaunch } from '@/lib/otaUpdates';
 
 applyGlobalFont();
 import RatePingModal from '@/components/RatePingModal';
@@ -84,7 +85,7 @@ function AuthGuard() {
         case 'ping_join':
         case 'ping_cancel':
         case 'ping_starting':
-          router.push('/(tabs)/');
+          router.push('/(tabs)');
           break;
         case 'friend_accept':
         case 'friend_reject':
@@ -92,14 +93,14 @@ function AuthGuard() {
           router.push('/(tabs)/friends');
           break;
         case 'ping_new':
-          router.push('/(tabs)/');
+          router.push('/(tabs)');
           break;
         case 'chat_message':
           if (payload.roomId) router.push(`/chat/${payload.roomId}` as any);
           break;
         case 'participant_nearby':
           if (payload.userId) router.push(`/user/${payload.userId}`);
-          else router.push('/(tabs)/');
+          else router.push('/(tabs)');
           break;
       }
     });
@@ -113,7 +114,11 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { loadFromStorage, isLoading, user } = useAuthStore();
-  const [splashDone, setSplashDone] = useState(false);
+  const [splashAnimDone, setSplashAnimDone] = useState(false);
+  const [updateCheckDone, setUpdateCheckDone] = useState(false);
+  // Splash stays up until the intro finishes AND any pending OTA has been
+  // checked (and applied via reload if one was waiting).
+  const splashDone = splashAnimDone && updateCheckDone;
   const [ratingItem, setRatingItem] = useState<PendingRating | null>(null);
   const ratingChecked = useRef(false);
   const notifSetupDone = useRef(false);
@@ -125,6 +130,9 @@ export default function RootLayout() {
   useEffect(() => {
     loadFromStorage();
     useThemeStore.getState().loadPreference();
+    applyPendingUpdateOnLaunch().then((reloading) => {
+      if (!reloading) setUpdateCheckDone(true);
+    });
   }, []);
 
   // Keep Android window background in sync with theme so the transparent
@@ -206,7 +214,7 @@ export default function RootLayout() {
 
       {/* Splash sits on top as an absolute overlay; fades out when animation ends */}
       {!splashDone && (
-        <SplashAnimation onDone={() => setSplashDone(true)} />
+        <SplashAnimation onDone={() => setSplashAnimDone(true)} />
       )}
 
       {/* Post-ping rating prompt — appears once per session after splash is done */}
