@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Animated,
   Image,
@@ -167,6 +166,9 @@ export default function ProfileScreen() {
   const completionPct = useMemo(() => calcCompletion(user), [user]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scrollY  = useRef(new Animated.Value(0)).current;
+  // Hero moves with the scroll offset so it appears pinned while the card slides over it.
+  const heroPin = scrollY.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolateLeft: 'clamp' });
 
   useEffect(() => {
     friendsApi.list().then((r) => setFriendCount(r.friends?.length ?? 0)).catch(() => {});
@@ -224,8 +226,15 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
-      {/* Hero stays fixed — does not scroll */}
-      <View style={[styles.hero, { height: HERO_H }]}>
+      <Animated.ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+      >
+      {/* Hero is pinned via translateY; the card scrolls up over it */}
+      <Animated.View style={[styles.hero, { height: HERO_H, transform: [{ translateY: heroPin }] }]}>
             {photos.length > 0 ? (
               <FlatList
                 data={photos}
@@ -303,14 +312,8 @@ export default function ProfileScreen() {
                 ))}
               </View>
             )}
-      </View>
+      </Animated.View>
 
-      {/* Only the card content scrolls — overlaps hero by 32 px */}
-      <ScrollView
-        style={{ flex: 1, marginTop: HERO_H - 32 }}
-        contentContainerStyle={{ flexGrow: 1 }}
-        showsVerticalScrollIndicator={false}
-      >
         <Animated.View style={{ opacity: fadeAnim }}>
           <View style={[styles.glassCard, { backgroundColor: scheme === 'dark' ? '#141418' : '#FFFFFF', borderColor: c.border, minHeight: SCREEN_H - HERO_H + 32 + tabBarHeight, paddingBottom: tabBarHeight + 16 }]}>
             {/* Identity Header */}
@@ -458,7 +461,7 @@ export default function ProfileScreen() {
             )}
           </View>
         </Animated.View>
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 
@@ -467,9 +470,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   hero: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
     width: SCREEN_W,
     backgroundColor: '#111',
     overflow: 'hidden',
@@ -516,6 +516,7 @@ const styles = StyleSheet.create({
   dotActive: { width: 16, backgroundColor: '#FFF' },
 
   glassCard: {
+    marginTop: -32,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 22,
