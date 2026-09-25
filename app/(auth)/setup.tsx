@@ -276,6 +276,7 @@ export default function SetupScreen() {
                     keyboardType="number-pad"
                     maxLength={2}
                     textAlign="center"
+                    selectTextOnFocus
                   />
                   <Text style={s.dobSlash}>/</Text>
                   <TextInput
@@ -287,6 +288,7 @@ export default function SetupScreen() {
                     keyboardType="number-pad"
                     maxLength={2}
                     textAlign="center"
+                    selectTextOnFocus
                   />
                   <Text style={s.dobSlash}>/</Text>
                   <TextInput
@@ -298,6 +300,7 @@ export default function SetupScreen() {
                     keyboardType="number-pad"
                     maxLength={4}
                     textAlign="center"
+                    selectTextOnFocus
                   />
                 </View>
               </View>
