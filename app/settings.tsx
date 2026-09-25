@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Share, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import ConfirmSheet from '@/components/ConfirmSheet';
@@ -61,7 +61,7 @@ export default function SettingsScreen() {
             <UIRow icon="person-outline" label="Edit Profile" onPress={() => router.push('/edit-profile' as any)} separator />
             <UIRow icon="diamond-outline" label="Ping Plus" onPress={() => router.push('/subscription' as any)} iconColor={Ping.purple} separator />
             <UIRow icon="flash-outline" label="My Activity" onPress={() => router.push('/my-activity' as any)} separator />
-            <UIRow icon="megaphone-outline" label="My Ads" onPress={() => router.push('/ads')} />
+            <UIRow icon="megaphone-outline" label="My Ads" onPress={() => Alert.alert('Coming Soon', 'Ad management will be available in the next update.')} />
           </UICard>
         </View>
 
