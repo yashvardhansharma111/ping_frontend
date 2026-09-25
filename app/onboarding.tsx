@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Pressable,
   Dimensions, Animated, PanResponder, Image,
+  AppState, type AppStateStatus,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -19,10 +21,26 @@ import Reanimated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { Ping, Spacing, Radius } from '@/constants/theme';
+import { Ping, Radius } from '@/constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
 const HERO_H = Math.round(H * 0.56);
+
+// ── Intro timing ──────────────────────────────────────────────────────────────
+// The orb breathes for INTRO_BURST_MS, then bursts into the profile circles.
+// Tune this to land the burst on the beat of the ambient track.
+const INTRO_BURST_MS = 2600;
+const ORB_SIZE = 96;
+const ORB_CX = W / 2;                       // hero-relative orb centre
+const ORB_CY = Math.round(HERO_H * 0.78);
+
+// ── Ambient sound ─────────────────────────────────────────────────────────────
+// Drop your track at frontend/assets/sounds/ambient.mp3 and swap the line below:
+//   const AMBIENT_SOURCE: AudioSource = require('@/assets/sounds/ambient.mp3');
+// expo-av is a native module — it only works in an APK built after it was installed.
+type AudioSource = number | { uri: string };
+const AMBIENT_SOURCE: AudioSource | null = null;
+const AMBIENT_VOLUME = 0.35;
 
 // ── Photo bank (square crops for clean circular display) ──────────────────────
 
@@ -181,48 +199,112 @@ const SLIDES: SlideData[] = [
   },
 ];
 
+// ── Ambient sound hook ────────────────────────────────────────────────────────
+// expo-av is required lazily inside try/catch so an APK built without the
+// native module still runs this screen (just silently).
+
+function useAmbientSound(muted: boolean) {
+  const soundRef = useRef<any>(null);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  useEffect(() => {
+    if (!AMBIENT_SOURCE) return;
+
+    let AudioMod: any;
+    try {
+      AudioMod = require('expo-av').Audio;
+    } catch {
+      return; // native module missing in this build
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        await AudioMod.setAudioModeAsync({
+          playsInSilentModeIOS: false,      // respect the iOS silent switch
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+        const { sound } = await AudioMod.Sound.createAsync(
+          AMBIENT_SOURCE,
+          { isLooping: true, volume: AMBIENT_VOLUME, shouldPlay: !mutedRef.current },
+        );
+        if (!alive) { sound.unloadAsync().catch(() => {}); return; }
+        soundRef.current = sound;
+      } catch {
+        // audio unavailable — continue without music
+      }
+    })();
+
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') {
+        if (!mutedRef.current) soundRef.current?.playAsync().catch(() => {});
+      } else {
+        soundRef.current?.pauseAsync().catch(() => {});
+      }
+    });
+
+    return () => {
+      alive = false;
+      sub.remove();
+      soundRef.current?.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const snd = soundRef.current;
+    if (!snd) return;
+    (muted ? snd.pauseAsync() : snd.playAsync()).catch(() => {});
+  }, [muted]);
+}
+
 // ── FloatingCircle ─────────────────────────────────────────────────────────────
-// Each circle has its own Reanimated shared values and runs entirely
-// on the UI thread — no JS-thread frame budget.
+// Travels from (originDX, originDY) to its resting spot with a spring, then
+// floats forever. Travel and float use separate shared values so neither
+// animation cancels the other. Everything runs on the UI thread.
 
-type FloatingCircleProps = { photo: PhotoDef; index: number };
+type FloatingCircleProps = {
+  photo: PhotoDef;
+  index: number;
+  top: number;
+  left: number;
+  originDX: number;
+  originDY: number;
+  delayMs: number;
+};
 
-function FloatingCircle({ photo, index }: FloatingCircleProps) {
-  const ty      = useSharedValue(0);
-  const tx      = useSharedValue(0);
+function FloatingCircle({ photo, index, top, left, originDX, originDY, delayMs }: FloatingCircleProps) {
+  const entX    = useSharedValue(originDX);
+  const entY    = useSharedValue(originDY);
+  const fx      = useSharedValue(0);
+  const fy      = useSharedValue(0);
   const scale   = useSharedValue(0);
   const opacity = useSharedValue(0);
 
-  const fp           = FLOAT_CONFIGS[index % FLOAT_CONFIGS.length];
-  const entranceMs   = index * 160;
+  const fp = FLOAT_CONFIGS[index % FLOAT_CONFIGS.length];
 
   useEffect(() => {
-    // ── Staggered entrance ──
-    scale.value = withDelay(
-      entranceMs,
-      withSpring(1, { damping: 10, stiffness: 72, mass: 1.3 })
-    );
-    opacity.value = withDelay(
-      entranceMs,
-      withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) })
-    );
+    const travel = { damping: 13, stiffness: 68, mass: 1.1 };
+    entX.value    = withDelay(delayMs, withSpring(0, travel));
+    entY.value    = withDelay(delayMs, withSpring(0, travel));
+    scale.value   = withDelay(delayMs, withSpring(1, { damping: 10, stiffness: 72, mass: 1.3 }));
+    opacity.value = withDelay(delayMs, withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }));
 
-    // ── Continuous float — starts after entrance settles ──
-    const floatStart = entranceMs + 820;
-
-    ty.value = withDelay(
+    const floatStart = delayMs + 900;
+    fy.value = withDelay(
       floatStart,
       withRepeat(
         withSequence(
-          withTiming( fp.yAmp,          { duration: fp.yDur, easing: Easing.inOut(Easing.sin) }),
-          withTiming(-fp.yAmp * 0.45,   { duration: fp.yDur, easing: Easing.inOut(Easing.sin) }),
+          withTiming( fp.yAmp,        { duration: fp.yDur, easing: Easing.inOut(Easing.sin) }),
+          withTiming(-fp.yAmp * 0.45, { duration: fp.yDur, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
-        false
-      )
+        true,
+      ),
     );
-
-    tx.value = withDelay(
+    fx.value = withDelay(
       floatStart,
       withRepeat(
         withSequence(
@@ -230,13 +312,15 @@ function FloatingCircle({ photo, index }: FloatingCircleProps) {
           withTiming(-fp.xAmp, { duration: fp.xDur, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
-        false
-      )
+        true,
+      ),
     );
 
     return () => {
-      cancelAnimation(ty);
-      cancelAnimation(tx);
+      cancelAnimation(entX);
+      cancelAnimation(entY);
+      cancelAnimation(fx);
+      cancelAnimation(fy);
       cancelAnimation(scale);
       cancelAnimation(opacity);
     };
@@ -244,37 +328,23 @@ function FloatingCircle({ photo, index }: FloatingCircleProps) {
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
     transform: [
-      { translateY: ty.value },
-      { translateX: tx.value },
+      { translateX: entX.value + fx.value },
+      { translateY: entY.value + fy.value },
       { scale: scale.value },
     ],
-    opacity: opacity.value,
   }));
 
-  // Resolve absolute position from fractional values
-  const pos: Record<string, number> = { position: 'absolute' } as any;
-  if (photo.pos.top    !== undefined) pos.top    = Math.round(HERO_H * photo.pos.top);
-  if (photo.pos.bottom !== undefined) pos.bottom = Math.round(HERO_H * photo.pos.bottom);
-  if (photo.pos.left   !== undefined) pos.left   = Math.round(W * photo.pos.left);
-  if (photo.pos.right  !== undefined) pos.right  = Math.round(W * photo.pos.right);
-
-  const s = photo.size;
-  const ringSize = s + 7;
-  const ringR    = ringSize / 2;
+  const size     = photo.size;
+  const ringSize = size + 7;
 
   return (
-    <Reanimated.View style={[pos as any, animStyle, circ.shadow]}>
-      {/* White-glass ring */}
-      <View
-        style={[
-          circ.ring,
-          { width: ringSize, height: ringSize, borderRadius: ringR },
-        ]}
-      >
+    <Reanimated.View style={[{ position: 'absolute', top, left }, animStyle, circ.shadow]}>
+      <View style={[circ.ring, { width: ringSize, height: ringSize, borderRadius: ringSize / 2 }]}>
         <Image
           source={{ uri: photo.uri }}
-          style={{ width: s, height: s, borderRadius: s / 2 }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
           resizeMode="cover"
         />
       </View>
@@ -302,14 +372,34 @@ const circ = StyleSheet.create({
 
 // ── FloatingCircles ───────────────────────────────────────────────────────────
 
-function FloatingCircles({ slide }: { slide: SlideData }) {
+function resolveTopLeft(p: PhotoDef) {
+  const ringSize = p.size + 7;
+  const top  = p.pos.top  !== undefined ? Math.round(HERO_H * p.pos.top)  : HERO_H - Math.round(HERO_H * (p.pos.bottom ?? 0)) - ringSize;
+  const left = p.pos.left !== undefined ? Math.round(W * p.pos.left)      : W      - Math.round(W * (p.pos.right ?? 0))       - ringSize;
+  return { top, left, ringSize };
+}
+
+function FloatingCircles({ slide, fromOrb }: { slide: SlideData; fromOrb: boolean }) {
   return (
     <View style={{ flex: 1, position: 'relative' }}>
-      {slide.photos.map((p, i) => (
-        <FloatingCircle key={p.uri} photo={p} index={i} />
-      ))}
+      {slide.photos.map((p, i) => {
+        const { top, left, ringSize } = resolveTopLeft(p);
+        const originDX = fromOrb ? ORB_CX - (left + ringSize / 2) : 0;
+        const originDY = fromOrb ? ORB_CY - (top  + ringSize / 2) : 0;
+        return (
+          <FloatingCircle
+            key={p.uri}
+            photo={p}
+            index={i}
+            top={top}
+            left={left}
+            originDX={originDX}
+            originDY={originDY}
+            delayMs={fromOrb ? i * 90 : i * 160}
+          />
+        );
+      })}
 
-      {/* Emoji decorators */}
       {(slide.decor ?? []).map((d, i) => {
         const dp: any = { position: 'absolute', zIndex: 10 };
         if (d.top    !== undefined) dp.top    = Math.round(HERO_H * d.top);
@@ -326,23 +416,176 @@ const ph = StyleSheet.create({
   decor: { fontSize: 22, position: 'absolute' },
 });
 
+// ── IntroOverlay ──────────────────────────────────────────────────────────────
+// Light splash with a breathing gradient orb + ripple rings. On `bursting`
+// the rings blow out, the orb collapses and the overlay fades away.
+
+function RippleRing({ delayMs, bursting, style }: { delayMs: number; bursting: boolean; style: any }) {
+  const scale   = useSharedValue(1);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (bursting) {
+      scale.value   = withTiming(3.8, { duration: 520, easing: Easing.out(Easing.quad) });
+      opacity.value = withTiming(0,   { duration: 420 });
+      return;
+    }
+    scale.value = withDelay(delayMs, withRepeat(
+      withSequence(
+        withTiming(1,   { duration: 0 }),
+        withTiming(2.6, { duration: 1800, easing: Easing.out(Easing.quad) }),
+      ), -1, false,
+    ));
+    opacity.value = withDelay(delayMs, withRepeat(
+      withSequence(
+        withTiming(0.55, { duration: 0 }),
+        withTiming(0,    { duration: 1800, easing: Easing.out(Easing.quad) }),
+      ), -1, false,
+    ));
+    return () => { cancelAnimation(scale); cancelAnimation(opacity); };
+  }, [bursting]);
+
+  const anim = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return <Reanimated.View pointerEvents="none" style={[intro.ring, style, anim]} />;
+}
+
+function IntroOverlay({
+  bursting, onTap, topInset, bottomInset,
+}: { bursting: boolean; onTap: () => void; topInset: number; bottomInset: number }) {
+  const overlayOpacity = useSharedValue(1);
+  const orbScale       = useSharedValue(1);
+  const glowScale      = useSharedValue(1);
+
+  useEffect(() => {
+    if (bursting) {
+      overlayOpacity.value = withDelay(120, withTiming(0, { duration: 520, easing: Easing.out(Easing.quad) }));
+      orbScale.value  = withSequence(
+        withTiming(1.22, { duration: 150, easing: Easing.out(Easing.quad) }),
+        withTiming(0,    { duration: 320, easing: Easing.in(Easing.cubic) }),
+      );
+      glowScale.value = withTiming(2.4, { duration: 480, easing: Easing.out(Easing.quad) });
+      return;
+    }
+    orbScale.value = withRepeat(
+      withSequence(
+        withTiming(1.07, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1,    { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+      ), -1, false,
+    );
+    glowScale.value = withRepeat(
+      withSequence(
+        withTiming(1.18, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1,    { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+      ), -1, false,
+    );
+    return () => { cancelAnimation(orbScale); cancelAnimation(glowScale); };
+  }, [bursting]);
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
+  const orbStyle     = useAnimatedStyle(() => ({ transform: [{ scale: orbScale.value }] }));
+  const glowStyle    = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value * 0.9,
+    transform: [{ scale: glowScale.value }],
+  }));
+
+  // Orb centre in screen coordinates (hero starts at topInset)
+  const cx = ORB_CX;
+  const cy = topInset + ORB_CY;
+  const centred = (d: number) => ({ top: cy - d / 2, left: cx - d / 2, width: d, height: d, borderRadius: d / 2 });
+
+  return (
+    <Reanimated.View
+      style={[StyleSheet.absoluteFill, intro.overlay, overlayStyle]}
+      pointerEvents={bursting ? 'none' : 'auto'}
+    >
+      <Pressable style={StyleSheet.absoluteFill} onPress={onTap} />
+
+      <Text style={[intro.wordmark, { top: topInset + 24 }]}>ping</Text>
+
+      {/* soft glow halo */}
+      <Reanimated.View pointerEvents="none" style={[intro.glow, centred(ORB_SIZE * 1.9), glowStyle]} />
+
+      <RippleRing delayMs={0}   bursting={bursting} style={centred(ORB_SIZE)} />
+      <RippleRing delayMs={900} bursting={bursting} style={centred(ORB_SIZE)} />
+
+      <Reanimated.View pointerEvents="none" style={[intro.orbShadow, centred(ORB_SIZE), orbStyle]}>
+        <LinearGradient
+          colors={['#D3C6FF', '#B8A8F4', '#A9B9EE']}
+          start={{ x: 0.15, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: ORB_SIZE / 2 }]}
+        />
+        <Text style={intro.plus}>+</Text>
+      </Reanimated.View>
+
+      <Text style={[intro.handle, { bottom: bottomInset + 22 }]}>@ping.official</Text>
+    </Reanimated.View>
+  );
+}
+
+const intro = StyleSheet.create({
+  overlay:  { backgroundColor: '#F4F4F6', zIndex: 50 },
+  wordmark: { position: 'absolute', left: 28, fontSize: 22, fontWeight: '500', color: '#141414', letterSpacing: -0.3 },
+  handle:   { position: 'absolute', left: 28, fontSize: 11, color: '#6B6B70' },
+  glow:     { position: 'absolute', backgroundColor: 'rgba(143,99,244,0.16)' },
+  ring:     { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(143,99,244,0.45)' },
+  orbShadow: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: Ping.purple,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    elevation: 10,
+  },
+  plus: { fontSize: 46, fontWeight: '300', color: '#FFFFFF', lineHeight: 50, marginTop: -2 },
+});
+
 // ── Main screen ───────────────────────────────────────────────────────────────
+
+type Phase = 'intro' | 'burst' | 'slides';
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [slide, setSlide] = useState(0);
-  // RN Animated — used for page-level transitions (unchanged)
+  const [phase, setPhase] = useState<Phase>('intro');
+  const [muted, setMuted] = useState(false);
+
+  useAmbientSound(muted);
+
+  // RN Animated — page-level transitions
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideX   = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+
+  const phaseRef = useRef<Phase>('intro');
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  function burst() {
+    if (phaseRef.current !== 'intro') return;
+    phaseRef.current = 'burst';
+    setPhase('burst');
+    setTimeout(() => setPhase('slides'), 700);
+  }
+
+  useEffect(() => {
+    const t = setTimeout(burst, INTRO_BURST_MS);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Slide helpers ────────────────────────────────────────────────────────────
 
   const cur    = SLIDES[slide];
   const isLast = slide === SLIDES.length - 1;
 
-  const isDark   = true;
   const textCol  = '#F0EAFF';
   const subCol   = 'rgba(240,230,255,0.55)';
   const dotInact = 'rgba(255,255,255,0.14)';
@@ -394,8 +637,11 @@ export default function OnboardingScreen() {
   ).current;
 
   const showSkip   = slide < SLIDES.length - 1;
-  const skipLabel  = cur.skipLabel ?? 'Skip';
   const skipAction = cur.skipLabel ? finish : () => goTo(slide + 1);
+
+  // Circles only exist once the orb bursts; slide 0's first mount flies out of the orb.
+  const circlesVisible = phase !== 'intro';
+  const fromOrb        = slide === 0 && phase !== 'slides';
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -411,7 +657,6 @@ export default function OnboardingScreen() {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Top bar */}
         <View style={s.topBar}>
           {slide > 0 ? (
             <TouchableOpacity onPress={() => goTo(slide - 1)} hitSlop={14} activeOpacity={0.7} style={s.backBtn}>
@@ -419,16 +664,22 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           ) : <View style={s.backBtn} />}
 
-          {showSkip && (
-            <TouchableOpacity onPress={skipAction} hitSlop={10} activeOpacity={0.7}>
-              <Text style={s.skipText}>SKIP</Text>
-            </TouchableOpacity>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {AMBIENT_SOURCE != null && (
+              <TouchableOpacity onPress={() => setMuted(m => !m)} hitSlop={10} activeOpacity={0.75} style={s.muteBtn}>
+                <Ionicons name={muted ? 'volume-mute' : 'volume-medium'} size={16} color="rgba(255,255,255,0.65)" />
+              </TouchableOpacity>
+            )}
+            {showSkip && (
+              <TouchableOpacity onPress={skipAction} hitSlop={10} activeOpacity={0.7}>
+                <Text style={s.skipText}>SKIP</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* Floating circles — keyed by slide so entrance animation replays */}
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-          <FloatingCircles key={slide} slide={cur} />
+          {circlesVisible && <FloatingCircles key={slide} slide={cur} fromOrb={fromOrb} />}
         </Animated.View>
       </View>
 
@@ -452,7 +703,6 @@ export default function OnboardingScreen() {
           <Text style={[s.subtitle, { color: subCol }]}>{cur.subtitle}</Text>
         </Animated.View>
 
-        {/* Progress dots */}
         <View style={s.dotsRow}>
           {SLIDES.map((_, i) => (
             <TouchableOpacity key={i} onPress={() => goTo(i)} hitSlop={8}>
@@ -470,7 +720,6 @@ export default function OnboardingScreen() {
           ))}
         </View>
 
-        {/* CTA button */}
         <Animated.View style={{ transform: [{ scale: btnScale }] }}>
           <TouchableOpacity
             style={[s.btn, { backgroundColor: Ping.purple }]}
@@ -487,6 +736,16 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* ── Intro splash (sits above everything until it bursts) ── */}
+      {phase !== 'slides' && (
+        <IntroOverlay
+          bursting={phase === 'burst'}
+          onTap={burst}
+          topInset={insets.top}
+          bottomInset={insets.bottom}
+        />
+      )}
     </View>
   );
 }
@@ -516,6 +775,17 @@ const s = StyleSheet.create({
   backArrow: { fontSize: 28, fontWeight: '300', color: 'rgba(255,255,255,0.40)', lineHeight: 34 },
   skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.38)' },
 
+  muteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+
   body: {
     flex: 1,
     paddingHorizontal: 24,
@@ -523,7 +793,6 @@ const s = StyleSheet.create({
     gap: 0,
   },
 
-  // Pro
   proRow:      { alignItems: 'flex-start', gap: 6, marginBottom: 10 },
   couponBadge: {
     paddingHorizontal: 12, paddingVertical: 5,
@@ -536,7 +805,6 @@ const s = StyleSheet.create({
   strikePrice: { textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.35)', fontWeight: '400' },
   freePrice:   { color: Ping.purple, fontWeight: '800' },
 
-  // Content
   title: {
     fontSize: 28,
     fontWeight: '800',
@@ -552,12 +820,10 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // Dots
   dotsRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 20 },
   dot:       { width: 6, height: 6, borderRadius: 3 },
   dotActive: { width: 22, height: 6, borderRadius: 3 },
 
-  // Button
   btn: {
     height: 54,
     borderRadius: Radius.full,
