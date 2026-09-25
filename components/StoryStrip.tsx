@@ -142,16 +142,19 @@ export default function StoryStrip({ onCreatePing }: { onCreatePing?: () => void
       >
         {/* Your story / create ping */}
         <TouchableOpacity style={s.bubble} onPress={onCreatePing} activeOpacity={0.8}>
-          <View style={[s.ringWrap, { borderColor: Ping.purple, borderWidth: 2, borderStyle: 'dashed' }]}>
-            <View style={[s.avatarCircle, { backgroundColor: `${Ping.purple}22` }]}>
-              {myAvatar ? (
-                <Image source={{ uri: myAvatar }} style={s.avatarImg} />
-              ) : (
-                <Text style={[s.avatarLetter, { color: Ping.purple }]}>{myName[0]?.toUpperCase()}</Text>
-              )}
-              <View style={s.addBadge}>
-                <Ionicons name="add" size={10} color="#FFF" />
+          <View style={s.ringOuter}>
+            <View style={[s.ringWrap, { borderColor: Ping.purple, borderWidth: 2, borderStyle: 'dashed' }]}>
+              <View style={[s.avatarCircle, { backgroundColor: `${Ping.purple}22` }]}>
+                {myAvatar ? (
+                  <Image source={{ uri: myAvatar }} style={s.avatarImg} />
+                ) : (
+                  <Text style={[s.avatarLetter, { color: Ping.purple }]}>{myName[0]?.toUpperCase()}</Text>
+                )}
               </View>
+            </View>
+            {/* Sibling of the clipped circle so it renders on top, unclipped */}
+            <View style={s.addBadge}>
+              <Ionicons name="add" size={11} color="#FFF" />
             </View>
           </View>
           <Text style={[s.bubbleName, { color: Ping.purpleLight }]}>Your Ping</Text>
@@ -237,18 +240,21 @@ const s = StyleSheet.create({
   avatarImg: { width: '100%', height: '100%', borderRadius: 999 },
   avatarLetter: { fontSize: 20, fontWeight: '700' },
   bubbleName: { fontSize: 11, fontWeight: '600', color: '#9490C0', textAlign: 'center', maxWidth: 62 },
+  ringOuter: { position: 'relative' },
   addBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    bottom: 3,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: Ping.purple,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#0F0F1A',
+    zIndex: 2,
+    elevation: 3,
   },
 
   // Ping cards
