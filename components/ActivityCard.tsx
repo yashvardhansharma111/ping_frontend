@@ -437,10 +437,10 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 40, flex: 0.74, paddingHorizontal: 18, borderRadius: 10,
+    height: 44, flex: 0.86, paddingHorizontal: 20, borderRadius: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  mainBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  mainBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   shareBtn: {
     width: 40, height: 40, borderRadius: 10, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
