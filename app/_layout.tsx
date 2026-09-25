@@ -21,6 +21,10 @@ import useAuthStore from '@/lib/stores/authStore';
 import useThemeStore from '@/lib/stores/themeStore';
 import SplashAnimation from '@/components/SplashAnimation';
 import { toastConfig } from '@/components/ToastConfig';
+import { useFonts } from 'expo-font';
+import { APP_FONTS, applyGlobalFont, setFontsReady } from '@/lib/fonts';
+
+applyGlobalFont();
 import RatePingModal from '@/components/RatePingModal';
 import { activitiesApi, type PendingRating } from '@/lib/api';
 import { setupNotifications, clearPushToken, addResponseListener, startSessionTracking, stopSessionTracking, type NotificationPayload } from '@/lib/notifications';
@@ -113,6 +117,10 @@ export default function RootLayout() {
   const [ratingItem, setRatingItem] = useState<PendingRating | null>(null);
   const ratingChecked = useRef(false);
   const notifSetupDone = useRef(false);
+  const [fontsLoaded, fontsError] = useFonts(APP_FONTS);
+  // Fall through on error so a missing font never blocks the app
+  const fontsSettled = fontsLoaded || !!fontsError;
+  setFontsReady(fontsLoaded);
 
   useEffect(() => {
     loadFromStorage();
@@ -184,7 +192,7 @@ export default function RootLayout() {
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
 
       {/* Stack renders (and AuthGuard fires) beneath the splash */}
-      {!isLoading && (
+      {!isLoading && fontsSettled && (
         <>
           <AuthGuard />
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
