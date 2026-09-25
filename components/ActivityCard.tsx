@@ -263,10 +263,9 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
                   <TypeIcon size={9} color={accent} weight="bold" />
                   <Text style={[s.typePillText, { color: accent }]}>{typeCfg.label}</Text>
                 </View>
-                <Text style={[s.metaDot, { color: muted }]}>·</Text>
-                <Text style={[s.timeText, { color: muted }]}>{timeAgo(a.startsAt)}</Text>
               </View>
             </View>
+            <Text style={[s.timeText, { color: muted }]}>{timeAgo(a.startsAt)}</Text>
           </View>
 
           {/* Title */}
@@ -407,7 +406,7 @@ const s = StyleSheet.create({
   venueChipText: { fontSize: 10, fontWeight: '600', color: '#FFF' },
 
   // Body
-  body: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 2 },
+  body: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2 },
 
   creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   avatar: {
@@ -434,15 +433,12 @@ const s = StyleSheet.create({
   // Actions
   actionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 40, borderRadius: 10,
+    height: 36, borderRadius: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    shadowColor: Ping.purple,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
   },
   mainBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   shareBtn: {
