@@ -2703,6 +2703,7 @@ function makeStyles(isDark: boolean) {
       backgroundColor: isDark ? '#13131F' : '#FFFFFF',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
+      overflow: 'hidden',
       maxHeight: SCREEN_H * 0.72,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderColor: isDark ? 'rgba(167,139,250,0.14)' : 'rgba(0,0,0,0.08)',
