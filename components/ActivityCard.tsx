@@ -444,5 +444,6 @@ const s = StyleSheet.create({
   shareBtn: {
     width: 40, height: 40, borderRadius: 10, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
+    marginRight: 10,
   },
 });
