@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,15 +19,27 @@ import * as ImagePicker from 'expo-image-picker';
 import { usersApi, uploadApi } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import { Ping, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
-// Light premium palette — Ping design system
-const BG     = '#FFFFFF';
-const TEXT   = '#111111';
-const MUTED  = '#6F6866';
-const DIM    = '#A6A6B0';
 const PURPLE = Ping.purple;
-const SURF   = Ping.soft;
-const BORDER = 'rgba(143,99,244,0.18)';
+
+type Palette = { BG: string; TEXT: string; MUTED: string; DIM: string; SURF: string; BORDER: string; LINK: string };
+
+const PALETTE_LIGHT: Palette = {
+  BG: '#FFFFFF', TEXT: '#111111', MUTED: '#6F6866', DIM: '#A6A6B0',
+  SURF: Ping.soft, BORDER: 'rgba(143,99,244,0.18)', LINK: Ping.purpleDim,
+};
+const PALETTE_DARK: Palette = {
+  BG: '#0F0F12', TEXT: '#F1F0FF', MUTED: '#9490C0', DIM: '#555570',
+  SURF: 'rgba(255,255,255,0.05)', BORDER: 'rgba(167,139,250,0.18)', LINK: Ping.purpleLight,
+};
+
+function usePalette() {
+  const isDark = (useColorScheme() ?? 'dark') === 'dark';
+  const p = isDark ? PALETTE_DARK : PALETTE_LIGHT;
+  const s = useMemo(() => makeStyles(p), [p]);
+  return { p, s, isDark };
+}
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -94,12 +106,15 @@ const pd = StyleSheet.create({
 
 // ── Shared section label ──────────────────────────────────────────────────────
 function FieldLabel({ text }: { text: string }) {
+  const { s } = usePalette();
   return <Text style={s.label}>{text}</Text>;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SetupScreen() {
   const insets    = useSafeAreaInsets();
+  const { p, s }  = usePalette();
+  const { TEXT, MUTED, DIM } = p;
   const [step, setStep] = useState(1);
 
   const [displayName, setDisplayName] = useState('');
@@ -267,41 +282,49 @@ export default function SetupScreen() {
               <View style={s.field}>
                 <FieldLabel text="Date of birth" />
                 <View style={s.dobRow}>
-                  <TextInput
-                    style={[s.input, s.dobPart]}
-                    placeholder="DD"
-                    placeholderTextColor={DIM}
-                    value={dobDay}
-                    onChangeText={(v) => setDobDay(v.replace(/\D/g, '').slice(0, 2))}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    textAlign="center"
-                    selectTextOnFocus
-                  />
+                  {/* Each input is only as wide as its digits and centred in its box,
+                      so Android's cursor placement can't drift to an edge. */}
+                  <View style={[s.input, s.dobBox, { flex: 1 }]}>
+                    <TextInput
+                      style={[s.dobInput, { width: 44 }]}
+                      placeholder="DD"
+                      placeholderTextColor={DIM}
+                      value={dobDay}
+                      onChangeText={(v) => setDobDay(v.replace(/\D/g, '').slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      textAlign="center"
+                      selectTextOnFocus
+                    />
+                  </View>
                   <Text style={s.dobSlash}>/</Text>
-                  <TextInput
-                    style={[s.input, s.dobPart]}
-                    placeholder="MM"
-                    placeholderTextColor={DIM}
-                    value={dobMonth}
-                    onChangeText={(v) => setDobMonth(v.replace(/\D/g, '').slice(0, 2))}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    textAlign="center"
-                    selectTextOnFocus
-                  />
+                  <View style={[s.input, s.dobBox, { flex: 1 }]}>
+                    <TextInput
+                      style={[s.dobInput, { width: 44 }]}
+                      placeholder="MM"
+                      placeholderTextColor={DIM}
+                      value={dobMonth}
+                      onChangeText={(v) => setDobMonth(v.replace(/\D/g, '').slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      textAlign="center"
+                      selectTextOnFocus
+                    />
+                  </View>
                   <Text style={s.dobSlash}>/</Text>
-                  <TextInput
-                    style={[s.input, s.dobYear]}
-                    placeholder="YYYY"
-                    placeholderTextColor={DIM}
-                    value={dobYear}
-                    onChangeText={(v) => setDobYear(v.replace(/\D/g, '').slice(0, 4))}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    textAlign="center"
-                    selectTextOnFocus
-                  />
+                  <View style={[s.input, s.dobBox, { flex: 1.8 }]}>
+                    <TextInput
+                      style={[s.dobInput, { width: 68 }]}
+                      placeholder="YYYY"
+                      placeholderTextColor={DIM}
+                      value={dobYear}
+                      onChangeText={(v) => setDobYear(v.replace(/\D/g, '').slice(0, 4))}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      textAlign="center"
+                      selectTextOnFocus
+                    />
+                  </View>
                 </View>
               </View>
 
@@ -464,7 +487,9 @@ export default function SetupScreen() {
   );
 }
 
-const s = StyleSheet.create({
+function makeStyles(p: Palette) {
+  const { BG, TEXT, MUTED, DIM, SURF, BORDER } = p;
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: BG,
@@ -484,7 +509,7 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Ping.soft,
+    backgroundColor: SURF,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -571,8 +596,8 @@ const s = StyleSheet.create({
 
   // DOB
   dobRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dobPart: { flex: 1, paddingHorizontal: 0, textAlign: 'center' },
-  dobYear: { flex: 1.8, paddingHorizontal: 0, textAlign: 'center' },
+  dobBox: { paddingHorizontal: 0, alignItems: 'center', justifyContent: 'center' },
+  dobInput: { height: '100%', fontSize: 15, fontWeight: '500', color: TEXT, textAlign: 'center', paddingHorizontal: 0 },
   dobSlash: { fontSize: 18, color: DIM, fontWeight: '300' },
 
   // Occupation chips
@@ -620,7 +645,7 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     alignSelf: 'flex-start',
   },
-  privacyNoteText: { fontSize: 12, color: Ping.purpleDim, fontWeight: '600' },
+  privacyNoteText: { fontSize: 12, color: p.LINK, fontWeight: '600' },
   photoRow: { flexDirection: 'row', gap: 14 },
   photoSlot: {
     width: 130,
@@ -691,4 +716,5 @@ const s = StyleSheet.create({
     elevation: 0,
   },
   btnText: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: 0.2 },
-});
+  });
+}

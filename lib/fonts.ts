@@ -88,12 +88,20 @@ export function applyGlobalFont() {
   patched = true;
 
   const RN = require('react-native');
+  // react-native-web exposes these as frozen ES exports (static web export
+  // throws "Cannot redefine property"); native uses configurable getters.
+  if (RN.Platform?.OS === 'web') return;
+
   for (const name of ['Text', 'TextInput'] as const) {
-    const Orig = RN[name];
-    const Wrapped = (props: any) =>
-      React.createElement(Orig, { ...props, style: [props.style, resolveFontStyle(props.style)] });
-    Wrapped.displayName = name;
-    for (const key of Object.keys(Orig)) (Wrapped as any)[key] = (Orig as any)[key];
-    Object.defineProperty(RN, name, { configurable: true, enumerable: true, get: () => Wrapped });
+    try {
+      const Orig = RN[name];
+      const Wrapped = (props: any) =>
+        React.createElement(Orig, { ...props, style: [props.style, resolveFontStyle(props.style)] });
+      Wrapped.displayName = name;
+      for (const key of Object.keys(Orig)) (Wrapped as any)[key] = (Orig as any)[key];
+      Object.defineProperty(RN, name, { configurable: true, enumerable: true, get: () => Wrapped });
+    } catch {
+      // Leave the system font in place rather than crash at startup
+    }
   }
 }
