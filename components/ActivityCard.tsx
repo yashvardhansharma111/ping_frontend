@@ -258,14 +258,14 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[s.creatorName, { color: ink }]} numberOfLines={1}>{a.creator?.displayName ?? 'Someone'}</Text>
-              <View style={s.metaRow}>
-                <View style={[s.typePill, { backgroundColor: accentMist }]}>
-                  <TypeIcon size={9} color={accent} weight="bold" />
-                  <Text style={[s.typePillText, { color: accent }]}>{typeCfg.label}</Text>
-                </View>
+            </View>
+            <View style={s.metaCol}>
+              <Text style={[s.timeText, { color: muted }]}>{timeAgo(a.startsAt)}</Text>
+              <View style={[s.typePill, { backgroundColor: accentMist }]}>
+                <TypeIcon size={9} color={accent} weight="bold" />
+                <Text style={[s.typePillText, { color: accent }]}>{typeCfg.label}</Text>
               </View>
             </View>
-            <Text style={[s.timeText, { color: muted }]}>{timeAgo(a.startsAt)}</Text>
           </View>
 
           {/* Title */}
@@ -284,7 +284,7 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
       {/* ── Action row ── */}
       {!compact && (
         <View style={[s.actionRow, { borderTopColor: borderColor }]}>
-          <Animated.View style={[{ flex: 1 }, { transform: [{ scale: btnScale }] }]}>
+          <Animated.View style={{ transform: [{ scale: btnScale }] }}>
             <TouchableOpacity
               style={[s.mainBtn, { backgroundColor: isExpired ? (isDark ? 'rgba(255,255,255,0.06)' : '#F0F0F0') : accent }]}
               onPress={() => {
@@ -365,7 +365,7 @@ const s = StyleSheet.create({
 
   // Cover
   coverWrap: { position: 'relative' },
-  cover: { width: '100%', height: 160 },
+  cover: { width: '100%', height: 124 },
   coverPlaceholder: {
     width: '100%', height: 100,
     alignItems: 'center', justifyContent: 'center',
@@ -416,7 +416,7 @@ const s = StyleSheet.create({
   avatarImg: { width: '100%', height: '100%' },
   avatarLetter: { fontSize: 12, fontWeight: '800' },
   creatorName: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  metaCol: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   typePill: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20,
@@ -432,12 +432,12 @@ const s = StyleSheet.create({
 
   // Actions
   actionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
     paddingHorizontal: 14, paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 36, borderRadius: 10,
+    height: 36, minWidth: 128, paddingHorizontal: 18, borderRadius: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   mainBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
