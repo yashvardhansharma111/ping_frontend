@@ -223,7 +223,7 @@ export default function SetupScreen() {
           {step === 1 && (
             <View style={s.stepWrap}>
               <View style={s.stepHead}>
-                <Text style={s.stepTitle}>Let's set up{'\n'}your profile.</Text>
+                <Text style={s.stepTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Let's set up your profile.</Text>
                 <Text style={s.stepSub}>Tell us a bit about yourself.</Text>
               </View>
 
@@ -378,7 +378,7 @@ export default function SetupScreen() {
           {step === 2 && (
             <View style={s.stepWrap}>
               <View style={s.stepHead}>
-                <Text style={s.stepTitle}>What are{'\n'}you into?</Text>
+                <Text style={s.stepTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>What are you into?</Text>
                 <Text style={s.stepSub}>Pick at least 3 — we'll use this to find your people.</Text>
               </View>
 
@@ -422,7 +422,7 @@ export default function SetupScreen() {
           {step === 3 && (
             <View style={s.stepWrap}>
               <View style={s.stepHead}>
-                <Text style={s.stepTitle}>Add your{'\n'}photos.</Text>
+                <Text style={s.stepTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Add your photos.</Text>
                 <Text style={s.stepSub}>At least one. Of you, ideally.</Text>
               </View>
 
@@ -522,7 +522,7 @@ function makeStyles(p: Palette) {
   stepWrap: { gap: Spacing.lg },
   stepHead: { gap: 6 },
   stepTitle: {
-    fontSize: 30,
+    fontSize: 34,
     fontWeight: '800',
     color: TEXT,
     letterSpacing: -0.8,
