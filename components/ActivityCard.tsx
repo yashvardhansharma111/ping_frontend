@@ -284,7 +284,7 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
       {/* ── Action row ── */}
       {!compact && (
         <View style={[s.actionRow, { borderTopColor: borderColor }]}>
-          <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+          <Animated.View style={[{ flex: 1, flexDirection: 'row' }, { transform: [{ scale: btnScale }] }]}>
             <TouchableOpacity
               style={[s.mainBtn, { backgroundColor: isExpired ? (isDark ? 'rgba(255,255,255,0.06)' : '#F0F0F0') : accent }]}
               onPress={() => {
@@ -415,7 +415,7 @@ const s = StyleSheet.create({
   },
   avatarImg: { width: '100%', height: '100%' },
   avatarLetter: { fontSize: 12, fontWeight: '800' },
-  creatorName: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
+  creatorName: { fontSize: 12, fontWeight: '600', letterSpacing: 0 },
   metaCol: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   typePill: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
@@ -425,7 +425,7 @@ const s = StyleSheet.create({
   metaDot: { fontSize: 10 },
   timeText: { fontSize: 10, fontWeight: '500' },
 
-  title: { fontSize: 15, fontWeight: '700', letterSpacing: -0.3, lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4, lineHeight: 23, marginTop: 2, marginBottom: 6 },
 
   urgencyRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   urgencyText: { fontSize: 11, fontWeight: '600' },
@@ -437,7 +437,7 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 36, minWidth: 128, paddingHorizontal: 18, borderRadius: 10,
+    height: 40, flex: 0.68, paddingHorizontal: 18, borderRadius: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   mainBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
