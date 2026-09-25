@@ -91,6 +91,8 @@ const PHOSPHOR_COLORS: Record<string, string> = {
   musicNote: '#7C3AED', basketball: '#F97316', smiley: '#22C55E', campfire: '#EA580C', gameController: '#3B82F6',
 };
 const MARKER_EMOJIS = ['🎉', '🍕', '🎵', '⚽', '📚', '🎮', '🌟', '🎯', '🏃', '🎨'];
+const ALL_MARKER_ICONS = [...Object.keys(PHOSPHOR_ICON_MAP), ...MARKER_EMOJIS];
+const randomMarkerIcon = () => ALL_MARKER_ICONS[Math.floor(Math.random() * ALL_MARKER_ICONS.length)];
 
 const PRIVATE_VENUE_WORDS = [
   'home', 'house', 'flat', 'apartment', 'bedroom', 'my room', 'pg room',
@@ -1184,7 +1186,7 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(vibe ? { vibe } : {}),
         ...(imageUrl ? { imageUrl } : {}),
-        ...(markerIcon ? { markerIcon } : {}),
+        markerIcon: markerIcon ?? randomMarkerIcon(),
       });
       if (created?.activity?.startsAt) {
         scheduleStartingNotification(
