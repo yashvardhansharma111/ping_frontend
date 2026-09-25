@@ -2,15 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Dimensions, Animated, PanResponder, Image,
-  AppState, type AppStateStatus,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,13 +23,6 @@ import { Ping, Spacing, Radius } from '@/constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
 const HERO_H = Math.round(H * 0.56);
-
-// Ambient music — royalty-free (Mixkit free license).
-// To use a bundled file: const AMBIENT_AUDIO = require('@/assets/sounds/ambient.mp3');
-const AMBIENT_AUDIO = {
-  uri: 'https://assets.mixkit.co/music/preview/mixkit-dreamy-lo-fi-background-2232.mp3',
-};
-const AMBIENT_VOLUME = 0.28;
 
 // ── Photo bank (square crops for clean circular display) ──────────────────────
 
@@ -342,68 +332,10 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [slide, setSlide] = useState(0);
-  const [muted, setMuted] = useState(false);
-
   // RN Animated — used for page-level transitions (unchanged)
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideX   = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
-
-  // Audio refs — avoid stale closure issues
-  const soundRef  = useRef<Audio.Sound | null>(null);
-  const mutedRef  = useRef(false);
-
-  // ── Audio setup ──────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    let alive = true;
-
-    async function initAudio() {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: false,   // respect iOS silent switch
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-
-        const { sound } = await Audio.Sound.createAsync(
-          AMBIENT_AUDIO,
-          { isLooping: true, volume: AMBIENT_VOLUME, shouldPlay: true }
-        );
-
-        if (!alive) { sound.unloadAsync(); return; }
-        soundRef.current = sound;
-      } catch {
-        // Network unavailable or audio error — continue without music
-      }
-    }
-
-    initAudio();
-
-    // Pause when app goes to background; resume on foreground
-    const appSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active' && !mutedRef.current) {
-        soundRef.current?.playAsync().catch(() => {});
-      } else if (next !== 'active') {
-        soundRef.current?.pauseAsync().catch(() => {});
-      }
-    });
-
-    return () => {
-      alive = false;
-      appSub.remove();
-      soundRef.current?.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    };
-  }, []);
-
-  function toggleMute() {
-    const next = !mutedRef.current;
-    mutedRef.current = next;
-    setMuted(next);
-    if (next) soundRef.current?.pauseAsync().catch(() => {});
-    else      soundRef.current?.playAsync().catch(() => {});
-  }
 
   // ── Slide helpers ────────────────────────────────────────────────────────────
 
@@ -487,22 +419,11 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           ) : <View style={s.backBtn} />}
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            {/* Mute button */}
-            <TouchableOpacity onPress={toggleMute} hitSlop={10} activeOpacity={0.75} style={s.muteBtn}>
-              <Ionicons
-                name={muted ? 'volume-mute' : 'volume-medium'}
-                size={16}
-                color="rgba(255,255,255,0.65)"
-              />
+          {showSkip && (
+            <TouchableOpacity onPress={skipAction} hitSlop={10} activeOpacity={0.7}>
+              <Text style={s.skipText}>SKIP</Text>
             </TouchableOpacity>
-
-            {showSkip && (
-              <TouchableOpacity onPress={skipAction} hitSlop={10} activeOpacity={0.7}>
-                <Text style={s.skipText}>SKIP</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          )}
         </View>
 
         {/* Floating circles — keyed by slide so entrance animation replays */}
@@ -594,17 +515,6 @@ const s = StyleSheet.create({
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   backArrow: { fontSize: 28, fontWeight: '300', color: 'rgba(255,255,255,0.40)', lineHeight: 34 },
   skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.38)' },
-
-  muteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.32)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
 
   body: {
     flex: 1,
