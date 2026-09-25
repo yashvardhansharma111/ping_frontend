@@ -321,16 +321,18 @@ function PlanCard({
     ]}>
       {/* Header row */}
       <View style={styles.tierTop}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={[styles.tierName, { color: c.text }]}>{name}</Text>
           {isCurrent && (
             <Text style={[styles.currentBadge, { color: accent }]}>Current plan</Text>
           )}
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
+        <View style={styles.priceCol}>
           <Text style={[styles.tierPrice, { color: c.text }]}>{priceLabel}</Text>
           {interval && (
-            <Text style={[styles.tierInterval, { color: c.textSecondary }]}>/ {interval}</Text>
+            <Text style={[styles.tierInterval, { color: c.textSecondary }]} numberOfLines={1}>
+              /{interval.replace(/^1\s+/, '')}
+            </Text>
           )}
         </View>
       </View>
@@ -402,8 +404,9 @@ const styles = StyleSheet.create({
   tierTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   tierName: { ...Typography.h3 },
   currentBadge: { ...Typography.caption, fontWeight: '700', marginTop: 2 },
+  priceCol: { flexDirection: 'row', alignItems: 'baseline', gap: 2, flexShrink: 0, marginLeft: 12 },
   tierPrice: { fontSize: 22, fontWeight: '800' },
-  tierInterval: { ...Typography.caption },
+  tierInterval: { ...Typography.caption, fontWeight: '600' },
   featList: { gap: 7, marginTop: 4 },
   featRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   featText: { ...Typography.bodySm, flex: 1 },

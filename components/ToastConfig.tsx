@@ -1,40 +1,38 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ToastConfig } from 'react-native-toast-message';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type ToastType = 'success' | 'error' | 'info';
 
-const CFG: Record<ToastType, { icon: keyof typeof Ionicons.glyphMap; iconColor: string; bubbleBg: string; chipBg: string; textColor: string; subColor: string }> = {
-  success: {
-    icon: 'checkmark',
-    iconColor: '#10B981',
-    bubbleBg: '#0D2018',
-    chipBg: 'rgba(16,185,129,0.13)',
-    textColor: '#D1FAE5',
-    subColor: '#6EE7B7',
-  },
-  error: {
-    icon: 'close',
-    iconColor: '#F87171',
-    bubbleBg: '#200D0D',
-    chipBg: 'rgba(239,68,68,0.13)',
-    textColor: '#FEE2E2',
-    subColor: '#FCA5A5',
-  },
-  info: {
-    icon: 'location',
-    iconColor: '#C4B5FD',
-    bubbleBg: '#160D22',
-    chipBg: 'rgba(167,139,250,0.15)',
-    textColor: '#EDE9FE',
-    subColor: '#A78BFA',
-  },
+type Palette = {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  bubbleBg: string;
+  chipBg: string;
+  chipBorder: string;
+  textColor: string;
+  subColor: string;
+};
+
+// Opaque chips in both themes so the toast reads on any screen behind it.
+const DARK: Record<ToastType, Palette> = {
+  success: { icon: 'checkmark', iconColor: '#10B981', bubbleBg: 'rgba(16,185,129,0.18)', chipBg: '#0F1F19', chipBorder: 'rgba(16,185,129,0.35)', textColor: '#D1FAE5', subColor: '#6EE7B7' },
+  error:   { icon: 'close',     iconColor: '#F87171', bubbleBg: 'rgba(239,68,68,0.18)',  chipBg: '#221010', chipBorder: 'rgba(239,68,68,0.35)',  textColor: '#FEE2E2', subColor: '#FCA5A5' },
+  info:    { icon: 'location',  iconColor: '#C4B5FD', bubbleBg: 'rgba(167,139,250,0.20)', chipBg: '#171026', chipBorder: 'rgba(167,139,250,0.40)', textColor: '#EDE9FE', subColor: '#A78BFA' },
+};
+
+const LIGHT: Record<ToastType, Palette> = {
+  success: { icon: 'checkmark', iconColor: '#059669', bubbleBg: 'rgba(16,185,129,0.14)', chipBg: '#FFFFFF', chipBorder: 'rgba(5,150,105,0.30)',  textColor: '#064E3B', subColor: '#047857' },
+  error:   { icon: 'close',     iconColor: '#DC2626', bubbleBg: 'rgba(239,68,68,0.14)',  chipBg: '#FFFFFF', chipBorder: 'rgba(220,38,38,0.30)',  textColor: '#7F1D1D', subColor: '#B91C1C' },
+  info:    { icon: 'location',  iconColor: '#7C3AED', bubbleBg: 'rgba(139,92,246,0.14)', chipBg: '#FFFFFF', chipBorder: 'rgba(124,58,237,0.30)', textColor: '#3B1D8F', subColor: '#6D28D9' },
 };
 
 function PingToast({ type, text1, text2 }: { type: ToastType; text1?: string; text2?: string }) {
-  const c = CFG[type];
+  const isDark = (useColorScheme() ?? 'light') === 'dark';
+  const c = (isDark ? DARK : LIGHT)[type];
   return (
-    <View style={[s.chip, { backgroundColor: c.chipBg }]}>
+    <View style={[s.chip, { backgroundColor: c.chipBg, borderColor: c.chipBorder }]}>
       <View style={[s.bubble, { backgroundColor: c.bubbleBg }]}>
         <Ionicons name={c.icon} size={16} color={c.iconColor} />
       </View>
@@ -61,11 +59,12 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 40,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.18,
     shadowRadius: 10,
-    elevation: 10,
+    elevation: 8,
     maxWidth: 340,
   },
   bubble: {
