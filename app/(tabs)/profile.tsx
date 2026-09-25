@@ -224,14 +224,8 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ flexGrow: 1 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View style={{ opacity: fadeAnim }}>
-          {/* Top Hero Photo Section */}
-          <View style={[styles.hero, { height: HERO_H }]}>
+      {/* Hero stays fixed — does not scroll */}
+      <View style={[styles.hero, { height: HERO_H }]}>
             {photos.length > 0 ? (
               <FlatList
                 data={photos}
@@ -309,9 +303,15 @@ export default function ProfileScreen() {
                 ))}
               </View>
             )}
-          </View>
+      </View>
 
-          {/* Reference Image 1 Overlay Glass Card */}
+      {/* Only the card content scrolls — overlaps hero by 32 px */}
+      <ScrollView
+        style={{ flex: 1, marginTop: HERO_H - 32 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={{ opacity: fadeAnim }}>
           <View style={[styles.glassCard, { backgroundColor: scheme === 'dark' ? '#141418' : '#FFFFFF', borderColor: c.border, minHeight: SCREEN_H - HERO_H + 32 + tabBarHeight, paddingBottom: tabBarHeight + 16 }]}>
             {/* Identity Header */}
             <View style={styles.identityHeader}>
@@ -461,6 +461,7 @@ export default function ProfileScreen() {
       </ScrollView>
     </View>
   );
+
 }
 
 const styles = StyleSheet.create({
