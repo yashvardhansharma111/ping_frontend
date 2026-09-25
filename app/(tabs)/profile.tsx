@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -17,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { ChartBar, ShieldCheck } from 'phosphor-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
 import { usersApi, friendsApi, uploadApi, activitiesApi } from '@/lib/api';
@@ -60,6 +61,31 @@ function completionQuip(pct: number): string {
   if (pct <= 80) return "Almost decent! Your future ping partners deserve the full version, not the demo.";
   if (pct <= 95) return "Itni mehnat karke ruk gaye? Commitment issues toh nahi? Bas thoda aur.";
   return "99% done and still holding back. That last 1% is personal isn't it 😭";
+}
+
+// ── Snoozable banner ──────────────────────────────────────────────────────────
+// Dismissing hides the banner for BANNER_SNOOZE_MS (persisted), after which it
+// returns. Re-checked every time the tab gains focus so it can reappear
+// without an app restart.
+const BANNER_SNOOZE_MS = 24 * 60 * 60 * 1000;
+
+function useSnoozedBanner(storageKey: string) {
+  const [hidden, setHidden] = useState(true);
+
+  const check = useCallback(() => {
+    AsyncStorage.getItem(storageKey)
+      .then((v) => setHidden(Date.now() < (v ? Number(v) : 0)))
+      .catch(() => setHidden(false));
+  }, [storageKey]);
+
+  useFocusEffect(useCallback(() => { check(); }, [check]));
+
+  const dismiss = useCallback(() => {
+    setHidden(true);
+    AsyncStorage.setItem(storageKey, String(Date.now() + BANNER_SNOOZE_MS)).catch(() => {});
+  }, [storageKey]);
+
+  return { hidden, dismiss };
 }
 
 // ── Profile Completion Banner ─────────────────────────────────────────────────
@@ -160,8 +186,8 @@ export default function ProfileScreen() {
   const [activityCount, setActivityCount] = useState<number | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
-  const [hideCompletion, setHideCompletion] = useState(false);
-  const [hideVerification, setHideVerification] = useState(false);
+  const completionBanner   = useSnoozedBanner('banner:completion:snoozeUntil');
+  const verificationBanner = useSnoozedBanner('banner:verification:snoozeUntil');
 
   const completionPct = useMemo(() => calcCompletion(user), [user]);
 
@@ -433,21 +459,21 @@ export default function ProfileScreen() {
             </View>
 
             {/* Profile Completion Banner */}
-            {!hideCompletion && completionPct < 100 && (
+            {!completionBanner.hidden && completionPct < 100 && (
               <CompletionBanner
                 pct={completionPct}
                 onEdit={() => router.push('/edit-profile' as any)}
-                onDismiss={() => setHideCompletion(true)}
+                onDismiss={completionBanner.dismiss}
                 c={c}
                 scheme={scheme}
               />
             )}
 
             {/* Verification Banner */}
-            {!hideVerification && !isVerified && user?.verificationStatus !== 'pending' && (
+            {!verificationBanner.hidden && !isVerified && user?.verificationStatus !== 'pending' && (
               <VerificationBanner
                 onVerify={() => router.push('/verification' as any)}
-                onDismiss={() => setHideVerification(true)}
+                onDismiss={verificationBanner.dismiss}
                 c={c}
                 scheme={scheme}
               />
