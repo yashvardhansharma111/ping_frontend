@@ -131,9 +131,9 @@ export default function StoryStrip({ onCreatePing }: { onCreatePing?: () => void
 
   return (
     <View style={s.root}>
-      {/* ── Friends stories row ── */}
+      {/* ── Friends row ── */}
       <View style={s.sectionHeader}>
-        <Text style={[s.sectionTitle, { color: c.text }]}>Stories</Text>
+        <Text style={[s.sectionTitle, { color: c.text }]}>Friends</Text>
       </View>
       <ScrollView
         horizontal
