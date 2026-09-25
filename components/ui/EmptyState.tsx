@@ -69,5 +69,5 @@ const styles = StyleSheet.create({
   },
   title: { ...Typography.bodyMed, fontSize: 18, textAlign: 'center' },
   sub: { ...Typography.bodySm, textAlign: 'center', lineHeight: 20 },
-  cta: { marginTop: Spacing.sm, paddingHorizontal: Spacing.lg, minWidth: 140 },
+  cta: { marginTop: Spacing.sm, paddingHorizontal: Spacing.lg, minWidth: 140, alignSelf: 'center' },
 });
