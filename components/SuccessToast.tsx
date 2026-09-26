@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Radius, Spacing } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
+import { ToastChip } from './ToastConfig';
 
 interface Props {
   visible: boolean;
@@ -14,11 +14,14 @@ interface Props {
   onDone?: () => void;
 }
 
+// Locally-controlled toast (for flows that own their own visibility state).
+// Renders the same ToastChip as the global toast so every notification in
+// the app looks identical and follows the theme.
 export default function SuccessToast({
   visible,
   message,
   subMessage,
-  icon = 'checkmark-circle',
+  icon = 'checkmark',
   color = '#22C55E',
   onDone,
 }: Props) {
@@ -68,13 +71,7 @@ export default function SuccessToast({
       ]}
       pointerEvents="none"
     >
-      <View style={[s.iconWrap, { backgroundColor: `${color}22` }]}>
-        <Ionicons name={icon} size={22} color={color} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={s.message}>{message}</Text>
-        {subMessage ? <Text style={s.sub}>{subMessage}</Text> : null}
-      </View>
+      <ToastChip accent={color} icon={icon} text1={message} text2={subMessage} />
     </Animated.View>
   );
 }
@@ -82,31 +79,10 @@ export default function SuccessToast({
 const s = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
+    left: 0,
+    right: 0,
     zIndex: 9999,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-    borderRadius: Radius.xl,
-    backgroundColor: 'rgba(20,20,40,0.96)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 16,
+    paddingHorizontal: 16,
   },
-  iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  message: { color: '#F1F0FF', fontSize: 14, fontWeight: '700', lineHeight: 20 },
-  sub: { color: 'rgba(241,240,255,0.6)', fontSize: 12, marginTop: 2 },
 });
