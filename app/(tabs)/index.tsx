@@ -2701,7 +2701,8 @@ function makeStyles(isDark: boolean) {
     pingListRoot: { flex: 1, justifyContent: 'flex-end' },
     pingListBackdrop: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      // Dark scrim in both schemes so a white sheet's corners stay visible on a light map
+      backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(20,16,40,0.48)',
     },
     pingListSheet: {
       backgroundColor: isDark ? '#13131F' : '#FFFFFF',
