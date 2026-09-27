@@ -673,6 +673,8 @@ const s = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 22,
+    paddingBottom: 6,
+    justifyContent: 'flex-end',
     gap: 0,
   },
 
@@ -717,7 +719,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 6,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   btnText: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 0.1 },
   skipAlt: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
