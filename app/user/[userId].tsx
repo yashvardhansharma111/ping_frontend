@@ -79,10 +79,13 @@ function PhotoCarousel({
   photos,
   initials,
   insetTop = 0,
+  fillHeight,
 }: {
   photos: string[];
   initials: string;
   insetTop?: number;
+  /** When set, every photo is cover-cropped to this height (no letterboxing). */
+  fillHeight?: number;
 }) {
   const [active, setActive] = useState(0);
   // measured natural height per URI
@@ -103,13 +106,14 @@ function PhotoCarousel({
 
   // carousel height = tallest measured photo; fall back to PHOTO_H while loading
   const allMeasured = photos.every((u) => imgHeights[u] != null);
-  const carouselH = allMeasured && photos.length > 0
-    ? Math.max(...photos.map((u) => imgHeights[u]!))
-    : PHOTO_H;
+  const carouselH = fillHeight
+    ?? (allMeasured && photos.length > 0
+      ? Math.max(...photos.map((u) => imgHeights[u]!))
+      : PHOTO_H);
 
   if (photos.length === 0) {
     return (
-      <View style={[pc.single, { height: PHOTO_H, backgroundColor: '#141414' }]}>
+      <View style={[pc.single, { height: carouselH, backgroundColor: '#141414' }]}>
         <Text style={pc.initials}>{initials}</Text>
       </View>
     );
@@ -127,7 +131,7 @@ function PhotoCarousel({
         onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
         keyExtractor={(uri, i) => `${uri}-${i}`}
         renderItem={({ item }) => {
-          const imgH = imgHeights[item] ?? carouselH;
+          const imgH = fillHeight ?? (imgHeights[item] ?? carouselH);
           return (
             <View style={{ width: SCREEN_W, height: carouselH, backgroundColor: '#000' }}>
               <Image
@@ -1036,7 +1040,8 @@ export default function UserProfileScreen() {
 
     return (
       <View style={s.root}>
-        <PhotoCarousel photos={allPhotos} initials={initials} insetTop={insets.top} />
+        {/* Fill the whole screen so the photo runs behind the sheet — no gap */}
+        <PhotoCarousel photos={allPhotos} initials={initials} insetTop={insets.top} fillHeight={SCREEN_H} />
 
         {/* Bottom gradient — blends photo into card */}
         <LinearGradient
