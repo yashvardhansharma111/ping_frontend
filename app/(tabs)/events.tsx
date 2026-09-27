@@ -10,6 +10,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  PanResponder,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -503,6 +504,29 @@ export default function EventsScreen() {
     }
   }
 
+  // Swipe anywhere outside the card carousel to move between All / Events / Offers.
+  // The carousel's own horizontal scroll still wins when the gesture starts on a card.
+  const filterRef = useRef(filter);
+  useEffect(() => { filterRef.current = filter; }, [filter]);
+
+  function shiftFilter(dir: 1 | -1) {
+    const i = FILTERS.findIndex((f) => f.key === filterRef.current);
+    const next = FILTERS[i + dir];
+    if (!next) return;
+    Haptics.selectionAsync();
+    setFilter(next.key);
+  }
+
+  const swipePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -40) shiftFilter(1);
+        else if (g.dx > 40) shiftFilter(-1);
+      },
+    }),
+  ).current;
+
   function toggleBookmark(id: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setBookmarks((prev) => {
@@ -519,7 +543,7 @@ export default function EventsScreen() {
   const metaIcon = c.textSecondary;
 
   return (
-    <View style={[scr.root, { paddingTop: insets.top }]}>
+    <View style={[scr.root, { paddingTop: insets.top }]} {...swipePan.panHandlers}>
       <View style={scr.header}>
         <View>
           <Text style={scr.title}>Events</Text>
