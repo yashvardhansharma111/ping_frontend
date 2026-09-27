@@ -1968,6 +1968,8 @@ export default function MapScreen() {
         statusBarTranslucent
         onRequestClose={() => setShowPingList(false)}
       >
+        <View style={styles.pingListRoot}>
+        {/* Backdrop fills the whole modal so the dim shows through the sheet's rounded corners */}
         <TouchableOpacity
           style={styles.pingListBackdrop}
           activeOpacity={1}
@@ -2077,6 +2079,7 @@ export default function MapScreen() {
               </View>
             }
           />
+        </View>
         </View>
       </Modal>
 
@@ -2695,8 +2698,9 @@ function makeStyles(isDark: boolean) {
     },
 
     // ── Ping list bottom sheet ─────────────────────────────────────────────────
+    pingListRoot: { flex: 1, justifyContent: 'flex-end' },
     pingListBackdrop: {
-      flex: 1,
+      ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0,0,0,0.55)',
     },
     pingListSheet: {
