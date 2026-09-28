@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, Animated, PanResponder, Image,
+  Dimensions, Animated, PanResponder,
   AppState, type AppStateStatus,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -9,7 +9,10 @@ import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  Flame, Star, Lightning, Heart, Coffee, MusicNote, Basketball, Smiley, Campfire, GameController,
+} from 'phosphor-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import Reanimated, {
   useSharedValue,
@@ -56,26 +59,41 @@ type AudioSource = number | { uri: string };
 const AMBIENT_SOURCE: AudioSource | null = null;
 const AMBIENT_VOLUME = 0.35;
 
-// ── Photo bank ────────────────────────────────────────────────────────────────
+// ── Icon banks — the same marker icons and activity types the ping creator offers ──
 
-const PX = {
-  a: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=220&h=220&fit=crop&crop=faces',
-  b: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces',
-  c: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=faces',
-  d: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=180&h=180&fit=crop&crop=faces',
-  e: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=180&h=180&fit=crop&crop=faces',
-  f: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=170&h=170&fit=crop&crop=faces',
-  g: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=190&h=190&fit=crop&crop=faces',
-  h: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=170&h=170&fit=crop&crop=faces',
-};
+const MARKERS = {
+  flame:          { Icon: Flame,          color: '#EF4444' },
+  star:           { Icon: Star,           color: '#F59E0B' },
+  lightning:      { Icon: Lightning,      color: '#8B5CF6' },
+  heart:          { Icon: Heart,          color: '#EC4899' },
+  coffee:         { Icon: Coffee,         color: '#D97706' },
+  musicNote:      { Icon: MusicNote,      color: '#7C3AED' },
+  basketball:     { Icon: Basketball,     color: '#F97316' },
+  smiley:         { Icon: Smiley,         color: '#22C55E' },
+  campfire:       { Icon: Campfire,       color: '#EA580C' },
+  gameController: { Icon: GameController, color: '#3B82F6' },
+} as const;
+type MarkerKey = keyof typeof MARKERS;
+
+type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+const TYPE_ICONS = {
+  sport:   { icon: 'dumbbell'          as MCIName, color: '#22C55E' },
+  food:    { icon: 'food-fork-drink'   as MCIName, color: '#F97316' },
+  music:   { icon: 'music'             as MCIName, color: '#8B5CF6' },
+  study:   { icon: 'book-open-variant' as MCIName, color: '#3B82F6' },
+  outdoor: { icon: 'walk'              as MCIName, color: '#10B981' },
+  gaming:  { icon: 'gamepad-variant'   as MCIName, color: '#EC4899' },
+  meetup:  { icon: 'account-group'     as MCIName, color: Ping.purple },
+} as const;
+type TypeKey = keyof typeof TYPE_ICONS;
 
 // ── Slide data ────────────────────────────────────────────────────────────────
 
 type SlideData = {
   darkGrad: readonly [string, string, string];
-  center:   string;
-  orbit:    [string, string, string, string, string];
-  icons:    [IoniconName, IoniconName, IoniconName, IoniconName];
+  center:   MarkerKey;
+  orbit:    [MarkerKey, MarkerKey, MarkerKey, MarkerKey, MarkerKey];
+  icons:    [TypeKey, TypeKey, TypeKey, TypeKey];
   title:    string;
   accent:   string;
   subtitle: string;
@@ -88,9 +106,9 @@ type SlideData = {
 const SLIDES: SlideData[] = [
   {
     darkGrad: ['#14101F', '#0E0A1C', '#080815'],
-    center: PX.a,
-    orbit:  [PX.b, PX.c, PX.d, PX.e, PX.f],
-    icons:  ['compass', 'location', 'sparkles', 'people'],
+    center: 'lightning',
+    orbit:  ['coffee', 'basketball', 'musicNote', 'smiley', 'flame'],
+    icons:  ['sport', 'food', 'music', 'outdoor'],
     title:    'Discover What\'s',
     accent:   'Happening Near You',
     subtitle: 'See walks, hangouts, game nights and more — happening right around you.',
@@ -98,9 +116,9 @@ const SLIDES: SlideData[] = [
   },
   {
     darkGrad: ['#0E1220', '#0E0A1C', '#080815'],
-    center: PX.e,
-    orbit:  [PX.g, PX.h, PX.a, PX.b, PX.c],
-    icons:  ['people', 'chatbubble', 'hand-left', 'heart'],
+    center: 'smiley',
+    orbit:  ['heart', 'coffee', 'campfire', 'star', 'gameController'],
+    icons:  ['meetup', 'food', 'outdoor', 'study'],
     title:    'Meet Real People',
     accent:   'Near You',
     subtitle: 'Join pings, meet your neighbours, and build your local crew one activity at a time.',
@@ -108,9 +126,9 @@ const SLIDES: SlideData[] = [
   },
   {
     darkGrad: ['#160E20', '#0E0A1C', '#080815'],
-    center: PX.b,
-    orbit:  [PX.d, PX.f, PX.g, PX.h, PX.a],
-    icons:  ['flash', 'calendar', 'megaphone', 'location'],
+    center: 'flame',
+    orbit:  ['lightning', 'basketball', 'musicNote', 'heart', 'coffee'],
+    icons:  ['sport', 'music', 'gaming', 'meetup'],
     title:    'Drop a Ping.',
     accent:   'See Who Shows Up',
     subtitle: 'Host your own events. See who shows up nearby. Make something happen.',
@@ -118,9 +136,9 @@ const SLIDES: SlideData[] = [
   },
   {
     darkGrad: ['#0C1418', '#0E0A1C', '#080815'],
-    center: PX.g,
-    orbit:  [PX.c, PX.e, PX.b, PX.f, PX.d],
-    icons:  ['navigate', 'map', 'location', 'radio'],
+    center: 'campfire',
+    orbit:  ['star', 'coffee', 'basketball', 'smiley', 'lightning'],
+    icons:  ['outdoor', 'food', 'sport', 'meetup'],
     title:    'Know What\'s',
     accent:   'Around You',
     subtitle: 'Location access lets us show you what\'s happening nearby — in real time.',
@@ -129,9 +147,9 @@ const SLIDES: SlideData[] = [
   },
   {
     darkGrad: ['#180E1C', '#0E0A1C', '#080815'],
-    center: PX.c,
-    orbit:  [PX.a, PX.d, PX.h, PX.g, PX.e],
-    icons:  ['mail', 'people', 'chatbubbles', 'call'],
+    center: 'heart',
+    orbit:  ['smiley', 'star', 'coffee', 'gameController', 'musicNote'],
+    icons:  ['meetup', 'study', 'music', 'food'],
     title:    'Find Friends',
     accent:   'Already on Ping',
     subtitle: 'See which of your contacts are already using Ping. Connect instantly.',
@@ -141,9 +159,9 @@ const SLIDES: SlideData[] = [
   {
     isPro: true,
     darkGrad: ['#120A28', '#0E0A1C', '#080815'],
-    center: PX.h,
-    orbit:  [PX.e, PX.g, PX.a, PX.c, PX.b],
-    icons:  ['diamond', 'star', 'sparkles', 'ribbon'],
+    center: 'star',
+    orbit:  ['lightning', 'heart', 'flame', 'smiley', 'campfire'],
+    icons:  ['gaming', 'music', 'sport', 'meetup'],
     title:    'Go Pro — Free',
     accent:   'For New Users',
     subtitle: 'Get 1 month of Ping Pro with full features — on us. No payment needed today.',
@@ -335,11 +353,13 @@ function OrbitItem({
   );
 }
 
-function Avatar({ uri, size, ring = 2 }: { uri: string; size: number; ring?: number }) {
+// Coloured marker bubble — same look as a ping pin on the map
+function IconBubble({ k, size, ring = 2 }: { k: MarkerKey; size: number; ring?: number }) {
+  const { Icon, color } = MARKERS[k];
   return (
-    <View style={[orb.avatarShadow, { width: size, height: size, borderRadius: size / 2 }]}>
-      <View style={[orb.avatarRing, { width: size, height: size, borderRadius: size / 2, borderWidth: ring }]}>
-        <Image source={{ uri }} style={{ width: size - ring * 2, height: size - ring * 2, borderRadius: size / 2 }} resizeMode="cover" />
+    <View style={[orb.bubbleShadow, { width: size, height: size, borderRadius: size / 2, shadowColor: color }]}>
+      <View style={[orb.bubble, { width: size, height: size, borderRadius: size / 2, borderWidth: ring, backgroundColor: color }]}>
+        <Icon size={Math.round(size * 0.5)} color="#FFF" weight="fill" />
       </View>
     </View>
   );
@@ -393,18 +413,21 @@ function OrbitScene({ slide }: { slide: SlideData }) {
 
         {/* outer orbit — icons + one avatar, counter-clockwise */}
         <OrbitGroup rot={rotOuter}>
-          {slide.icons.map((name, i) => (
-            <OrbitItem key={`${name}-${i}`} rot={rotOuter} angle={ICON_ANGLES[i]} radius={RING_RADIUS.outer}
-              size={30} delayMs={620 + i * 70} bobAmp={2} bobMs={2400 + i * 300}>
-              <View style={orb.iconPill}>
-                <Ionicons name={name} size={16} color={Ping.purpleLight} />
-              </View>
-            </OrbitItem>
-          ))}
+          {slide.icons.map((key, i) => {
+            const t = TYPE_ICONS[key];
+            return (
+              <OrbitItem key={`${key}-${i}`} rot={rotOuter} angle={ICON_ANGLES[i]} radius={RING_RADIUS.outer}
+                size={32} delayMs={620 + i * 70} bobAmp={2} bobMs={2400 + i * 300}>
+                <View style={[orb.iconPill, { backgroundColor: `${t.color}26`, borderColor: `${t.color}66` }]}>
+                  <MaterialCommunityIcons name={t.icon} size={17} color={t.color} />
+                </View>
+              </OrbitItem>
+            );
+          })}
           {AVATAR_SLOTS.filter(s => s.ring === 'outer').map((s, i) => (
             <OrbitItem key={`o-${i}`} rot={rotOuter} angle={s.angle} radius={RING_RADIUS.outer}
               size={s.size} delayMs={560} bobAmp={3} bobMs={3000}>
-              <Avatar uri={slide.orbit[4]} size={s.size} />
+              <IconBubble k={slide.orbit[4]} size={s.size} />
             </OrbitItem>
           ))}
         </OrbitGroup>
@@ -414,14 +437,14 @@ function OrbitScene({ slide }: { slide: SlideData }) {
           {AVATAR_SLOTS.filter(s => s.ring !== 'outer').map((s, i) => (
             <OrbitItem key={`i-${i}`} rot={rotInner} angle={s.angle} radius={RING_RADIUS[s.ring]}
               size={s.size} delayMs={380 + i * 90} bobAmp={3 + i} bobMs={2800 + i * 350}>
-              <Avatar uri={slide.orbit[i]} size={s.size} />
+              <IconBubble k={slide.orbit[i]} size={s.size} />
             </OrbitItem>
           ))}
         </OrbitGroup>
 
         {/* centre */}
         <Reanimated.View style={[orb.center, centerAnim]}>
-          <Avatar uri={slide.center} size={CENTER_SIZE} ring={3} />
+          <IconBubble k={slide.center} size={CENTER_SIZE} ring={3} />
         </Reanimated.View>
       </View>
 
@@ -440,24 +463,20 @@ const orb = StyleSheet.create({
     width: CENTER_SIZE,
     height: CENTER_SIZE,
   },
-  avatarShadow: {
-    shadowColor: Ping.purple,
+  bubbleShadow: {
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.5,
     shadowRadius: 14,
     elevation: 10,
   },
-  avatarRing: {
-    borderColor: Ping.purpleLight,
-    backgroundColor: '#1A1230',
+  bubble: {
+    borderColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   iconPill: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(143,99,244,0.18)',
-    borderWidth: 1, borderColor: 'rgba(187,146,255,0.35)',
+    width: 32, height: 32, borderRadius: 16,
+    borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
   },
 });
