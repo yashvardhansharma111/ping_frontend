@@ -241,9 +241,10 @@ type SocialItem = { label: string; color: string; url: string | null };
 function SocialBtn({ link, scheme = 'dark' }: { link: SocialItem; scheme?: 'light' | 'dark' }) {
   const active = !!link.url;
   const dark = scheme === 'dark';
-  const ink = dark ? '#FFFFFF' : '#111111';
-  const chipBg = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';
-  const chipBorder = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.10)';
+  // Solid black chip with a white glyph in both themes — true black & white, no grey wash
+  const ink = '#FFFFFF';
+  const chipBg = '#000000';
+  const chipBorder = dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.9)';
   return (
     <TouchableOpacity
       onPress={active ? () => Linking.openURL(link.url!) : undefined}
