@@ -949,6 +949,7 @@ export default function MapScreen() {
   const prevSheetIdRef   = useRef<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const pendingPingReload = useRef(false);
   const [pingCreatedToast, setPingCreatedToast] = useState(false);
   const [showPingAnim, setShowPingAnim] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -1893,7 +1894,11 @@ export default function MapScreen() {
       <CreatePingModal
         visible={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreated={() => { loadNearby(); loadMyActivePing(); setShowPingAnim(true); setPingCreatedToast(true); }}
+        onCreated={() => {
+          // Play the drop animation first; the marker is loaded onto the map when it finishes
+          pendingPingReload.current = true;
+          setShowPingAnim(true);
+        }}
         lat={coords.latitude}
         lng={coords.longitude}
       />
@@ -2104,7 +2109,15 @@ export default function MapScreen() {
       {/* Ping creation animation — sonar pulse + particles */}
       <PingDropAnimation
         visible={showPingAnim}
-        onDone={() => setShowPingAnim(false)}
+        onDone={() => {
+          setShowPingAnim(false);
+          if (pendingPingReload.current) {
+            pendingPingReload.current = false;
+            loadNearby();
+            loadMyActivePing();
+            setPingCreatedToast(true);
+          }
+        }}
       />
     </View>
   );

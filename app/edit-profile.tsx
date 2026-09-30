@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import BrandIcon from '@/components/BrandIcon';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import ConfirmSheet from '@/components/ConfirmSheet';
@@ -785,7 +786,7 @@ export default function EditProfileScreen() {
     payload.instagramHandle = instagramHandle.trim().replace(/^@/, '');
     payload.snapchatHandle = snapchatHandle.trim().replace(/^@/, '');
     payload.linkedinHandle = linkedinHandle.trim().replace(/^@/, '');
-    payload.spotifyHandle = spotifyHandle.trim().replace(/^@/, '');
+    payload.spotifyHandle = spotifyHandle.trim(); // full link; backend normalises bare usernames
     payload.sleepType = sleepType || null;
     payload.spontaneity = spontaneity || null;
     payload.foodPersonality = foodPersonality || null;
@@ -992,7 +993,7 @@ export default function EditProfileScreen() {
             <View style={fi.wrap}>
               <Text style={[fi.label, { color: c.textSecondary }]}>Instagram</Text>
               <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Ionicons name="logo-instagram" size={16} color="#E1306C" style={{ marginRight: 6 }} />
+                <View style={{ marginRight: 8 }}><BrandIcon brand="instagram" size={20} /></View>
                 <Text style={{ ...Typography.bodyMed, marginRight: 2, color: c.icon }}>@</Text>
                 <TextInput
                   style={[s.instaInput, { color: c.text }]}
@@ -1009,7 +1010,7 @@ export default function EditProfileScreen() {
             <View style={fi.wrap}>
               <Text style={[fi.label, { color: c.textSecondary }]}>Snapchat</Text>
               <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-                <MaterialCommunityIcons name="snapchat" size={16} color="#FFFC00" style={{ marginRight: 6 }} />
+                <View style={{ marginRight: 8 }}><BrandIcon brand="snapchat" size={20} /></View>
                 <Text style={{ ...Typography.bodyMed, marginRight: 2, color: c.icon }}>@</Text>
                 <TextInput
                   style={[s.instaInput, { color: c.text }]}
@@ -1026,7 +1027,7 @@ export default function EditProfileScreen() {
             <View style={fi.wrap}>
               <Text style={[fi.label, { color: c.textSecondary }]}>LinkedIn</Text>
               <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Ionicons name="logo-linkedin" size={16} color="#0A66C2" style={{ marginRight: 6 }} />
+                <View style={{ marginRight: 8 }}><BrandIcon brand="linkedin" size={20} /></View>
                 <TextInput
                   style={[s.instaInput, { color: c.text }]}
                   value={linkedinHandle}
@@ -1040,17 +1041,18 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={fi.wrap}>
-              <Text style={[fi.label, { color: c.textSecondary }]}>Spotify</Text>
+              <Text style={[fi.label, { color: c.textSecondary }]}>Spotify profile link</Text>
               <View style={[s.instaWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Ionicons name="musical-notes" size={16} color="#1DB954" style={{ marginRight: 6 }} />
+                <View style={{ marginRight: 8 }}><BrandIcon brand="spotify" size={20} /></View>
                 <TextInput
                   style={[s.instaInput, { color: c.text }]}
                   value={spotifyHandle}
-                  onChangeText={(t) => setSpotifyHandle(t.replace(/^@/, '').replace(/^https?:\/\/open\.spotify\.com\/user\//i, ''))}
-                  placeholder="username"
+                  onChangeText={(t) => setSpotifyHandle(t.trim())}
+                  placeholder="https://open.spotify.com/user/…"
                   placeholderTextColor={c.icon}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType="url"
                 />
               </View>
             </View>

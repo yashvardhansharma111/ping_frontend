@@ -30,6 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import BrandIcon, { type Brand } from '@/components/BrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi, friendsApi, chatApi, activitiesApi, type UserProfile, type Activity } from '@/lib/api';
 import HighlightsSection from '@/components/HighlightsSection';
@@ -234,34 +235,19 @@ const glass = StyleSheet.create({
 
 // ── Social icon button ───────────────────────────────────────────────────────
 
-type SocialItem = { label: string; color: string; url: string | null };
+type SocialItem = { label: string; brand: Brand; url: string | null };
 
-// Monochrome on purpose: brand colours (e.g. white-on-yellow Snapchat) read badly
-// at this size, so every icon is the theme's ink on a neutral chip.
-function SocialBtn({ link, scheme = 'dark' }: { link: SocialItem; scheme?: 'light' | 'dark' }) {
-  const active = !!link.url;
-  const dark = scheme === 'dark';
-  // Pure black glyph on a white chip in both themes — the logos stay crisp, no grey wash
-  const ink = '#000000';
-  const chipBg = '#FFFFFF';
-  const chipBorder = dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)';
+// Real app badges at full brand colour; only links the user actually set are shown.
+function SocialBtn({ link }: { link: SocialItem }) {
+  if (!link.url) return null;
   return (
     <TouchableOpacity
-      onPress={active ? () => Linking.openURL(link.url!) : undefined}
-      style={[gal.socialBtn, { backgroundColor: chipBg, borderColor: chipBorder }, !active && { opacity: 0.32 }]}
-      activeOpacity={active ? 0.7 : 1}
-      disabled={!active}
+      onPress={() => Linking.openURL(link.url!).catch(() => {})}
+      style={gal.socialBtn}
+      activeOpacity={0.75}
       accessibilityLabel={link.label}
     >
-      {link.label === 'Snapchat' ? (
-        <MaterialCommunityIcons name="snapchat" size={22} color={ink} />
-      ) : link.label === 'Instagram' ? (
-        <Ionicons name="logo-instagram" size={22} color={ink} />
-      ) : link.label === 'LinkedIn' ? (
-        <Ionicons name="logo-linkedin" size={22} color={ink} />
-      ) : (
-        <Ionicons name="musical-notes-outline" size={22} color={ink} />
-      )}
+      <BrandIcon brand={link.brand} size={44} />
     </TouchableOpacity>
   );
 }
@@ -493,8 +479,6 @@ const gal = StyleSheet.create({
   socialBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -917,12 +901,16 @@ export default function UserProfileScreen() {
     .filter(Boolean)
     .map((t) => TRAIT_LABELS[t as string] ?? (t as string));
 
+  const spotifyUrl = profile.spotifyHandle
+    ? (/^https?:\/\//i.test(profile.spotifyHandle) ? profile.spotifyHandle : `https://open.spotify.com/user/${profile.spotifyHandle.replace('@', '')}`)
+    : null;
   const socialLinks: SocialItem[] = [
-    { label: 'Instagram', color: '#E1306C', url: profile.instagramHandle ? `https://www.instagram.com/${profile.instagramHandle.replace('@', '')}` : null },
-    { label: 'Snapchat',  color: '#FFFC00', url: profile.snapchatHandle  ? `https://www.snapchat.com/add/${profile.snapchatHandle.replace('@', '')}` : null },
-    { label: 'LinkedIn',  color: '#0A66C2', url: profile.linkedinHandle  ? `https://www.linkedin.com/in/${profile.linkedinHandle.replace('@', '')}` : null },
-    { label: 'Spotify',   color: '#1DB954', url: profile.spotifyHandle   ? `https://open.spotify.com/user/${profile.spotifyHandle.replace('@', '')}` : null },
+    { label: 'Instagram', brand: 'instagram', url: profile.instagramHandle ? `https://www.instagram.com/${profile.instagramHandle.replace('@', '')}` : null },
+    { label: 'Snapchat',  brand: 'snapchat',  url: profile.snapchatHandle  ? `https://www.snapchat.com/add/${profile.snapchatHandle.replace('@', '')}` : null },
+    { label: 'LinkedIn',  brand: 'linkedin',  url: profile.linkedinHandle  ? `https://www.linkedin.com/in/${profile.linkedinHandle.replace('@', '')}` : null },
+    { label: 'Spotify',   brand: 'spotify',   url: spotifyUrl },
   ];
+  const hasSocial = socialLinks.some((l) => !!l.url);
 
   // Stats
   const canShowMutuals = mutualCount !== null && mutualCount > 0;
@@ -1221,9 +1209,11 @@ export default function UserProfileScreen() {
           <QuoteCard question="Fun Truth" text={funTruthText} scheme={scheme} />
         ) : null}
 
-        <View style={[s.socialCard, { backgroundColor: dt.socialBg }]}>
-          {socialLinks.map((link) => <SocialBtn key={link.label} link={link} scheme={scheme} />)}
-        </View>
+        {hasSocial && (
+          <View style={[s.socialCard, { backgroundColor: dt.socialBg }]}>
+            {socialLinks.map((link) => <SocialBtn key={link.label} link={link} />)}
+          </View>
+        )}
 
         <HighlightsSection userId={userId} isOwnProfile={isSelf} scheme={scheme} />
 
