@@ -429,26 +429,6 @@ function PhotoGallery({ photos }: { photos: string[] }) {
         )}
         keyExtractor={(_, i) => `g-${i}`}
       />
-      {photos.length > 1 && (
-        <View style={gal.navRow}>
-          <TouchableOpacity
-            style={[gal.navBtn, index === 0 && gal.navBtnDisabled]}
-            onPress={() => scrollTo(index - 1)}
-            disabled={index === 0}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chevron-back" size={16} color="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[gal.navBtn, index >= photos.length - 1 && gal.navBtnDisabled]}
-            onPress={() => scrollTo(index + 1)}
-            disabled={index >= photos.length - 1}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chevron-forward" size={16} color="#FFF" />
-          </TouchableOpacity>
-        </View>
-      )}
       {viewerIdx !== null && (
         <PhotoViewer photos={photos} startIndex={viewerIdx} onClose={() => setViewerIdx(null)} />
       )}
@@ -457,7 +437,7 @@ function PhotoGallery({ photos }: { photos: string[] }) {
 }
 
 const gal = StyleSheet.create({
-  wrap: { gap: 14 },
+  wrap: { gap: 0 },
   thumb: {
     width: THUMB,
     height: THUMB,
