@@ -1307,6 +1307,14 @@ export default function MapScreen() {
     Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 200, useNativeDriver: true }).start();
   }
 
+  // Content pulled down while at scroll top: expanded → peek (a second pull closes via the pan)
+  function collapseSheet() {
+    if (!sheetExpandedRef.current) return;
+    sheetExpandedRef.current = false;
+    setSheetExpanded(false);
+    Animated.spring(sheetAnim, { toValue: SHEET_PEEK_Y, damping: 22, stiffness: 200, useNativeDriver: true }).start();
+  }
+
   // Lock map while popup card or detail sheet is open
   const mapLocked = !!(selected || sheetActivity);
 
@@ -1852,6 +1860,7 @@ export default function MapScreen() {
             onRefresh={() => { loadNearby(); loadMyActivePing(); }}
             onDismiss={dismissSheet}
             onScrolledDown={expandSheet}
+            onPullDown={collapseSheet}
             onActivityUpdate={(act) => setSheetActivity(act)}
             scrollEnabled={sheetExpanded}
           />

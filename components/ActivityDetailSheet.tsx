@@ -164,11 +164,13 @@ interface Props {
   onRefresh: () => void;
   onDismiss: () => void;
   onScrolledDown?: () => void;
+  /** Fired when the user drags the content down while it's already scrolled to the top. */
+  onPullDown?: () => void;
   onActivityUpdate?: (activity: Activity) => void;
   scrollEnabled?: boolean;
 }
 
-export default function ActivityDetailSheet({ activity: initial, onRefresh, onDismiss, onScrolledDown, onActivityUpdate, scrollEnabled = true }: Props) {
+export default function ActivityDetailSheet({ activity: initial, onRefresh, onDismiss, onScrolledDown, onPullDown, onActivityUpdate, scrollEnabled = true }: Props) {
   const scheme = useColorScheme() ?? 'dark';
   const c = Colors[scheme];
   const isDark = scheme === 'dark';
@@ -426,6 +428,11 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
   const creatorId = a.creator?._id ?? a.creatorId;
 
   const scrollExpandedRef = useRef(false);
+  // Pull-to-collapse: the native ScrollView owns vertical drags, so we watch raw
+  // touches and fire onPullDown when the user drags down from scroll offset 0.
+  const scrollYRef = useRef(0);
+  const touchStartY = useRef(0);
+  const pulledRef = useRef(false);
 
   return (
     <>
@@ -435,8 +442,18 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={32}
       scrollEnabled={scrollEnabled}
+      onTouchStart={(e) => { touchStartY.current = e.nativeEvent.pageY; pulledRef.current = false; }}
+      onTouchMove={(e) => {
+        if (pulledRef.current || !onPullDown) return;
+        const dy = e.nativeEvent.pageY - touchStartY.current;
+        if (scrollYRef.current <= 0 && dy > 28) {
+          pulledRef.current = true;
+          onPullDown();
+        }
+      }}
       onScroll={(e) => {
         const y = e.nativeEvent.contentOffset.y;
+        scrollYRef.current = y;
         if (y > 40 && !scrollExpandedRef.current) {
           scrollExpandedRef.current = true;
           onScrolledDown?.();

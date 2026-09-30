@@ -372,6 +372,7 @@ export default function ActivitiesScreen() {
                   loadMine();
                 }}
                 onDismiss={closeSheet}
+                onPullDown={closeSheet}
                 onActivityUpdate={(updated) => setSelectedActivity(updated)}
               />
             </Animated.View>
