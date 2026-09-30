@@ -1,21 +1,28 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Flame, Star, Lightning, Heart, Coffee, MusicNote, Basketball, Smiley, Campfire, GameController,
 } from 'phosphor-react-native';
 import type { Icon } from 'phosphor-react-native';
 
-const PHOSPHOR_MAP: Record<string, Icon> = {
-  flame: Flame,
-  star: Star,
-  lightning: Lightning,
-  heart: Heart,
-  coffee: Coffee,
-  musicNote: MusicNote,
-  basketball: Basketball,
-  smiley: Smiley,
-  campfire: Campfire,
-  gameController: GameController,
+// Same marker icons + colours the ping creator offers
+const PHOSPHOR_MAP: Record<string, { Icon: Icon; color: string }> = {
+  flame:          { Icon: Flame,          color: '#EF4444' },
+  star:           { Icon: Star,           color: '#F59E0B' },
+  lightning:      { Icon: Lightning,      color: '#8B5CF6' },
+  heart:          { Icon: Heart,          color: '#EC4899' },
+  coffee:         { Icon: Coffee,         color: '#D97706' },
+  musicNote:      { Icon: MusicNote,      color: '#7C3AED' },
+  basketball:     { Icon: Basketball,     color: '#F97316' },
+  smiley:         { Icon: Smiley,         color: '#22C55E' },
+  campfire:       { Icon: Campfire,       color: '#EA580C' },
+  gameController: { Icon: GameController, color: '#3B82F6' },
+};
+
+// Fallback when the creator picked no marker icon
+const TYPE_EMOJI: Record<string, string> = {
+  sport: '🏃', food: '🍜', music: '🎧', study: '📚',
+  outdoor: '🌿', gaming: '🎮', meetup: '👋', custom: '✨',
 };
 
 function isEmojiKey(str: string) {
@@ -29,147 +36,122 @@ interface Props {
   count?: number;
   genderFilter?: 'all' | 'women_only' | 'men_only';
   isOwn?: boolean;
+  isDark?: boolean;
+  /** Creator's photo, shown as a small badge on the top-right of the bubble */
+  avatarUrl?: string | null;
+  avatarName?: string | null;
 }
 
-export default function PingMarker({ markerIcon, selected = false, count = 0, genderFilter, isOwn = false }: Props) {
-  const BUBBLE = selected ? 50 : isOwn ? 46 : 42;
-  const TAIL_W = selected ? 10 : 8;
-  const TAIL_H = selected ? 13 : 10;
-  const ICON_SZ = selected ? 24 : 20;
-  const EMOJI_SZ = selected ? 22 : 18;
-  const DOT_SZ = selected ? 12 : 9;
+// Round bubble (white in light, near-black in dark) with the chosen emoji /
+// icon inside and the creator's dp pinned to the corner — no tail, so the
+// marker is anchored at its centre.
+export default function PingMarker({
+  type, markerIcon, selected = false, count = 0, genderFilter, isOwn = false, isDark = true, avatarUrl, avatarName,
+}: Props) {
+  const SIZE = selected ? 52 : 46;
+  const EMOJI = selected ? 24 : 21;
+  const ICON = selected ? 26 : 22;
+  const DP = 20;
 
-  const bgColor = selected ? '#8B5CF6' : isOwn ? '#7C3AED' : '#6545D9';
-  const borderColor = selected ? '#A78BFA' : isOwn ? '#9B7AFF' : '#7C3AED';
+  const bubbleBg = isDark ? '#111114' : '#FFFFFF';
+  const bubbleBorder = selected ? '#8B5CF6' : isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.10)';
+  const initial = (avatarName || '?').trim()[0]?.toUpperCase() ?? '?';
 
   function renderInner() {
     if (markerIcon) {
       if (isEmojiKey(markerIcon)) {
-        return (
-          <Text style={{ fontSize: EMOJI_SZ, lineHeight: EMOJI_SZ + 4, includeFontPadding: false }}>
-            {markerIcon}
-          </Text>
-        );
+        return <Text style={{ fontSize: EMOJI, lineHeight: EMOJI + 6, includeFontPadding: false }}>{markerIcon}</Text>;
       }
-      const PhIcon = PHOSPHOR_MAP[markerIcon];
-      if (PhIcon) return <PhIcon size={ICON_SZ} color="#FFF" weight="fill" />;
+      const m = PHOSPHOR_MAP[markerIcon];
+      if (m) return <m.Icon size={ICON} color={m.color} weight="fill" />;
     }
-    return (
-      <View style={{ width: DOT_SZ, height: DOT_SZ, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.88)' }} />
-    );
+    const emoji = TYPE_EMOJI[type] ?? '📍';
+    return <Text style={{ fontSize: EMOJI, lineHeight: EMOJI + 6, includeFontPadding: false }}>{emoji}</Text>;
   }
 
   return (
-    <View style={s.outer}>
+    <View style={[s.outer, { width: SIZE + DP / 2, height: SIZE + DP / 2 }]}>
       <View
         style={[
           s.bubble,
           {
-            width: BUBBLE,
-            height: BUBBLE,
-            borderRadius: BUBBLE / 2,
-            backgroundColor: bgColor,
-            borderColor,
-            shadowOpacity: selected ? 0.55 : 0.3,
-            shadowRadius: selected ? 12 : 6,
-            elevation: selected ? 14 : 7,
+            width: SIZE, height: SIZE, borderRadius: SIZE / 2,
+            backgroundColor: bubbleBg, borderColor: bubbleBorder, borderWidth: selected ? 2.5 : 1.5,
+            shadowOpacity: selected ? 0.45 : 0.28,
+            elevation: selected ? 12 : 7,
           },
-          selected && s.selectedScale,
         ]}
       >
         {renderInner()}
 
-        {isOwn && (
-          <View style={s.badge}>
-            <Text style={s.badgeText}>ME</Text>
-          </View>
-        )}
         {!isOwn && count > 1 && (
-          <View style={s.badge}>
-            <Text style={s.badgeText}>{count > 9 ? '9+' : count}</Text>
+          <View style={[s.countBadge, { backgroundColor: isDark ? '#F1F0FF' : '#111114', borderColor: bubbleBg }]}>
+            <Text style={[s.countText, { color: isDark ? '#111' : '#FFF' }]}>{count > 9 ? '9+' : count}</Text>
           </View>
         )}
         {genderFilter && genderFilter !== 'all' && (
-          <View style={[s.genderBadge, { backgroundColor: genderFilter === 'women_only' ? '#EC4899' : '#3B82F6' }]}>
-            <MaterialCommunityIcons
-              name={genderFilter === 'women_only' ? 'gender-female' : 'gender-male'}
-              size={9}
-              color="#FFF"
-            />
+          <View style={[s.genderBadge, { backgroundColor: genderFilter === 'women_only' ? '#EC4899' : '#3B82F6', borderColor: bubbleBg }]}>
+            <MaterialCommunityIcons name={genderFilter === 'women_only' ? 'gender-female' : 'gender-male'} size={9} color="#FFF" />
           </View>
         )}
       </View>
 
-      {/* Teardrop tail */}
-      <View
-        style={{
-          width: 0,
-          height: 0,
-          borderLeftWidth: TAIL_W,
-          borderRightWidth: TAIL_W,
-          borderTopWidth: TAIL_H,
-          borderLeftColor: 'transparent',
-          borderRightColor: 'transparent',
-          borderTopColor: bgColor,
-          marginTop: -1,
-        }}
-      />
-      {/* Ground shadow */}
-      <View
-        style={[
-          s.groundShadow,
-          { width: BUBBLE * 0.55, opacity: selected ? 0.18 : 0.1 },
-        ]}
-      />
+      {/* Creator dp on the top-right corner */}
+      {(avatarUrl || avatarName) && (
+        <View style={[s.dp, { width: DP, height: DP, borderRadius: DP / 2, borderColor: bubbleBg, backgroundColor: isOwn ? '#7C3AED' : '#6545D9' }]}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
+          ) : (
+            <Text style={s.dpInitial}>{initial}</Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  outer: { alignItems: 'center' },
+  outer: { alignItems: 'flex-start', justifyContent: 'flex-end' },
   bubble: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    shadowColor: '#4C1D95',
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
   },
-  selectedScale: {
-    transform: [{ scale: 1.06 }],
-  },
-  badge: {
+  dp: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 3,
+    top: 0,
+    right: 0,
+    borderWidth: 2,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.08)',
-    elevation: 3,
+    elevation: 9,
   },
-  badgeText: { fontSize: 9, fontWeight: '800', lineHeight: 11, color: '#7C3AED' },
-  genderBadge: {
+  dpInitial: { color: '#FFF', fontSize: 9, fontWeight: '800' },
+  countBadge: {
     position: 'absolute',
     bottom: -4,
     right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  countText: { fontSize: 9, fontWeight: '800', lineHeight: 11 },
+  genderBadge: {
+    position: 'absolute',
+    bottom: -3,
+    left: -3,
     width: 16,
     height: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFF',
-    elevation: 3,
-  },
-  groundShadow: {
-    height: 4,
-    backgroundColor: '#000',
-    borderRadius: 10,
-    marginTop: 2,
+    borderWidth: 2,
   },
 });

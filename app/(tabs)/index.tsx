@@ -1436,7 +1436,7 @@ export default function MapScreen() {
             <Marker
               key={`my-${myPing._id}`}
               lngLat={[mLng, mLat]}
-              anchor="bottom"
+              anchor="center"
               onPress={() => {
                 suppressMapTapRef.current = true;
                 setTimeout(() => { suppressMapTapRef.current = false; }, 300);
@@ -1451,6 +1451,9 @@ export default function MapScreen() {
                 count={myPing.participants?.length ?? 0}
                 genderFilter={myPing.genderFilter}
                 isOwn
+                isDark={isDark}
+                avatarUrl={user?.avatarUrl}
+                avatarName={user?.displayName || user?.username}
               />
             </Marker>
           );
@@ -1470,7 +1473,7 @@ export default function MapScreen() {
             <Marker
               key={a._id}
               lngLat={[mLng, mLat]}
-              anchor="bottom"
+              anchor="center"
               onPress={() => {
                 suppressMapTapRef.current = true;
                 setTimeout(() => { suppressMapTapRef.current = false; }, 300);
@@ -1486,6 +1489,9 @@ export default function MapScreen() {
                 selected={isSelected}
                 count={a.participants?.length ?? 0}
                 genderFilter={a.genderFilter}
+                isDark={isDark}
+                avatarUrl={a.creator?.avatarUrl}
+                avatarName={a.creator?.displayName || a.creator?.username}
               />
             </Marker>
           );
