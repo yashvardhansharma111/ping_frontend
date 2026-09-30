@@ -236,24 +236,30 @@ const glass = StyleSheet.create({
 
 type SocialItem = { label: string; color: string; url: string | null };
 
-function SocialBtn({ link }: { link: SocialItem }) {
+// Monochrome on purpose: brand colours (e.g. white-on-yellow Snapchat) read badly
+// at this size, so every icon is the theme's ink on a neutral chip.
+function SocialBtn({ link, scheme = 'dark' }: { link: SocialItem; scheme?: 'light' | 'dark' }) {
   const active = !!link.url;
-  const btnBg = active ? link.color : 'rgba(128,128,128,0.25)';
+  const dark = scheme === 'dark';
+  const ink = dark ? '#FFFFFF' : '#111111';
+  const chipBg = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';
+  const chipBorder = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.10)';
   return (
     <TouchableOpacity
       onPress={active ? () => Linking.openURL(link.url!) : undefined}
-      style={[gal.socialBtn, { backgroundColor: btnBg }, !active && { opacity: 0.4 }]}
-      activeOpacity={active ? 0.75 : 1}
+      style={[gal.socialBtn, { backgroundColor: chipBg, borderColor: chipBorder }, !active && { opacity: 0.32 }]}
+      activeOpacity={active ? 0.7 : 1}
       disabled={!active}
+      accessibilityLabel={link.label}
     >
       {link.label === 'Snapchat' ? (
-        <MaterialCommunityIcons name="snapchat" size={22} color={active ? '#FFF' : link.color} />
+        <MaterialCommunityIcons name="snapchat" size={22} color={ink} />
       ) : link.label === 'Instagram' ? (
-        <Ionicons name="logo-instagram" size={22} color={active ? '#FFF' : link.color} />
+        <Ionicons name="logo-instagram" size={22} color={ink} />
       ) : link.label === 'LinkedIn' ? (
-        <Ionicons name="logo-linkedin" size={22} color={active ? '#FFF' : link.color} />
+        <Ionicons name="logo-linkedin" size={22} color={ink} />
       ) : (
-        <Ionicons name="musical-notes-outline" size={22} color={active ? '#FFF' : link.color} />
+        <Ionicons name="musical-notes-outline" size={22} color={ink} />
       )}
     </TouchableOpacity>
   );
@@ -487,6 +493,7 @@ const gal = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1214,7 +1221,7 @@ export default function UserProfileScreen() {
         ) : null}
 
         <View style={[s.socialCard, { backgroundColor: dt.socialBg }]}>
-          {socialLinks.map((link) => <SocialBtn key={link.label} link={link} />)}
+          {socialLinks.map((link) => <SocialBtn key={link.label} link={link} scheme={scheme} />)}
         </View>
 
         <HighlightsSection userId={userId} isOwnProfile={isSelf} scheme={scheme} />
