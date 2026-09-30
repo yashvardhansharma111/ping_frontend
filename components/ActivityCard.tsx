@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { activitiesApi, chatApi, type Activity, type ActivityParticipant } from '@/lib/api';
 import useAuthStore from '@/lib/stores/authStore';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import VerifyRequiredSheet from '@/components/VerifyRequiredSheet';
 import PaywallModal from '@/components/PaywallModal';
 import { Ping, Radius, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -152,16 +153,17 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
   const accentMist = isDark ? 'rgba(187,146,255,0.14)' : 'rgba(143,99,244,0.12)';
   const borderColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
 
-  function requireVerified() {
+  const [verifyGate, setVerifyGate] = useState<'join' | 'chat' | null>(null);
+  function requireVerified(action: 'join' | 'chat' = 'join') {
     if ((user as any)?.verificationStatus !== 'verified') {
-      router.push('/verification' as any);
+      setVerifyGate(action);
       return false;
     }
     return true;
   }
 
   async function handleJoin() {
-    if (isJoined || joining || isExpired || !requireVerified()) return;
+    if (isJoined || joining || isExpired || !requireVerified('join')) return;
     setShowJoinSafety(true);
   }
 
@@ -188,7 +190,7 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
   }
 
   async function handleOpenChat() {
-    if (openingChat || !requireVerified()) return;
+    if (openingChat || !requireVerified('chat')) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setOpeningChat(true);
     try {
@@ -281,6 +283,8 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
           )}
         </View>
       </TouchableOpacity>
+
+      <VerifyRequiredSheet visible={!!verifyGate} action={verifyGate ?? 'join'} onClose={() => setVerifyGate(null)} />
 
       {/* ── Action row ── */}
       {!compact && (

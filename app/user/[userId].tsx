@@ -897,7 +897,7 @@ export default function UserProfileScreen() {
   const stats = [
     { value: mutualCount !== null ? String(mutualCount) : '—', label: 'Mutuals', onPress: canShowMutuals ? () => setShowMutuals(true) : undefined },
     { value: String(profile.completedPingsCount ?? 0), label: 'Pings' },
-    { value: profile.ratingCount && profile.ratingCount > 0 ? `${profile.trustRate ?? 0}%` : '—', label: 'Trust Rate' },
+    { value: `${profile.trustRate ?? 0}%`, label: 'Trust Rate' },
   ];
 
   // ── Primary CTA label / action ─────────────────────────────────────────────

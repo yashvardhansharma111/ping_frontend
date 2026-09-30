@@ -392,7 +392,7 @@ export default function ProfileScreen() {
 
               <View style={styles.statColumn}>
                 <Text style={[styles.statNumber, { color: c.text }]}>
-                  {user?.ratingCount && user.ratingCount > 0 ? `${user.trustRate ?? 0}%` : '—'}
+                  {`${user?.trustRate ?? 0}%`}
                 </Text>
                 <Text style={[styles.statLabel, { color: c.textSecondary }]}>Trust Rate</Text>
               </View>

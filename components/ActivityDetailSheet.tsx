@@ -25,6 +25,7 @@ import { scheduleStartingNotification, cancelStartingNotification, scheduleSafet
 import useAuthStore from '@/lib/stores/authStore';
 import SuccessToast from './SuccessToast';
 import ConfirmSheet from '@/components/ConfirmSheet';
+import VerifyRequiredSheet from '@/components/VerifyRequiredSheet';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -215,6 +216,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 
   // Report sheet state
   const [showReport, setShowReport] = useState(false);
+  const [verifyGate, setVerifyGate] = useState(false);
 
   // Profile menu state
   const [profileMenu, setProfileMenu] = useState<{ userId: string; name: string; sent: boolean } | null>(null);
@@ -262,6 +264,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 
   async function handleJoin() {
     if (joining || isExpired) return;
+    if ((user as any)?.verificationStatus !== 'verified') { setVerifyGate(true); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setJoining(true);
     const myName = user?.displayName ?? user?.username ?? 'Someone';
@@ -572,7 +575,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
                   <Ionicons name="checkmark-circle" size={14} color={Ping.purpleLight} />
                 </View>
                 <Text style={[styles.hostSub, { color: isDark ? 'rgba(241,240,255,0.4)' : '#9CA3AF' }]}>
-                  Host{a.creator.trustRate != null && a.creator.ratingCount != null && a.creator.ratingCount > 0
+                  Host{a.creator.trustRate != null && a.creator.trustRate > 0
                     ? ` · ${a.creator.trustRate}% Trust` : ''}
                   {a.creator.createdAt ? ` · ${memberSince(a.creator.createdAt)}` : ''}
                 </Text>
@@ -955,6 +958,8 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       danger
       onConfirm={doCancel}
     />
+
+    <VerifyRequiredSheet visible={verifyGate} action="join" onClose={() => setVerifyGate(false)} />
 
     {/* Report sheet */}
     <Modal

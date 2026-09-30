@@ -37,6 +37,7 @@ import ActivityDetailSheet from '@/components/ActivityDetailSheet';
 import CreatePingModal from '@/components/CreatePingModal';
 import SuccessToast from '@/components/SuccessToast';
 import PingDropAnimation from '@/components/PingDropAnimation';
+import VerifyRequiredSheet from '@/components/VerifyRequiredSheet';
 import PlacePoiMarker from '@/components/PlacePoiMarker';
 import { fetchMapPois, type MapPoi } from '@/lib/placesApi';
 
@@ -950,6 +951,7 @@ export default function MapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const pendingPingReload = useRef(false);
+  const [verifyGate, setVerifyGate] = useState<'create' | 'join' | null>(null);
   const [pingCreatedToast, setPingCreatedToast] = useState(false);
   const [showPingAnim, setShowPingAnim] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -1890,6 +1892,7 @@ export default function MapScreen() {
         style={[styles.fab, { bottom: insets.bottom + 90 }]}
         onPress={() => {
           setShowFilterPanel(false);
+          if ((user as any)?.verificationStatus !== 'verified') { setVerifyGate('create'); return; }
           setShowCreate(true);
         }}
         activeOpacity={0.85}
@@ -2111,6 +2114,8 @@ export default function MapScreen() {
         color={Ping.purple}
         onDone={() => setPingCreatedToast(false)}
       />
+
+      <VerifyRequiredSheet visible={!!verifyGate} action={verifyGate ?? 'create'} onClose={() => setVerifyGate(null)} />
 
       {/* Ping creation animation — sonar pulse + particles */}
       <PingDropAnimation
