@@ -43,10 +43,9 @@ import {
   Flame, Star, Lightning, Heart, Coffee, MusicNote, Basketball, Smiley, Campfire, GameController,
 } from 'phosphor-react-native';
 import type { Icon } from 'phosphor-react-native';
-import { Map as MapLibreMap, Camera } from '@maplibre/maplibre-react-native';
+import VectorMapArt from '@/components/VectorMapArt';
 import LocationPickerModal from './LocationPickerModal';
 
-const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 import PaywallModal from './PaywallModal';
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -1691,26 +1690,9 @@ export default function CreatePingModal({ visible, onClose, onCreated, lat, lng,
                       onPress={() => setShowLocationPicker(true)}
                       activeOpacity={0.9}
                     >
-                      {/* Non-interactive map fills the card */}
+                      {/* Illustrated map backdrop — the real picker opens on tap */}
                       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                        <MapLibreMap
-                          style={{ flex: 1 }}
-                          styleURL={MAP_STYLE_URL}
-                          scrollEnabled={false}
-                          pitchEnabled={false}
-                          rotateEnabled={false}
-                          zoomEnabled={false}
-                          logoEnabled={false}
-                          attributionEnabled={false}
-                          compassEnabled={false}
-                        >
-                          <Camera
-                            centerCoordinate={[customLng ?? lng, customLat ?? lat]}
-                            zoomLevel={14}
-                            animationMode="none"
-                            animationDuration={0}
-                          />
-                        </MapLibreMap>
+                        <VectorMapArt isDark={isDark} />
                       </View>
                       {/* Center pin */}
                       <View style={s.locMapPin} pointerEvents="none">

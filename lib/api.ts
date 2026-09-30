@@ -221,6 +221,7 @@ export interface CreateActivityPayload {
   notes?: string;
   vibe?: string;
   imageUrl?: string;
+  markerIcon?: string | null;
 }
 
 export const activitiesApi = {
