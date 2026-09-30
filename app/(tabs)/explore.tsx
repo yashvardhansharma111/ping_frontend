@@ -12,6 +12,7 @@ import {
   ScrollView,
   Dimensions,
   Modal,
+  PanResponder,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,6 +64,28 @@ export default function ActivitiesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const searchRef = useRef<TextInput>(null);
+
+  // Detail sheet: drag the handle down to dismiss
+  const sheetY = useRef(new Animated.Value(0)).current;
+  const closeSheet = useCallback(() => {
+    Animated.timing(sheetY, { toValue: 700, duration: 220, useNativeDriver: true }).start(() => {
+      setSelectedActivity(null);
+      sheetY.setValue(0);
+    });
+  }, [sheetY]);
+  const sheetPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) sheetY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 120 || g.vy > 0.8) closeSheet();
+        else Animated.spring(sheetY, { toValue: 0, damping: 20, stiffness: 220, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(sheetY, { toValue: 0, damping: 20, stiffness: 220, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
 
   const pageScrollRef = useRef<ScrollView>(null);
   const TAB_W = (SCREEN_W - Spacing.lg * 2 - 8 * (FILTERS.length - 1)) / FILTERS.length;
@@ -325,10 +348,22 @@ export default function ActivitiesScreen() {
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
               activeOpacity={1}
-              onPress={() => setSelectedActivity(null)}
+              onPress={closeSheet}
             />
-            <View style={[styles.detailSheet, { paddingBottom: insets.bottom + 8 }]}>
-              <View style={styles.detailHandle} />
+            <Animated.View
+              style={[
+                styles.detailSheet,
+                {
+                  backgroundColor: scheme === 'dark' ? '#111111' : '#FFFFFF',
+                  paddingBottom: insets.bottom + 8,
+                  transform: [{ translateY: sheetY }],
+                },
+              ]}
+            >
+              {/* Grab strip — swipe down here to close */}
+              <View style={styles.detailGrab} {...sheetPan.panHandlers}>
+                <View style={[styles.detailHandle, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
+              </View>
               <ActivityDetailSheet
                 activity={selectedActivity}
                 onRefresh={() => {
@@ -336,10 +371,10 @@ export default function ActivitiesScreen() {
                   loadJoined();
                   loadMine();
                 }}
-                onDismiss={() => setSelectedActivity(null)}
+                onDismiss={closeSheet}
                 onActivityUpdate={(updated) => setSelectedActivity(updated)}
               />
-            </View>
+            </Animated.View>
           </View>
         </Modal>
       )}
@@ -400,18 +435,18 @@ const styles = StyleSheet.create({
   },
   detailSheet: {
     height: '88%',
-    backgroundColor: '#111111',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
+  },
+  detailGrab: {
+    paddingTop: 10,
+    paddingBottom: 8,
+    alignItems: 'center',
   },
   detailHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
   },
 });

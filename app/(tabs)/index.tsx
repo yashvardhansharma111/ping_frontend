@@ -904,7 +904,7 @@ function makeSoStyles(isDark: boolean) {
     },
     detailHandle: {
       width: 36, height: 4, borderRadius: 2,
-      backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginTop: 10, marginBottom: 4,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)', alignSelf: 'center', marginTop: 10, marginBottom: 4,
     },
   });
 }
