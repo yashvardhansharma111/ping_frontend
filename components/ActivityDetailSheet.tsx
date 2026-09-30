@@ -486,7 +486,7 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
       }}
       key={a._id}
     >
-      {/* 1. Cover photo — full width, no border radius */}
+      {/* 1. Cover photo — inset with rounded corners */}
       {a.imageUrl ? (
         <Image source={{ uri: a.imageUrl }} style={styles.coverPhoto} resizeMode="cover" />
       ) : (
@@ -1172,12 +1172,16 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
 
 const styles = StyleSheet.create({
   coverPhoto: {
-    width: '100%',
+    marginHorizontal: 16,
+    marginTop: 6,
     height: 220,
+    borderRadius: 20,
   },
   coverPhotoPlaceholder: {
-    width: '100%',
+    marginHorizontal: 16,
+    marginTop: 6,
     height: 180,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
