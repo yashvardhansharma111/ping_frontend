@@ -34,7 +34,7 @@ import Toast from 'react-native-toast-message';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Linking, Pressable } from 'react-native';
+import { Linking } from 'react-native';
 import VectorMapArt from '@/components/VectorMapArt';
 import { useLocation } from '@/hooks/useLocation';
 
