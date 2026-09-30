@@ -534,7 +534,7 @@ export default function FriendsScreen() {
       </Animated.View>
 
       {/* Stories + Recent Pings strip */}
-      <StoryStrip onCreatePing={() => setShowCreate(true)} />
+      <StoryStrip />
 
       {/* Tab pills with animated underline */}
       <View style={styles.filterRow}>

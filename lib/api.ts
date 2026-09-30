@@ -113,7 +113,7 @@ const del = <T>(path: string, auth = true) => request<T>('DELETE', path, undefin
 // ── Image upload (multipart — bypasses request() which is JSON-only) ──────────
 
 export const uploadApi = {
-  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'photos' | 'pings' | 'misc' = 'misc'): Promise<string> => {
+  uploadImage: async (localUri: string, folder: 'ads' | 'avatars' | 'photos' | 'pings' | 'stories' | 'misc' = 'misc'): Promise<string> => {
     const token = await getAccessToken();
     if (!token) throw new Error('Not authenticated');
 
@@ -809,5 +809,38 @@ export const eventsApi = {
     return get<{ ok: boolean; events: PingEvent[] }>(`/events?${q.toString()}`).then((r) => r.events);
   },
   getById: (id: string) => get<{ ok: boolean; event: PingEvent }>(`/events/${id}`).then((r) => r.event),
+};
+
+// ── Stories ──────────────────────────────────────────────────────────────────
+
+export interface Story {
+  _id: string;
+  userId: string;
+  mediaUrl: string;
+  mediaType: 'image';
+  caption?: string;
+  createdAt: string;
+  expiresAt: string;
+  seen: boolean;
+  viewCount?: number; // only on your own stories
+}
+
+export interface StoryGroup {
+  user: Pick<User, '_id' | 'displayName' | 'username' | 'avatarUrl'>;
+  stories: Story[];
+  hasUnseen: boolean;
+  isSelf: boolean;
+}
+
+export const storiesApi = {
+  feed: () => get<{ ok: boolean; groups: StoryGroup[] }>('/stories/feed').then((r) => r.groups),
+  create: (body: { mediaUrl: string; caption?: string }) =>
+    post<{ ok: boolean; story: Story }>('/stories', body).then((r) => r.story),
+  byUser: (userId: string) =>
+    get<{ ok: boolean; stories: Story[] }>(`/stories/user/${userId}`).then((r) => r.stories),
+  view: (id: string) => post<{ ok: boolean }>(`/stories/${id}/view`),
+  viewers: (id: string) =>
+    get<{ ok: boolean; viewers: { user: User; at: string }[] }>(`/stories/${id}/viewers`).then((r) => r.viewers),
+  remove: (id: string) => del<{ ok: boolean }>(`/stories/${id}`),
 };
 
