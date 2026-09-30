@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -103,6 +104,33 @@ const pd = StyleSheet.create({
   dotDone:   { backgroundColor: 'rgba(143,99,244,0.45)' },
   dotActive: { width: 24, borderRadius: 4, backgroundColor: PURPLE },
 });
+
+// ── DOB segment ───────────────────────────────────────────────────────────────
+// The input auto-sizes to its digits (no fixed width), so an empty field is a
+// few px wide sitting dead-centre — Android's caret can't drift to an edge.
+// The placeholder is drawn separately behind it.
+function DobPart({ value, onChange, placeholder, maxLength, flex, s, dim }: {
+  value: string; onChange: (v: string) => void; placeholder: string; maxLength: number;
+  flex: number; s: ReturnType<typeof makeStyles>; dim: string;
+}) {
+  const ref = useRef<TextInput>(null);
+  return (
+    <Pressable style={[s.input, s.dobBox, { flex }]} onPress={() => ref.current?.focus()}>
+      {!value && <Text style={[s.dobPlaceholder, { color: dim }]} pointerEvents="none">{placeholder}</Text>}
+      <TextInput
+        ref={ref}
+        style={s.dobInput}
+        value={value}
+        onChangeText={(v) => onChange(v.replace(/\D/g, ''))}
+        keyboardType="number-pad"
+        maxLength={maxLength}
+        textAlign="center"
+        selectTextOnFocus
+        caretHidden={false}
+      />
+    </Pressable>
+  );
+}
 
 // ── Shared section label ──────────────────────────────────────────────────────
 function FieldLabel({ text }: { text: string }) {
@@ -282,49 +310,11 @@ export default function SetupScreen() {
               <View style={s.field}>
                 <FieldLabel text="Date of birth" />
                 <View style={s.dobRow}>
-                  {/* Each input is only as wide as its digits and centred in its box,
-                      so Android's cursor placement can't drift to an edge. */}
-                  <View style={[s.input, s.dobBox, { flex: 1 }]}>
-                    <TextInput
-                      style={[s.dobInput, { width: 44 }]}
-                      placeholder="DD"
-                      placeholderTextColor={DIM}
-                      value={dobDay}
-                      onChangeText={(v) => setDobDay(v.replace(/\D/g, '').slice(0, 2))}
-                      keyboardType="number-pad"
-                      maxLength={2}
-                      textAlign="center"
-                      selectTextOnFocus
-                    />
-                  </View>
+                  <DobPart value={dobDay}   onChange={(v) => setDobDay(v.slice(0, 2))}   placeholder="DD"   maxLength={2} flex={1}   s={s} dim={DIM} />
                   <Text style={s.dobSlash}>/</Text>
-                  <View style={[s.input, s.dobBox, { flex: 1 }]}>
-                    <TextInput
-                      style={[s.dobInput, { width: 44 }]}
-                      placeholder="MM"
-                      placeholderTextColor={DIM}
-                      value={dobMonth}
-                      onChangeText={(v) => setDobMonth(v.replace(/\D/g, '').slice(0, 2))}
-                      keyboardType="number-pad"
-                      maxLength={2}
-                      textAlign="center"
-                      selectTextOnFocus
-                    />
-                  </View>
+                  <DobPart value={dobMonth} onChange={(v) => setDobMonth(v.slice(0, 2))} placeholder="MM"   maxLength={2} flex={1}   s={s} dim={DIM} />
                   <Text style={s.dobSlash}>/</Text>
-                  <View style={[s.input, s.dobBox, { flex: 1.8 }]}>
-                    <TextInput
-                      style={[s.dobInput, { width: 68 }]}
-                      placeholder="YYYY"
-                      placeholderTextColor={DIM}
-                      value={dobYear}
-                      onChangeText={(v) => setDobYear(v.replace(/\D/g, '').slice(0, 4))}
-                      keyboardType="number-pad"
-                      maxLength={4}
-                      textAlign="center"
-                      selectTextOnFocus
-                    />
-                  </View>
+                  <DobPart value={dobYear}  onChange={(v) => setDobYear(v.slice(0, 4))}  placeholder="YYYY" maxLength={4} flex={1.8} s={s} dim={DIM} />
                 </View>
               </View>
 
@@ -596,8 +586,9 @@ function makeStyles(p: Palette) {
 
   // DOB
   dobRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dobBox: { paddingHorizontal: 0, alignItems: 'center', justifyContent: 'center' },
-  dobInput: { height: '100%', fontSize: 15, fontWeight: '500', color: TEXT, textAlign: 'center', paddingHorizontal: 0 },
+  dobBox: { paddingHorizontal: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  dobPlaceholder: { position: 'absolute', fontSize: 15, fontWeight: '500' },
+  dobInput: { minWidth: 6, height: '100%', fontSize: 15, fontWeight: '500', color: TEXT, textAlign: 'center', paddingHorizontal: 0, paddingVertical: 0 },
   dobSlash: { fontSize: 18, color: DIM, fontWeight: '300' },
 
   // Occupation chips
