@@ -285,7 +285,7 @@ export default function ActivityCard({ activity: a, onJoin, onPress, compact = f
       {/* ── Action row ── */}
       {!compact && (
         <View style={[s.actionRow, { borderTopColor: borderColor }]}>
-          <Animated.View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center', paddingLeft: 10 }, { transform: [{ scale: btnScale }] }]}>
+          <Animated.View style={[{ flex: 1, flexDirection: 'row' }, { transform: [{ scale: btnScale }] }]}>
             <TouchableOpacity
               style={[s.mainBtn, { backgroundColor: isExpired ? (isDark ? 'rgba(255,255,255,0.06)' : '#F0F0F0') : accent }]}
               onPress={() => {
@@ -454,7 +454,7 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mainBtn: {
-    height: 44, flex: 0.86, paddingHorizontal: 25, borderRadius: 15,
+    height: 44, flex: 1, paddingHorizontal: 25, borderRadius: 15,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   mainBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
