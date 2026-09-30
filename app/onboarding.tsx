@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -116,58 +115,14 @@ const SLIDES: SlideData[] = [
     btnLabel: 'Continue',
   },
   {
-    darkGrad: ['#0E1220', '#0E0A1C', '#080815'],
-    center: 'smiley',
-    orbit:  ['heart', 'coffee', 'campfire', 'star', 'gameController'],
-    icons:  ['meetup', 'food', 'outdoor', 'study'],
-    title:    'Meet Real People',
-    accent:   'Near You',
-    subtitle: 'Join pings, meet your neighbours, and build your local crew one activity at a time.',
-    btnLabel: 'Continue',
-  },
-  {
     darkGrad: ['#160E20', '#0E0A1C', '#080815'],
     center: 'flame',
     orbit:  ['lightning', 'basketball', 'musicNote', 'heart', 'coffee'],
     icons:  ['sport', 'music', 'gaming', 'meetup'],
     title:    'Drop a Ping.',
     accent:   'See Who Shows Up',
-    subtitle: 'Host your own events. See who shows up nearby. Make something happen.',
-    btnLabel: 'Continue',
-  },
-  {
-    darkGrad: ['#0C1418', '#0E0A1C', '#080815'],
-    center: 'campfire',
-    orbit:  ['star', 'coffee', 'basketball', 'smiley', 'lightning'],
-    icons:  ['outdoor', 'food', 'sport', 'meetup'],
-    title:    'Know What\'s',
-    accent:   'Around You',
-    subtitle: 'Location access lets us show you what\'s happening nearby — in real time.',
-    btnLabel: 'Allow Location',
-    onAction: async () => { await Location.requestForegroundPermissionsAsync(); },
-  },
-  {
-    darkGrad: ['#180E1C', '#0E0A1C', '#080815'],
-    center: 'heart',
-    orbit:  ['smiley', 'star', 'coffee', 'gameController', 'musicNote'],
-    icons:  ['meetup', 'study', 'music', 'food'],
-    title:    'Find Friends',
-    accent:   'Already on Ping',
-    subtitle: 'See which of your contacts are already using Ping. Connect instantly.',
-    btnLabel: 'Find My Friends',
-    skipLabel: 'Skip for now',
-  },
-  {
-    isPro: true,
-    darkGrad: ['#120A28', '#0E0A1C', '#080815'],
-    center: 'star',
-    orbit:  ['lightning', 'heart', 'flame', 'smiley', 'campfire'],
-    icons:  ['gaming', 'music', 'sport', 'meetup'],
-    title:    'Go Pro — Free',
-    accent:   'For New Users',
-    subtitle: 'Get 1 month of Ping Pro with full features — on us. No payment needed today.',
-    btnLabel: 'Claim Free Pro',
-    skipLabel: 'Start for free',
+    subtitle: 'Host your own hangouts, join the ones nearby, and meet real people one activity at a time.',
+    btnLabel: 'Get started',
   },
 ];
 
@@ -354,15 +309,26 @@ function OrbitItem({
   );
 }
 
-// Coloured marker bubble — same look as a ping pin on the map
+// Coloured marker bubble — same look as a ping pin on the map.
+// When the icon key changes (slide change) it pops in briefly instead of
+// replaying the whole scene entrance.
 function IconBubble({ k, size, ring = 2 }: { k: MarkerKey; size: number; ring?: number }) {
   const { Icon, color } = MARKERS[k];
+  const pop = useSharedValue(1);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    pop.value = 0.6;
+    pop.value = withSpring(1, { damping: 12, stiffness: 220 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [k]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
-    <View style={[orb.bubbleShadow, { width: size, height: size, borderRadius: size / 2, shadowColor: color }]}>
+    <Reanimated.View style={[orb.bubbleShadow, popStyle, { width: size, height: size, borderRadius: size / 2, shadowColor: color }]}>
       <View style={[orb.bubble, { width: size, height: size, borderRadius: size / 2, borderWidth: ring, backgroundColor: color }]}>
         <Icon size={Math.round(size * 0.5)} color="#FFF" weight="fill" />
       </View>
-    </View>
+    </Reanimated.View>
   );
 }
 
@@ -417,7 +383,7 @@ function OrbitScene({ slide }: { slide: SlideData }) {
           {slide.icons.map((key, i) => {
             const t = TYPE_ICONS[key];
             return (
-              <OrbitItem key={`${key}-${i}`} rot={rotOuter} angle={ICON_ANGLES[i]} radius={RING_RADIUS.outer}
+              <OrbitItem key={`icon-${i}`} rot={rotOuter} angle={ICON_ANGLES[i]} radius={RING_RADIUS.outer}
                 size={32} delayMs={620 + i * 70} bobAmp={2} bobMs={2400 + i * 300}>
                 <View style={[orb.iconPill, { backgroundColor: `${t.color}26`, borderColor: `${t.color}66` }]}>
                   <MaterialCommunityIcons name={t.icon} size={17} color={t.color} />
@@ -595,10 +561,11 @@ export default function OnboardingScreen() {
           </View>
         </View>
 
-        {/* Scene slides with the copy so a slide change reads as one motion, not a re-appear */}
-        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideX }] }}>
-          <OrbitScene key={slide} slide={cur} />
-        </Animated.View>
+        {/* One persistent scene: the orbit keeps spinning and only the icons swap,
+            so a slide change never looks like the screen re-entering */}
+        <View style={{ flex: 1 }}>
+          <OrbitScene slide={cur} />
+        </View>
       </View>
 
       {/* ── Content ── */}
