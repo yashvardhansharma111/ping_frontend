@@ -796,7 +796,7 @@ export default function ChatRoomScreen() {
                   styles.input,
                   {
                     color: c.text,
-                    backgroundColor: scheme === 'dark' ? '#1A1A2E' : '#FFFFFF',
+                    backgroundColor: scheme === 'dark' ? '#1E1E25' : '#FFFFFF',
                     borderColor: c.border,
                   },
                 ]}
@@ -838,7 +838,7 @@ export default function ChatRoomScreen() {
             activeOpacity={1}
             onPress={() => setShowOptions(false)}
           />
-          <View style={[dmOpt.sheet, { backgroundColor: scheme === 'dark' ? '#1A1A2E' : '#FFFFFF', paddingBottom: insets.bottom + 8 }]}>
+          <View style={[dmOpt.sheet, { backgroundColor: scheme === 'dark' ? '#1E1E25' : '#FFFFFF', paddingBottom: insets.bottom + 8 }]}>
             <View style={[dmOpt.handle, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)' }]} />
             <TouchableOpacity style={dmOpt.row} onPress={handleClearChat} activeOpacity={0.7}>
               <Ionicons name="trash-outline" size={20} color={scheme === 'dark' ? '#E5E7EB' : '#374151'} />

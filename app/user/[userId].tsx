@@ -691,7 +691,7 @@ function InviteToPingSheet({ visible, targetUserId, targetName, onClose }: {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={inv.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
-        <View style={[inv.sheet, { backgroundColor: invDark ? '#11112A' : '#FFFFFF', paddingBottom: insets.bottom + 16 }]}>
+        <View style={[inv.sheet, { backgroundColor: invDark ? '#1E1E25' : '#FFFFFF', paddingBottom: insets.bottom + 16 }]}>
           <View style={[inv.header, { borderBottomColor: invDark ? 'rgba(167,139,250,0.12)' : 'rgba(0,0,0,0.08)' }]}>
             <Text style={[inv.title, { color: invDark ? '#F1F0FF' : '#111111' }]}>Invite to a Ping</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}><Ionicons name="close" size={22} color="#9CA3AF" /></TouchableOpacity>

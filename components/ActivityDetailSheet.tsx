@@ -152,7 +152,7 @@ const av = StyleSheet.create({
     width: 11, height: 11,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#11112A',
+    borderColor: '#1E1E25',
   },
   name: { ...Typography.caption, color: '#9490C0', fontSize: 10, maxWidth: 48 },
 });
@@ -1381,7 +1381,7 @@ const styles = StyleSheet.create({
 // ── Report / Profile menu sheet styles ───────────────────────────────────────
 
 function makeRptStyles(isDark: boolean, c: typeof Colors.dark) {
-  const sheetBg  = isDark ? '#11112A' : '#FFFFFF';
+  const sheetBg  = isDark ? c.surface : '#FFFFFF';
   const titleClr = isDark ? '#F1F0FF' : '#111111';
   const subClr   = isDark ? 'rgba(241,240,255,0.45)' : '#6B7280';
   const optionClr= isDark ? '#F1F0FF' : '#111111';

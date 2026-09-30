@@ -249,7 +249,7 @@ export default function AdDetailSheet({ ad, onClose }: Props) {
 
 const s = StyleSheet.create({
   sheet: {
-    backgroundColor: '#11112A',
+    backgroundColor: '#1E1E25',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
@@ -353,7 +353,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(167,139,250,0.12)',
   },
   productImg: { width: 184, height: 110 },
-  productImgEmpty: { backgroundColor: '#11112A', alignItems: 'center', justifyContent: 'center' },
+  productImgEmpty: { backgroundColor: '#1E1E25', alignItems: 'center', justifyContent: 'center' },
   productBody: { padding: 10, gap: 3 },
   productName: { fontSize: 13, fontWeight: '700', color: '#F1F0FF' },
   productPrice: { fontSize: 13, fontWeight: '700', color: Ping.purpleLight },

@@ -21,7 +21,7 @@ const OPTIONS: {
 
 function MiniPreview({ mode }: { mode: 'light' | 'dark' }) {
   const bg   = mode === 'dark' ? '#080815' : '#F4F0FF';
-  const card = mode === 'dark' ? '#11112A' : '#FFFFFF';
+  const card = mode === 'dark' ? '#1E1E25' : '#FFFFFF';
   const bar  = mode === 'dark' ? 'rgba(12,12,28,0.97)' : 'rgba(255,255,255,0.97)';
   const dot  = mode === 'dark' ? 'rgba(167,139,250,0.4)' : 'rgba(124,58,237,0.25)';
   return (
