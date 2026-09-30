@@ -1,14 +1,12 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   ActivityIndicator,
   Animated,
-  Keyboard,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { authApi } from '@/lib/api';
 import { Ping, Gradients } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const INDIA_PHONE_RE = /^[6-9]\d{9}$/;
 
@@ -33,19 +32,7 @@ export default function PhoneScreen() {
 
   const [fontsLoaded] = useFonts({ Pacifico_400Regular });
 
-  const keyboardY = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, (e) => {
-      Animated.timing(keyboardY, { toValue: e.endCoordinates.height, duration: 260, useNativeDriver: false }).start();
-    });
-    const hide = Keyboard.addListener(hideEvt, () => {
-      Animated.timing(keyboardY, { toValue: 0, duration: 220, useNativeDriver: false }).start();
-    });
-    return () => { show.remove(); hide.remove(); };
-  }, [keyboardY]);
+  const { keyboardY, onRootLayout } = useKeyboardInset();
 
   const isValid = INDIA_PHONE_RE.test(phone.trim());
 
@@ -65,7 +52,7 @@ export default function PhoneScreen() {
 
   return (
     // marginBottom tracks keyboard height — entire layout slides up, card stays at bottom
-    <Animated.View style={[s.root, { marginBottom: keyboardY }]}>
+    <Animated.View style={[s.root, { marginBottom: keyboardY }]} onLayout={onRootLayout}>
 
       {/* Hero text — flex:1 fills space above the card */}
       <View style={[s.hero, { paddingTop: insets.top + 28 }]}>

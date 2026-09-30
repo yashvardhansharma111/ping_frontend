@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   ActivityIndicator,
   Animated,
   Modal,
@@ -21,6 +20,7 @@ import useAuthStore from '@/lib/stores/authStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ping, Spacing, Gradients } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const OTP_LENGTH      = 6;
 const RESEND_COOLDOWN = 30;
@@ -46,25 +46,13 @@ export default function OtpScreen() {
   const boxAnims    = useRef(Array.from({ length: OTP_LENGTH }, () => new Animated.Value(1))).current;
   const safetyScale = useRef(new Animated.Value(0.88)).current;
   const safetyOp    = useRef(new Animated.Value(0)).current;
-  const keyboardY   = useRef(new Animated.Value(0)).current;
+  const { keyboardY, onRootLayout } = useKeyboardInset();
 
   useEffect(() => {
     if (resendSecs <= 0) return;
     const t = setTimeout(() => setResend((sec) => sec - 1), 1000);
     return () => clearTimeout(t);
   }, [resendSecs]);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvent, (e) => {
-      Animated.timing(keyboardY, { toValue: e.endCoordinates.height, duration: 260, useNativeDriver: false }).start();
-    });
-    const hide = Keyboard.addListener(hideEvent, () => {
-      Animated.timing(keyboardY, { toValue: 0, duration: 220, useNativeDriver: false }).start();
-    });
-    return () => { show.remove(); hide.remove(); };
-  }, [keyboardY]);
 
   useEffect(() => {
     if (debugCode && debugCode.length === OTP_LENGTH) {
@@ -152,7 +140,7 @@ export default function OtpScreen() {
 
   return (
     // marginBottom tracks keyboard height — entire layout slides up, card stays at bottom
-    <Animated.View style={[s.root, { marginBottom: keyboardY }]}>
+    <Animated.View style={[s.root, { marginBottom: keyboardY }]} onLayout={onRootLayout}>
       {/* Hero area fills space above card */}
       <View style={[s.hero, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>

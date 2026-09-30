@@ -23,7 +23,7 @@
     "android": {
       "package": "com.pingnow.app",
       "googleServicesFile": "./google-services.json",
-      "softwareKeyboardLayoutMode": "pan",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#080815",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
