@@ -434,6 +434,26 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
   const touchStartY = useRef(0);
   const pulledRef = useRef(false);
 
+  function shareActivity() {
+    const HOOKS: Record<string, string> = {
+      food: "We're eating. Come hungry or don't come at all.",
+      sport: 'Moving our bodies like functioning humans. Join.',
+      music: 'The aux is open. Bring your actual taste.',
+      study: "Group delusion that we'll be productive. You in?",
+      outdoor: "Outside. On purpose. It'll be worth it.",
+      gaming: 'We play, we argue, we do it again. Classic.',
+      meetup: 'Real people. IRL. In this economy. Wild.',
+    };
+    const emoji = ({ sport: '🏃', food: '🍜', music: '🎧', study: '📖', outdoor: '🌿', gaming: '🎮', meetup: '👋' } as Record<string, string>)[a.type] ?? '📍';
+    const hook = HOOKS[a.type];
+    const place = (a as any).placeName as string | undefined;
+    const time = new Date(a.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const date = new Date(a.startsAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    const body = [a.description?.trim() || null, place ? `📍 ${place}` : null, `🕐 ${date}, ${time}`].filter(Boolean).join('\n');
+    const msg = [`${emoji} ${a.title}`, '', hook ?? body, ...(hook ? ['', body] : []), '', 'Get on Ping and join → https://pingnow.in'].join('\n');
+    Share.share({ message: msg });
+  }
+
   return (
     <>
     <ScrollView
@@ -484,42 +504,17 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
           </View>
         </View>
 
-        {/* Gender chip + share */}
-        <View style={styles.subRow}>
-          {a.genderFilter && a.genderFilter !== 'all' && (
+        {/* Gender chip (only when a filter is set — no empty row otherwise) */}
+        {a.genderFilter && a.genderFilter !== 'all' && (
+          <View style={styles.subRow}>
             <View style={[styles.genderChip, { backgroundColor: 'rgba(143,99,244,0.12)', borderColor: `${Ping.purple}60` }]}>
               <Ionicons name={a.genderFilter === 'women_only' ? 'female' : a.genderFilter === 'men_only' ? 'male' : 'transgender-outline'} size={11} color={Ping.purpleLight} />
               <Text style={[styles.genderChipText, { color: Ping.purpleLight }]}>
                 {a.genderFilter === 'women_only' ? 'Women only' : a.genderFilter === 'men_only' ? 'Men only' : 'Non-binary only'}
               </Text>
             </View>
-          )}
-          <TouchableOpacity
-            style={styles.shareSmallBtn}
-            onPress={() => {
-              const HOOKS: Record<string, string> = {
-                food: "We're eating. Come hungry or don't come at all.",
-                sport: 'Moving our bodies like functioning humans. Join.',
-                music: 'The aux is open. Bring your actual taste.',
-                study: "Group delusion that we'll be productive. You in?",
-                outdoor: "Outside. On purpose. It'll be worth it.",
-                gaming: 'We play, we argue, we do it again. Classic.',
-                meetup: 'Real people. IRL. In this economy. Wild.',
-              };
-              const emoji = ({ sport: '🏃', food: '🍜', music: '🎧', study: '📖', outdoor: '🌿', gaming: '🎮', meetup: '👋' } as Record<string,string>)[a.type] ?? '📍';
-              const hook = HOOKS[a.type];
-              const place = (a as any).placeName as string | undefined;
-              const time = new Date(a.startsAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-              const date = new Date(a.startsAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-              const body = [a.description?.trim() || null, place ? `📍 ${place}` : null, `🕐 ${date}, ${time}`].filter(Boolean).join('\n');
-              const msg = [`${emoji} ${a.title}`, '', hook ?? body, ...(hook ? ['', body] : []), '', 'Get on Ping and join → https://pingnow.in'].join('\n');
-              Share.share({ message: msg });
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="share-outline" size={16} color={isDark ? 'rgba(241,240,255,0.5)' : '#6B7280'} />
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
 
         {/* Bullet meta — 2-col grid */}
         <View style={styles.metaGrid}>
@@ -549,10 +544,11 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
           {a.maxParticipants ? ` · ${Math.max(0, a.maxParticipants - count)} spots left` : ''}
         </Text>
 
-        {/* ── Host card ── */}
+        {/* ── Host card + share ── */}
         {a.creator?.displayName && (
+          <View style={styles.hostRow}>
           <TouchableOpacity
-            style={[styles.hostCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB', borderColor: isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.07)' }]}
+            style={[styles.hostCard, { flex: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB', borderColor: isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.07)' }]}
             onPress={() => {
               if (!creatorId) return;
               if (isCreator) { router.push(`/user/${creatorId}`); return; }
@@ -592,6 +588,15 @@ export default function ActivityDetailSheet({ activity: initial, onRefresh, onDi
               </View>
             )}
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shareSquareBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB', borderColor: isDark ? 'rgba(167,139,250,0.15)' : 'rgba(0,0,0,0.07)' }]}
+            onPress={shareActivity}
+            activeOpacity={0.7}
+            accessibilityLabel="Share ping"
+          >
+            <Ionicons name="share-outline" size={18} color={isDark ? 'rgba(241,240,255,0.7)' : '#4B5563'} />
+          </TouchableOpacity>
+          </View>
         )}
 
         {/* ── Event Details card ── */}
@@ -1211,11 +1216,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   genderChipText: { fontSize: 11, fontWeight: '700' },
-  shareSmallBtn: { marginLeft: 'auto' as any, padding: 6 },
-  metaGrid: { flexDirection: 'row', gap: 10 },
+  metaGrid: { flexDirection: 'row', gap: 10, marginTop: -4 },
   metaCell: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   metaCellText: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 },
-  peopleCount: { fontSize: 13, fontWeight: '500' },
+  peopleCount: { fontSize: 13, fontWeight: '500', marginTop: -6 },
+  hostRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
+  shareSquareBtn: {
+    width: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   hostCard: {
     borderRadius: 16,
     borderWidth: 1,
