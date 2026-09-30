@@ -823,6 +823,10 @@ export interface PingEvent {
   title: string;
   description?: string;
   imageUrl?: string | null;
+  organizer?: string | null;
+  city?: string | null;
+  mapsUrl?: string | null;
+  location?: { type: 'Point'; coordinates: [number, number] } | null;
   venueName?: string | null;
   venueAddress?: string | null;
   category: 'offer' | 'event';

@@ -1,288 +1,28 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  FlatList,
-  Animated,
-  Image,
-  ActivityIndicator,
-  RefreshControl,
-  PanResponder,
-  type NativeSyntheticEvent,
-  type NativeScrollEvent,
+  View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView,
+  RefreshControl, ActivityIndicator, PanResponder, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocation } from '@/hooks/useLocation';
 import { eventsApi, type PingEvent } from '@/lib/api';
-import { Ping, Spacing, Radius, Typography, Colors } from '@/constants/theme';
+import useAuthStore from '@/lib/stores/authStore';
+import AppAvatar from '@/components/AppAvatar';
+import { Ping, Spacing, Radius, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { openEventLocation, eventPlaceLabel, isLiveNow, fmtDate, fmtTime } from '@/lib/eventUtils';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const CARD_W = SCREEN_W * 0.72;
-const CARD_H = Math.min(SCREEN_H * 0.52, 460);
-const SIDE_PAD = (SCREEN_W - CARD_W) / 2;
-const ACCENTS = ['#6545D9', '#8F63F4', '#BB92FF', '#7B5CFF', '#C8A8FF'];
-
-function accentFor(item: PingEvent, index: number) {
-  if (item.category === 'offer') return '#8F63F4';
-  return ACCENTS[index % ACCENTS.length];
-}
-
-function badgeLabel(item: PingEvent) {
-  const now = Date.now();
-  const start = new Date(item.startDate).getTime();
-  const end = new Date(item.endDate).getTime();
-  if (now >= start && now <= end) {
-    return item.category === 'offer' ? 'Live offer' : 'Happening now';
-  }
-  if (now < start) return 'Coming soon';
-  return item.category === 'offer' ? 'Offer' : 'Event';
-}
-
-function formatRange(start: string, end: string) {
-  const s = new Date(start);
-  const e = new Date(end);
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-  if (s.toDateString() === e.toDateString()) {
-    return s.toLocaleDateString('en-IN', opts);
-  }
-  return `${s.toLocaleDateString('en-IN', opts)} – ${e.toLocaleDateString('en-IN', opts)}`;
-}
-
-// ── Carousel card ─────────────────────────────────────────────────────────────
-
-function EventPosterCard({
-  item,
-  index,
-  scrollX,
-  bookmarked,
-  onToggleBookmark,
-  isDark,
-}: {
-  item: PingEvent;
-  index: number;
-  scrollX: Animated.Value;
-  bookmarked: boolean;
-  onToggleBookmark: () => void;
-  isDark: boolean;
-}) {
-  const accent = accentFor(item, index);
-  const inputRange = [
-    (index - 1) * CARD_W,
-    index * CARD_W,
-    (index + 1) * CARD_W,
-  ];
-
-  const scale = scrollX.interpolate({
-    inputRange,
-    outputRange: [0.78, 1, 0.78],
-    extrapolate: 'clamp',
-  });
-  const opacity = scrollX.interpolate({
-    inputRange,
-    outputRange: [0.55, 1, 0.55],
-    extrapolate: 'clamp',
-  });
-  const translateY = scrollX.interpolate({
-    inputRange,
-    outputRange: [28, 0, 28],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <Animated.View style={[card.wrap, { transform: [{ scale }, { translateY }], opacity }]}>
-      <View style={[card.inner, !isDark && card.innerLight]}>
-        <View style={card.imageArea}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={card.image} resizeMode="cover" />
-          ) : (
-            <View style={[card.placeholder, { backgroundColor: accent }]}>
-              <Ionicons
-                name={item.category === 'offer' ? 'pricetag' : 'ticket'}
-                size={48}
-                color="rgba(255,255,255,0.85)"
-              />
-            </View>
-          )}
-
-          <View style={card.badge}>
-            <Text style={card.badgeText}>{badgeLabel(item)}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={card.bookmark}
-            onPress={onToggleBookmark}
-            hitSlop={8}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={bookmarked ? 'bookmark' : 'bookmark-outline'}
-              size={18}
-              color={bookmarked ? '#FBBF24' : '#FFF'}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={[card.titleBlock, { backgroundColor: accent }]}>
-          <Text style={card.titleBlockText} numberOfLines={2}>
-            {item.title.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-    </Animated.View>
-  );
-}
-
-const card = StyleSheet.create({
-  wrap: {
-    width: CARD_W,
-    height: CARD_H,
-    justifyContent: 'center',
-  },
-  inner: {
-    flex: 1,
-    marginHorizontal: 8,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: '#111',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
-    elevation: 14,
-  },
-  innerLight: {
-    backgroundColor: '#FFF',
-    shadowColor: '#6545D9',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  imageArea: {
-    flex: 1,
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: 'rgba(20,20,20,0.72)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.full,
-  },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  bookmark: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(20,20,20,0.72)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titleBlock: {
-    minHeight: CARD_H * 0.22,
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  titleBlockText: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-});
-
-// ── Pagination dots ───────────────────────────────────────────────────────────
-
-function Dots({ count, active, isDark }: { count: number; active: number; isDark: boolean }) {
-  return (
-    <View style={dots.row}>
-      {Array.from({ length: count }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            dots.dot,
-            { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(28,16,64,0.18)' },
-            i === active && {
-              width: 22,
-              backgroundColor: isDark ? '#FFF' : Ping.purple,
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-const dots = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 18,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-});
-
-// ── Empty / loading ───────────────────────────────────────────────────────────
-
-function EmptyState({ isDark, colors }: { isDark: boolean; colors: typeof Colors.light }) {
-  return (
-    <View style={empty.wrap}>
-      <View style={[empty.iconCircle, { backgroundColor: isDark ? 'rgba(124,58,237,0.14)' : 'rgba(124,58,237,0.1)' }]}>
-        <Ionicons name="sparkles-outline" size={40} color={isDark ? Ping.purpleLight : Ping.purple} />
-      </View>
-      <Text style={[empty.title, { color: colors.text }]}>No events yet</Text>
-      <Text style={[empty.sub, { color: colors.textSecondary }]}>
-        When something special drops nearby,{'\n'}it’ll show up here in style.
-      </Text>
-    </View>
-  );
-}
-
-const empty = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
-  iconCircle: {
-    width: 88, height: 88, borderRadius: 44,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
-  },
-  title: { ...Typography.h3 },
-  sub: { ...Typography.bodySm, textAlign: 'center', lineHeight: 20 },
-});
-
-// ── Filters ───────────────────────────────────────────────────────────────────
+const { width: SCREEN_W } = Dimensions.get('window');
+const HERO_H = Math.round((SCREEN_W - Spacing.lg * 2) * 0.62); // fixed aspect so every hero matches
+const THUMB = 76;
+const BOOKMARK_KEY = 'events:bookmarks';
 
 type FilterKey = 'all' | 'event' | 'offer';
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -291,224 +31,171 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'offer', label: 'Offers' },
 ];
 
-function makeScreenStyles(isDark: boolean, c: typeof Colors.light) {
-  return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: c.background,
-    },
-    glow: {
-      position: 'absolute',
-      top: -80,
-      alignSelf: 'center',
-      width: SCREEN_W * 0.9,
-      height: 220,
-      borderRadius: 110,
-      backgroundColor: isDark ? 'rgba(124,58,237,0.16)' : 'rgba(124,58,237,0.08)',
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      justifyContent: 'space-between',
-      paddingHorizontal: Spacing.lg,
-      paddingTop: 8,
-      paddingBottom: 14,
-    },
-    title: {
-      color: c.text,
-      fontSize: 28,
-      fontWeight: '700',
-      letterSpacing: -0.5,
-    },
-    subtitle: {
-      color: c.textSecondary,
-      fontSize: 12,
-      fontWeight: '400',
-      marginTop: 2,
-    },
-    livePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: isDark ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.1)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(34,197,94,0.28)' : 'rgba(34,197,94,0.25)',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: Radius.full,
-      marginBottom: 6,
-    },
-    liveDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
-      backgroundColor: Ping.green,
-    },
-    liveText: {
-      color: Ping.green,
-      fontSize: 12,
-      fontWeight: '700',
-    },
-    filters: {
-      flexDirection: 'row',
-      paddingHorizontal: Spacing.lg,
-      paddingTop: 8,
-      paddingBottom: 12,
-      gap: 8,
-    },
-    chip: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 8,
-      borderRadius: Radius.full,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-    },
-    chipOn: {
-      backgroundColor: Ping.purple,
-      borderColor: Ping.purple,
-    },
-    chipText: {
-      color: c.textSecondary,
-      fontSize: 13,
-      fontWeight: '600',
-    },
-    chipTextOn: {
-      color: '#FFF',
-    },
-    center: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-    },
-    loadingText: {
-      color: c.textSecondary,
-      fontSize: 13,
-    },
-    carouselBlock: {
-      flex: 1,
-      justifyContent: 'center',
-      paddingTop: 12,
-      paddingBottom: 100,
-    },
-    meta: {
-      paddingHorizontal: Spacing.xl,
-      alignItems: 'center',
-      marginTop: 22,
-      gap: 6,
-      minHeight: 92,
-    },
-    metaTitle: {
-      color: c.text,
-      fontSize: 22,
-      fontWeight: '700',
-      textAlign: 'center',
-      letterSpacing: -0.3,
-    },
-    metaSub: {
-      color: c.textSecondary,
-      fontSize: 14,
-      lineHeight: 20,
-      textAlign: 'center',
-      maxWidth: SCREEN_W * 0.82,
-    },
-    metaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      marginTop: 4,
-      maxWidth: SCREEN_W * 0.85,
-    },
-    metaMeta: {
-      color: c.textSecondary,
-      fontSize: 12,
-      fontWeight: '500',
-    },
-    metaDot: {
-      color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(28,16,64,0.25)',
-      marginHorizontal: 2,
-    },
-  });
+const PLACEHOLDER: [string, string] = ['#3B2A6B', '#1E1533'];
+
+// ── Bookmarks (per device) ──────────────────────────────────────────────────
+function useBookmarks() {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    AsyncStorage.getItem(BOOKMARK_KEY).then((v) => { if (v) setIds(new Set(JSON.parse(v))); }).catch(() => {});
+  }, []);
+  const toggle = useCallback((id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      AsyncStorage.setItem(BOOKMARK_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+  return { ids, toggle };
 }
 
-// ── Main screen ───────────────────────────────────────────────────────────────
+// ── Cards ───────────────────────────────────────────────────────────────────
+function HeroCard({ ev, bookmarked, onBookmark, onPress, isDark }: {
+  ev: PingEvent; bookmarked: boolean; onBookmark: () => void; onPress: () => void; isDark: boolean;
+}) {
+  const live = isLiveNow(ev);
+  return (
+    <TouchableOpacity activeOpacity={0.92} onPress={onPress} style={[hero.card, { height: HERO_H }]}>
+      {ev.imageUrl ? (
+        <Image source={{ uri: ev.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <LinearGradient colors={PLACEHOLDER} style={StyleSheet.absoluteFill} />
+      )}
+      <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.78)']} style={StyleSheet.absoluteFill} />
 
+      <View style={hero.topRow}>
+        <View style={hero.pill}>
+          <View style={[hero.liveDot, { backgroundColor: live ? '#22C55E' : '#FBBF24' }]} />
+          <Text style={hero.pillText}>{live ? 'Happening now' : `${fmtDate(ev.startDate)} · ${fmtTime(ev.startDate)}`}</Text>
+        </View>
+        <TouchableOpacity onPress={onBookmark} hitSlop={8} style={hero.bookmark}>
+          <Ionicons name={bookmarked ? 'bookmark' : 'bookmark-outline'} size={17} color={bookmarked ? '#FBBF24' : '#111'} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={hero.bottom}>
+        <Text style={hero.title} numberOfLines={2}>{ev.title}</Text>
+        <Text style={hero.by} numberOfLines={1}>By {ev.organizer || 'Ping'}{ev.city ? ` · ${ev.city}` : ''}</Text>
+        <View style={hero.ctaRow}>
+          <View style={[hero.cta, { backgroundColor: isDark ? '#F1F0FF' : '#111111' }]}>
+            <Text style={[hero.ctaText, { color: isDark ? '#111' : '#FFF' }]}>{ev.category === 'offer' ? 'View offer' : 'View details'}</Text>
+          </View>
+          <TouchableOpacity onPress={() => openEventLocation(ev)} hitSlop={6} style={hero.locBtn} activeOpacity={0.8}>
+            <Ionicons name="navigate" size={14} color="#FFF" />
+            <Text style={hero.locText} numberOfLines={1}>{eventPlaceLabel(ev)}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const hero = StyleSheet.create({
+  card: { borderRadius: 22, overflow: 'hidden', backgroundColor: '#1E1533' },
+  topRow: { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.92)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radius.full },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
+  pillText: { fontSize: 11, fontWeight: '700', color: '#111' },
+  bookmark: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' },
+  bottom: { position: 'absolute', left: 16, right: 16, bottom: 14, gap: 4 },
+  title: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: -0.4, lineHeight: 27 },
+  by: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' },
+  ctaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  cta: { paddingHorizontal: 18, height: 40, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  ctaText: { fontSize: 13, fontWeight: '700' },
+  locBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, height: 40, paddingHorizontal: 12, borderRadius: Radius.full, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  locText: { color: '#FFF', fontSize: 12, fontWeight: '600', flexShrink: 1 },
+});
+
+function EventRow({ ev, onPress, c, isDark }: { ev: PingEvent; onPress: () => void; c: typeof Colors.light; isDark: boolean }) {
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={[row.wrap, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <View style={row.thumb}>
+        {ev.imageUrl
+          ? <Image source={{ uri: ev.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          : <LinearGradient colors={PLACEHOLDER} style={StyleSheet.absoluteFill} />}
+        {ev.category === 'offer' && (
+          <View style={row.offerTag}><Text style={row.offerTagText}>OFFER</Text></View>
+        )}
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <Text style={[row.title, { color: c.text }]} numberOfLines={1}>{ev.title}</Text>
+        <Text style={[row.by, { color: c.textSecondary }]} numberOfLines={1}>By {ev.organizer || 'Ping'}</Text>
+        <View style={row.metaRow}>
+          <Ionicons name="time-outline" size={12} color={isDark ? Ping.purpleLight : Ping.purple} />
+          <Text style={[row.meta, { color: c.textSecondary }]} numberOfLines={1}>
+            {fmtDate(ev.startDate)}, {fmtTime(ev.startDate)}
+          </Text>
+          <Text style={[row.meta, { color: c.textSecondary }]}> · </Text>
+          <TouchableOpacity onPress={() => openEventLocation(ev)} hitSlop={6} style={{ flexShrink: 1 }}>
+            <Text style={[row.meta, { color: isDark ? Ping.purpleLight : Ping.purple }]} numberOfLines={1}>
+              {eventPlaceLabel(ev)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />
+    </TouchableOpacity>
+  );
+}
+
+const row = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth },
+  thumb: { width: THUMB, height: THUMB, borderRadius: 14, overflow: 'hidden', backgroundColor: '#1E1533' },
+  offerTag: { position: 'absolute', bottom: 5, left: 5, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6 },
+  offerTagText: { color: '#FBBF24', fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
+  title: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  by: { fontSize: 12 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  meta: { fontSize: 11, fontWeight: '500' },
+});
+
+// ── Screen ──────────────────────────────────────────────────────────────────
 export default function EventsScreen() {
   const insets = useSafeAreaInsets();
-  const scheme = useColorScheme() ?? 'light';
+  const scheme = useColorScheme() ?? 'dark';
   const isDark = scheme === 'dark';
   const c = Colors[scheme];
-  const scr = useMemo(() => makeScreenStyles(isDark, c), [isDark, c]);
-  const { coords } = useLocation();
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const listRef = useRef<FlatList>(null);
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const { coords, granted } = useLocation();
+  const { ids: bookmarks, toggle: toggleBookmark } = useBookmarks();
 
   const [events, setEvents] = useState<PingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterKey>('all');
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
-  const metaOpacity = useRef(new Animated.Value(1)).current;
+  const [query, setQuery] = useState('');
+  const [place, setPlace] = useState<string | null>(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     try {
-      const data = await eventsApi.list({
-        lat: coords.latitude,
-        lng: coords.longitude,
-        radius: 50000,
-        category: filter === 'all' ? undefined : filter,
-      });
+      const data = await eventsApi.list({ lat: coords.latitude, lng: coords.longitude, radius: 50000 });
       setEvents(data);
-      setActiveIndex(0);
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
-    } catch {
-      // non-fatal
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch { /* non-fatal */ }
+    finally { setLoading(false); setRefreshing(false); }
   }
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [filter, coords.latitude, coords.longitude]),
-  );
+  useFocusEffect(useCallback(() => { load(); }, [coords.latitude, coords.longitude]));
 
+  // City chip from a one-off reverse geocode (best effort)
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(metaOpacity, { toValue: 0.35, duration: 90, useNativeDriver: true }),
-      Animated.timing(metaOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-    ]).start();
-  }, [activeIndex]);
+    if (!granted) return;
+    Location.reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude })
+      .then((r) => {
+        const g = r[0];
+        const label = [g?.city || g?.subregion || g?.district, g?.region].filter(Boolean).join(', ');
+        if (label) setPlace(label);
+      })
+      .catch(() => {});
+  }, [granted, Math.round(coords.latitude * 100), Math.round(coords.longitude * 100)]);
 
-  // Pad data so adjacent cards always peek on both sides
-  const padded = useMemo(() => {
-    if (events.length === 0) return [];
-    if (events.length === 1) return [events[0], events[0], events[0]];
-    if (events.length === 2) return [events[0], events[1], events[0], events[1]];
-    return events;
-  }, [events]);
-
-  function onMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
-    const clamped = Math.max(0, Math.min(padded.length - 1, idx));
-    if (clamped !== activeIndex) {
-      setActiveIndex(clamped);
-      Haptics.selectionAsync();
-    }
-  }
-
-  // Swipe anywhere outside the card carousel to move between All / Events / Offers.
-  // The carousel's own horizontal scroll still wins when the gesture starts on a card.
+  // Swipe anywhere on the header area to move between filters
   const filterRef = useRef(filter);
   useEffect(() => { filterRef.current = filter; }, [filter]);
-
   function shiftFilter(dir: 1 | -1) {
     const i = FILTERS.findIndex((f) => f.key === filterRef.current);
     const next = FILTERS[i + dir];
@@ -516,135 +203,136 @@ export default function EventsScreen() {
     Haptics.selectionAsync();
     setFilter(next.key);
   }
-
   const swipePan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -40) shiftFilter(1);
-        else if (g.dx > 40) shiftFilter(-1);
-      },
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 18 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_, g) => { if (g.dx < -50) shiftFilter(1); else if (g.dx > 50) shiftFilter(-1); },
     }),
   ).current;
 
-  function toggleBookmark(id: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setBookmarks((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return events
+      .filter((e) => filter === 'all' || e.category === filter)
+      .filter((e) => !q || [e.title, e.organizer, e.venueName, e.city, ...(e.tags ?? [])].some((s) => s?.toLowerCase().includes(q)))
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }, [events, filter, query]);
 
-  // Map padded index back to real event index for meta + dots
-  const realIndex = events.length ? activeIndex % events.length : 0;
-  const active = events[realIndex];
-  const metaIcon = c.textSecondary;
+  const heroEv = visible.find((e) => isLiveNow(e)) ?? visible[0] ?? null;
+  const upcoming = visible.filter((e) => e._id !== heroEv?._id);
+
+  const firstName = (user?.displayName || user?.username || 'there').split(' ')[0];
+  const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <View style={[scr.root, { paddingTop: insets.top }]} {...swipePan.panHandlers}>
-      <View style={scr.header}>
-        <View>
-          <Text style={scr.title}>Events</Text>
-          <Text style={scr.subtitle}>Discover what's on near you</Text>
+    <View style={[s.root, { backgroundColor: c.background, paddingTop: insets.top }]} {...swipePan.panHandlers}>
+      <ScrollView
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 110 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={Ping.purple} />}
+      >
+        {/* Top bar */}
+        <View style={s.topBar}>
+          <View style={[s.placeChip, { backgroundColor: isDark ? '#F1F0FF' : '#111111' }]}>
+            <Ionicons name="navigate" size={13} color={isDark ? '#111' : '#FFF'} />
+            <Text style={[s.placeText, { color: isDark ? '#111' : '#FFF' }]} numberOfLines={1}>{place ?? 'Near you'}</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)} activeOpacity={0.8}>
+            <AppAvatar uri={user?.avatarUrl} name={user?.displayName || user?.username} size={40} />
+          </TouchableOpacity>
         </View>
-        <View style={scr.livePill}>
-          <View style={scr.liveDot} />
-          <Text style={scr.liveText}>Live</Text>
-        </View>
-      </View>
 
-      <View style={scr.filters}>
-        {FILTERS.map((f) => {
-          const on = filter === f.key;
-          return (
-            <TouchableOpacity
-              key={f.key}
-              style={[scr.chip, on && scr.chipOn]}
-              onPress={() => setFilter(f.key)}
-              activeOpacity={0.8}
-            >
-              <Text style={[scr.chipText, on && scr.chipTextOn]}>{f.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+        <Text style={[s.today, { color: c.textSecondary }]}>Today's {today}</Text>
+        <Text style={[s.welcome, { color: c.text }]}>Welcome, {firstName}!</Text>
 
-      {loading ? (
-        <View style={scr.center}>
-          <ActivityIndicator color={isDark ? Ping.purpleLight : Ping.purple} size="large" />
-          <Text style={scr.loadingText}>Curating nearby…</Text>
-        </View>
-      ) : events.length === 0 ? (
-        <EmptyState isDark={isDark} colors={c} />
-      ) : (
-        <View style={scr.carouselBlock}>
-          <Animated.FlatList
-            ref={listRef as any}
-            data={padded}
-            keyExtractor={(_, idx) => `card-${idx}`}
-            initialScrollIndex={events.length === 1 ? 1 : 0}
-            getItemLayout={(_, index) => ({ length: CARD_W, offset: CARD_W * index, index })}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={CARD_W}
-            decelerationRate="fast"
-            bounces
-            contentContainerStyle={{ paddingHorizontal: SIDE_PAD }}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: true },
-            )}
-            scrollEventThrottle={16}
-            onMomentumScrollEnd={onMomentumEnd}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => { setRefreshing(true); load(true); }}
-                tintColor={isDark ? Ping.purpleLight : Ping.purple}
-              />
-            }
-            renderItem={({ item, index }) => (
-              <EventPosterCard
-                item={item}
-                index={index}
-                scrollX={scrollX}
-                bookmarked={bookmarks.has(item._id)}
-                onToggleBookmark={() => toggleBookmark(item._id)}
-                isDark={isDark}
-              />
-            )}
+        {/* Search */}
+        <View style={[s.search, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F1F4', borderColor: c.border }]}>
+          <Ionicons name="search" size={16} color={c.textSecondary} />
+          <TextInput
+            style={[s.searchInput, { color: c.text }]}
+            placeholder="Search by name, place or tag"
+            placeholderTextColor={c.textSecondary}
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
           />
+          {query ? (
+            <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={c.textSecondary} /></TouchableOpacity>
+          ) : null}
+        </View>
 
-          <Animated.View style={[scr.meta, { opacity: metaOpacity }]}>
-            {active ? (
+        {/* Filters */}
+        <View style={s.filters}>
+          {FILTERS.map((f) => {
+            const on = filter === f.key;
+            return (
+              <TouchableOpacity key={f.key} onPress={() => setFilter(f.key)} style={[s.chip, { backgroundColor: on ? (isDark ? '#F1F0FF' : '#111') : 'transparent', borderColor: on ? 'transparent' : c.border }]} activeOpacity={0.8}>
+                <Text style={[s.chipText, { color: on ? (isDark ? '#111' : '#FFF') : c.textSecondary }]}>{f.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {loading ? (
+          <ActivityIndicator color={Ping.purple} style={{ marginTop: 40 }} />
+        ) : !heroEv ? (
+          <View style={s.empty}>
+            <View style={[s.emptyIcon, { backgroundColor: `${Ping.purple}1A` }]}>
+              <Ionicons name="sparkles-outline" size={34} color={isDark ? Ping.purpleLight : Ping.purple} />
+            </View>
+            <Text style={[s.emptyTitle, { color: c.text }]}>{query ? 'Nothing matches' : 'No events yet'}</Text>
+            <Text style={[s.emptySub, { color: c.textSecondary }]}>{query ? 'Try a different search.' : "When something special drops nearby, it'll show up here."}</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={[s.section, { color: c.text }]}>{isLiveNow(heroEv) ? 'Happening now' : 'Nearby event'}</Text>
+            <HeroCard
+              ev={heroEv}
+              bookmarked={bookmarks.has(heroEv._id)}
+              onBookmark={() => toggleBookmark(heroEv._id)}
+              onPress={() => router.push(`/event/${heroEv._id}` as any)}
+              isDark={isDark}
+            />
+
+            {upcoming.length > 0 && (
               <>
-                <Text style={scr.metaTitle} numberOfLines={2}>{active.title}</Text>
-                <Text style={scr.metaSub} numberOfLines={2}>
-                  {active.description?.trim()
-                    || (active.venueName
-                      ? `${active.venueName}${active.venueAddress ? ` · ${active.venueAddress}` : ''}`
-                      : formatRange(active.startDate, active.endDate))}
-                </Text>
-                <View style={scr.metaRow}>
-                  <Ionicons name="calendar-outline" size={13} color={metaIcon} />
-                  <Text style={scr.metaMeta}>{formatRange(active.startDate, active.endDate)}</Text>
-                  {active.venueName ? (
-                    <>
-                      <Text style={scr.metaDot}>·</Text>
-                      <Ionicons name="location-outline" size={13} color={metaIcon} />
-                      <Text style={scr.metaMeta} numberOfLines={1}>{active.venueName}</Text>
-                    </>
-                  ) : null}
+                <View style={s.sectionRow}>
+                  <Text style={[s.section, { color: c.text, marginTop: 0 }]}>Upcoming</Text>
+                  <Text style={[s.count, { color: c.textSecondary }]}>{upcoming.length}</Text>
+                </View>
+                <View style={{ gap: 10 }}>
+                  {upcoming.map((ev) => (
+                    <EventRow key={ev._id} ev={ev} c={c} isDark={isDark} onPress={() => router.push(`/event/${ev._id}` as any)} />
+                  ))}
                 </View>
               </>
-            ) : null}
-          </Animated.View>
-
-          <Dots count={Math.min(events.length, 8)} active={Math.min(realIndex, 7)} isDark={isDark} />
-        </View>
-      )}
+            )}
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  content: { paddingHorizontal: Spacing.lg, paddingTop: 8, gap: 12 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  placeChip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, height: 40, borderRadius: Radius.full, maxWidth: SCREEN_W * 0.6 },
+  placeText: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  today: { fontSize: 12, fontWeight: '500', marginTop: 8 },
+  welcome: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginTop: -8 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 46, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12 },
+  searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
+  filters: { flexDirection: 'row', gap: 8 },
+  chip: { paddingHorizontal: 14, height: 32, borderRadius: Radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chipText: { fontSize: 12, fontWeight: '700' },
+  section: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2, marginTop: 6 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  count: { fontSize: 12, fontWeight: '600' },
+  empty: { alignItems: 'center', paddingVertical: 40, gap: 8, paddingHorizontal: 24 },
+  emptyIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle: { fontSize: 17, fontWeight: '700' },
+  emptySub: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
+});
