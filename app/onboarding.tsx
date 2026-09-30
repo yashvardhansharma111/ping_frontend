@@ -27,6 +27,7 @@ import Reanimated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { Ping, Radius } from '@/constants/theme';
+import { subscriptionsApi, type CouponInfo } from '@/lib/api';
 
 const { width: W, height: H } = Dimensions.get('window');
 const HERO_H = Math.round(H * 0.56);
@@ -488,8 +489,18 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const [slide, setSlide] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [featured, setFeatured] = useState<CouponInfo | null>(null);
+  const [proMonthly, setProMonthly] = useState<number | null>(null); // rupees
 
   useAmbientSound(muted);
+
+  // Headline offer + live Pro price for the last slide (both public endpoints)
+  useEffect(() => {
+    subscriptionsApi.featuredCoupon().then(setFeatured).catch(() => {});
+    subscriptionsApi.plans()
+      .then((r) => setProMonthly(r.plans.find((p) => p.planId === 'pro_monthly')?.amountRupees ?? null))
+      .catch(() => {});
+  }, []);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideX   = useRef(new Animated.Value(0)).current;
@@ -505,7 +516,7 @@ export default function OnboardingScreen() {
 
   function goTo(next: number) {
     if (next < 0 || next >= SLIDES.length) return;
-    const dir = next > slide ? -24 : 24;
+    const dir = next > slide ? -56 : 56;
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
       Animated.timing(slideX,   { toValue: dir, duration: 160, useNativeDriver: true }),
@@ -584,23 +595,26 @@ export default function OnboardingScreen() {
           </View>
         </View>
 
-        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        {/* Scene slides with the copy so a slide change reads as one motion, not a re-appear */}
+        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideX }] }}>
           <OrbitScene key={slide} slide={cur} />
         </Animated.View>
       </View>
 
       {/* ── Content ── */}
       <View style={s.body}>
-        {cur.isPro && (
+        {cur.isPro && featured && (
           <View style={s.proRow}>
             <View style={s.couponBadge}>
-              <Text style={s.couponText}>🎁  WELCOME0 — ₹0 for 30 days</Text>
+              <Text style={s.couponText}>🎁  {featured.code} — {featured.description || 'welcome offer'}</Text>
             </View>
-            <Text style={s.priceRow}>
-              <Text style={s.strikePrice}>₹99</Text>
-              {'  '}
-              <Text style={s.freePrice}>FREE</Text>
-            </Text>
+            {proMonthly != null && featured.discountType === 'percent' && featured.value >= 100 && (
+              <Text style={s.priceRow}>
+                <Text style={s.strikePrice}>₹{proMonthly}</Text>
+                {'  '}
+                <Text style={s.freePrice}>FREE</Text>
+              </Text>
+            )}
           </View>
         )}
 
@@ -609,7 +623,13 @@ export default function OnboardingScreen() {
             {cur.title}{'\n'}
             <Text style={{ color: Ping.purpleLight }}>{cur.accent}</Text>
           </Text>
-          <Text style={[s.subtitle, { color: subCol }]}>{cur.subtitle}</Text>
+          <Text style={[s.subtitle, { color: subCol }]}>
+            {cur.isPro
+              ? featured
+                ? `Sign up, then apply ${featured.code} on the plan screen — ${featured.description || 'a welcome discount on Pro'}.`
+                : 'Pick a plan after sign-up. Start free and upgrade whenever you like.'
+              : cur.subtitle}
+          </Text>
         </Animated.View>
 
         <View style={s.dotsRow}>

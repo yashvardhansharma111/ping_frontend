@@ -668,6 +668,37 @@ export interface SubscriptionSnapshot {
   };
 }
 
+export interface CouponInfo {
+  code: string;
+  description: string;
+  discountType: 'percent' | 'flat';
+  value: number;
+  appliesToTiers: string[];
+  appliesToPlanIds: string[];
+  firstTimeOnly: boolean;
+  expiresAt: string | null;
+}
+
+export interface CouponPreview {
+  coupon: CouponInfo;
+  planId: string;
+  baseMinor: number;
+  discountMinor: number;
+  finalMinor: number;
+}
+
+export interface CreateOrderResult {
+  ok: boolean;
+  activated: boolean;
+  paymentId: string;
+  plan: SubscriptionPlan;
+  amountMinor: number;
+  discountMinor: number;
+  subscription?: SubscriptionSnapshot;
+  order?: { id: string; amount: number; currency: string; keyId: string };
+  checkoutUrl?: string;
+}
+
 export const subscriptionsApi = {
   plans: () =>
     get<{
@@ -675,15 +706,13 @@ export const subscriptionsApi = {
       plans: SubscriptionPlan[];
       tiers: Record<string, { name: string; features: string[] }>;
     }>('/subscriptions/plans', false),
+  featuredCoupon: () =>
+    get<{ ok: boolean; coupon: CouponInfo | null }>('/subscriptions/coupons/featured', false).then((r) => r.coupon),
   me: () => get<{ ok: boolean; subscription: SubscriptionSnapshot }>('/subscriptions/me'),
-  createOrder: (planId: string) =>
-    post<{
-      ok: boolean;
-      paymentId: string;
-      order: { id: string; amount: number; currency: string; keyId: string };
-      plan: SubscriptionPlan;
-      checkoutUrl: string;
-    }>('/subscriptions/order', { planId }),
+  previewCoupon: (code: string, planId: string) =>
+    post<{ ok: boolean } & CouponPreview>('/subscriptions/coupon/preview', { code, planId }),
+  createOrder: (planId: string, couponCode?: string | null) =>
+    post<CreateOrderResult>('/subscriptions/order', { planId, ...(couponCode ? { couponCode } : {}) }),
   verifyPayment: (body: {
     gatewayOrderId: string;
     gatewayPaymentId: string;

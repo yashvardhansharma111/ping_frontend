@@ -57,7 +57,7 @@ function AuthGuard() {
       const inAuth         = seg0 === '(auth)';
       const inVerification = seg0 === 'verification';
 
-      const inSetupFlow = inAuth && ['otp', 'setup'].includes(seg1 ?? '');
+      const inSetupFlow = inAuth && ['otp', 'setup', 'choose-plan'].includes(seg1 ?? '');
       const needsSetup  = !!(user && !(user as any)?.displayName);
 
       if (!onboardingDone) {

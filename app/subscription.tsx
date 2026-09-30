@@ -13,6 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenHeader from '@/components/ScreenHeader';
+import CouponField, { type CouponResults } from '@/components/CouponField';
+import { usePlanPurchase } from '@/hooks/usePlanPurchase';
 import {
   subscriptionsApi,
   type SubscriptionPlan,
@@ -64,7 +66,9 @@ export default function SubscriptionScreen() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [mine, setMine] = useState<SubscriptionSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState<CouponResults>({});
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const { buy: purchase, buying, pendingTier } = usePlanPurchase((sub) => setMine(sub));
 
   const load = useCallback(async () => {
     try {
@@ -86,22 +90,18 @@ export default function SubscriptionScreen() {
   const planFor = (tier: 'pro' | 'premium') =>
     plans.find((p) => p.planId === `${tier}${BILLING.find((b) => b.key === billing)!.suffix}`);
 
+  const candidateIds = (['pro', 'premium'] as const)
+    .map((t) => planFor(t)?.planId)
+    .filter(Boolean) as string[];
+
+  function priceText(plan: SubscriptionPlan) {
+    const cp = coupons[plan.planId];
+    if (!cp) return `₹${plan.amountRupees}`;
+    return cp.finalMinor === 0 ? 'FREE' : `₹${(cp.finalMinor / 100).toFixed(0)}`;
+  }
+
   async function buy(plan: SubscriptionPlan) {
-    if (buying) return;
-    setBuying(plan.planId);
-    try {
-      const res = await subscriptionsApi.mockActivate(plan.planId);
-      setMine(res.subscription);
-      Toast.show({
-        type: 'success',
-        text1: `${plan.tier === 'premium' ? 'Premium' : 'Pro'} unlocked 🎉`,
-        text2: `Active until ${res.subscription.expiresAt ? new Date(res.subscription.expiresAt).toLocaleDateString('en-IN') : '—'}`,
-      });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'Purchase failed', text2: e.message });
-    } finally {
-      setBuying(null);
-    }
+    await purchase(plan, coupons[plan.planId] ? couponCode : null);
   }
 
   const currentTier: Tier = (mine?.tier as Tier) ?? 'free';
@@ -186,6 +186,15 @@ export default function SubscriptionScreen() {
             })}
           </View>
 
+          {/* Coupon */}
+          <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>COUPON</Text>
+          <CouponField planIds={candidateIds} onChange={(r, code) => { setCoupons(r); setCouponCode(code); }} />
+          {pendingTier && (
+            <Text style={[styles.footnote, { color: c.textSecondary, marginTop: 0 }]}>
+              Waiting for payment confirmation — come back to this screen after paying.
+            </Text>
+          )}
+
           {/* ── Plan cards ── */}
           <PlanCard
             tier="free"
@@ -203,7 +212,7 @@ export default function SubscriptionScreen() {
               <PlanCard
                 tier="pro"
                 name="Pro"
-                priceLabel={plan ? `₹${plan.amountRupees}` : '—'}
+                priceLabel={plan ? priceText(plan) : '—'}
                 interval={plan?.intervalLabel}
                 features={['Direct messages', 'Direct pings to non-friends', '5 creates / week', '7 joins / week']}
                 action={planAction('pro')}
@@ -220,7 +229,7 @@ export default function SubscriptionScreen() {
               <PlanCard
                 tier="premium"
                 name="Premium"
-                priceLabel={plan ? `₹${plan.amountRupees}` : '—'}
+                priceLabel={plan ? priceText(plan) : '—'}
                 interval={plan?.intervalLabel}
                 features={['Unlimited create & join', 'Tag in Highlights', 'Create activity groups', 'Everything in Pro']}
                 action={planAction('premium')}
@@ -285,7 +294,7 @@ export default function SubscriptionScreen() {
           </View>
 
           <Text style={[styles.footnote, { color: c.textSecondary }]}>
-            Prices in INR. Cancel anytime by letting the period expire.{'\n'}Pro 3-month is ₹149 for 90 days as recorded on the sheet.
+            Prices in INR. Cancel anytime by letting the period expire.
           </Text>
         </ScrollView>
       )}

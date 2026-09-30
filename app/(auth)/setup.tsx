@@ -184,7 +184,7 @@ export default function SetupScreen() {
       }
       const result = await usersApi.updateMe(payload);
       setUser(result.user);
-      router.replace('/verification' as any);
+      router.replace('/(auth)/choose-plan' as any);
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Could not save profile.' });
     } finally { setLoading(false); }
