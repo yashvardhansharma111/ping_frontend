@@ -34,6 +34,45 @@ import Toast from 'react-native-toast-message';
 import useAuthStore from '@/lib/stores/authStore';
 import { Colors, Ping, Spacing, Radius, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Linking, Pressable } from 'react-native';
+import VectorMapArt from '@/components/VectorMapArt';
+import { useLocation } from '@/hooks/useLocation';
+
+function mapsUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
+// Shared-location bubble: illustrated map, pin, label, opens Maps on tap
+function LocationCard({ lat, lng, label, isMine }: { lat: number; lng: number; label?: string; isMine: boolean }) {
+  const scheme = useColorScheme() ?? 'dark';
+  const isDark = scheme === 'dark';
+  return (
+    <Pressable onPress={() => Linking.openURL(mapsUrl(lat, lng)).catch(() => {})} style={({ pressed }) => [loc.card, { opacity: pressed ? 0.85 : 1 }]}>
+      <View style={loc.map}>
+        <VectorMapArt isDark={isDark} />
+        <View style={loc.pinWrap} pointerEvents="none">
+          <Ionicons name="location" size={30} color="#EF4444" />
+        </View>
+      </View>
+      <View style={[loc.footer, { backgroundColor: isMine ? 'rgba(0,0,0,0.18)' : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[loc.label, { color: isMine ? '#FFF' : isDark ? '#F1F0FF' : '#111' }]} numberOfLines={1}>{label || 'Shared location'}</Text>
+          <Text style={[loc.sub, { color: isMine ? 'rgba(255,255,255,0.7)' : isDark ? 'rgba(241,240,255,0.5)' : '#6B7280' }]}>Tap to open in Maps</Text>
+        </View>
+        <Ionicons name="navigate-circle" size={22} color={isMine ? '#FFF' : Ping.purpleLight} />
+      </View>
+    </Pressable>
+  );
+}
+
+const loc = StyleSheet.create({
+  card: { width: 220, borderRadius: 14, overflow: 'hidden', marginBottom: 4 },
+  map: { height: 110, position: 'relative' },
+  pinWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingBottom: 14 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  label: { fontSize: 13, fontWeight: '700' },
+  sub: { fontSize: 11, marginTop: 1 },
+});
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -212,9 +251,18 @@ const MessageBubble = memo(function MessageBubble({
               {senderName}
             </Text>
           ) : null}
-          <Text style={[styles.bubbleText, { color: isMine ? '#FFF' : c.text }]}>
-            {bodyText}
-          </Text>
+          {msg.type === 'location' && msg.location?.coordinates ? (
+            <LocationCard
+              lat={msg.location.coordinates[1]}
+              lng={msg.location.coordinates[0]}
+              label={msg.body}
+              isMine={isMine}
+            />
+          ) : (
+            <Text style={[styles.bubbleText, { color: isMine ? '#FFF' : c.text }]}>
+              {bodyText}
+            </Text>
+          )}
           <View style={styles.metaRow}>
             <Text style={[styles.msgTime, { color: isMine ? 'rgba(255,255,255,0.7)' : c.textSecondary }]}>
               {formatTime(msg.createdAt)}
@@ -347,6 +395,25 @@ export default function ChatRoomScreen() {
   const quickActions = useMemo(() => getQuickActions(pingType), [pingType]);
   const isGroup = room?.kind === 'activity' || room?.kind === 'squad';
   const isActivityRoom = room?.kind === 'activity';
+
+  // Location sharing: the ping's venue (activity rooms) or my current position
+  const { coords: myCoords, granted: locGranted } = useLocation();
+  const [locSheet, setLocSheet] = useState(false);
+  const [sharingLoc, setSharingLoc] = useState(false);
+  const shareLocation = useCallback(async (loc: { lat: number; lng: number; label?: string }) => {
+    if (sharingLoc) return;
+    setSharingLoc(true);
+    setLocSheet(false);
+    try {
+      const res = await chatApi.sendLocation(roomId, loc);
+      setMessages((prev) => [...prev, { ...res.message, pending: false }]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Could not share location', text2: e?.message || 'Try again.' });
+    } finally {
+      setSharingLoc(false);
+    }
+  }, [roomId, sharingLoc]);
   const typeColor = (pingType && TYPE_COLORS[pingType]) ? TYPE_COLORS[pingType] : Ping.purple;
   const typeIcon: React.ComponentProps<typeof Ionicons>['name'] =
     (pingType && TYPE_ICONS[pingType]) ? TYPE_ICONS[pingType] : 'flash';
@@ -768,6 +835,17 @@ export default function ChatRoomScreen() {
             {!keyboardOpen && !text.trim() && !replyingTo ? (
               <View style={[styles.quickBar, { borderBottomColor: c.border }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
+                  {room?.venue && (
+                    <TouchableOpacity
+                      style={[styles.quickPill, { borderColor: `${Ping.purple}66`, backgroundColor: `${Ping.purple}1A` }]}
+                      onPress={() => shareLocation({ lat: room.venue!.lat, lng: room.venue!.lng, label: room.venue!.name })}
+                      disabled={sharingLoc}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="location" size={13} color={Ping.purpleLight} />
+                      <Text style={[styles.quickText, { color: c.text }]} numberOfLines={1}>Share venue · {room.venue.name}</Text>
+                    </TouchableOpacity>
+                  )}
                   {quickActions.map((qa) => (
                     <TouchableOpacity
                       key={qa.label}
@@ -790,6 +868,17 @@ export default function ChatRoomScreen() {
                 { paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 8) },
               ]}
             >
+              <TouchableOpacity
+                style={[styles.locBtn, { backgroundColor: scheme === 'dark' ? '#1E1E25' : '#FFFFFF', borderColor: c.border }]}
+                onPress={() => setLocSheet(true)}
+                disabled={sharingLoc}
+                activeOpacity={0.75}
+                accessibilityLabel="Share a location"
+              >
+                {sharingLoc
+                  ? <ActivityIndicator size="small" color={Ping.purple} />
+                  : <Ionicons name="location-outline" size={20} color={Ping.purpleLight} />}
+              </TouchableOpacity>
               <TextInput
                 ref={inputRef}
                 style={[
@@ -824,6 +913,40 @@ export default function ChatRoomScreen() {
           </Reanimated.View>
         </>
       )}
+
+      {/* Share location sheet */}
+      <Modal visible={locSheet} transparent animationType="slide" onRequestClose={() => setLocSheet(false)} statusBarTranslucent>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={() => setLocSheet(false)} />
+          <View style={[styles.locSheet, { backgroundColor: scheme === 'dark' ? '#1E1E25' : '#FFFFFF', paddingBottom: insets.bottom + 16 }]}>
+            <View style={[styles.locHandle, { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)' }]} />
+            <Text style={[styles.locTitle, { color: c.text }]}>Share a location</Text>
+            {room?.venue ? (
+              <TouchableOpacity style={[styles.locRow, { borderColor: c.border }]} onPress={() => shareLocation({ lat: room.venue!.lat, lng: room.venue!.lng, label: room.venue!.name })} activeOpacity={0.8}>
+                <View style={[styles.locRowIcon, { backgroundColor: `${Ping.purple}1F` }]}><Ionicons name="flag" size={18} color={Ping.purpleLight} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.locRowLabel, { color: c.text }]}>Ping venue</Text>
+                  <Text style={[styles.locRowHint, { color: c.textSecondary }]} numberOfLines={1}>{room.venue.name}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.locRow, { borderColor: c.border, opacity: locGranted ? 1 : 0.5 }]}
+              onPress={() => locGranted && shareLocation({ lat: myCoords.latitude, lng: myCoords.longitude, label: 'My current location' })}
+              disabled={!locGranted}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.locRowIcon, { backgroundColor: 'rgba(59,130,246,0.15)' }]}><Ionicons name="navigate" size={18} color="#3B82F6" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.locRowLabel, { color: c.text }]}>My current location</Text>
+                <Text style={[styles.locRowHint, { color: c.textSecondary }]}>{locGranted ? 'Where you are right now' : 'Allow location access to use this'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* DM options sheet */}
       <Modal
@@ -1124,6 +1247,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#9CA3AF',
     opacity: 0.55,
   },
+  locBtn: {
+    width: 42, height: 42, borderRadius: 21, borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  locSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, gap: 6 },
+  locHandle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, marginBottom: 10 },
+  locTitle: { fontSize: 17, fontWeight: '800', marginBottom: 6 },
+  locRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  locRowIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  locRowLabel: { fontSize: 14, fontWeight: '700' },
+  locRowHint: { fontSize: 12, marginTop: 1 },
   empty: {
     alignItems: 'center',
     justifyContent: 'center',

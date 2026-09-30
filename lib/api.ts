@@ -497,6 +497,8 @@ export interface ChatRoom {
   lastMessagePreview?: string;
   mutedBy?: string[];
   createdAt: string;
+  /** Venue of the linked ping (activity rooms only) */
+  venue?: { name: string; lat: number; lng: number } | null;
 }
 
 export interface ChatMessage {
@@ -539,6 +541,8 @@ export const chatApi = {
     ),
   sendMessage: (roomId: string, body: string, replyTo?: string) =>
     post<{ ok: boolean; message: ChatMessage }>(`/chat/rooms/${roomId}/messages`, { type: 'text', body, ...(replyTo ? { replyTo } : {}) }),
+  sendLocation: (roomId: string, loc: { lat: number; lng: number; label?: string }) =>
+    post<{ ok: boolean; message: ChatMessage }>(`/chat/rooms/${roomId}/messages`, { type: 'location', lat: loc.lat, lng: loc.lng, body: loc.label ?? '' }),
   markRead: (roomId: string) =>
     post<{ ok: boolean; marked: number }>(`/chat/rooms/${roomId}/read`),
   clearMessages: (roomId: string) =>
