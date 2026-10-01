@@ -27,7 +27,7 @@ import { applyPendingUpdateOnLaunch } from '@/lib/otaUpdates';
 
 applyGlobalFont();
 import RatePingModal from '@/components/RatePingModal';
-import { activitiesApi, type PendingRating } from '@/lib/api';
+import { activitiesApi, authApi, type PendingRating } from '@/lib/api';
 import { setupNotifications, clearPushToken, addResponseListener, startSessionTracking, stopSessionTracking, type NotificationPayload } from '@/lib/notifications';
 import { Colors, Ping } from '@/constants/theme';
 
@@ -113,7 +113,7 @@ function AuthGuard() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { loadFromStorage, isLoading, user } = useAuthStore();
+  const { loadFromStorage, isLoading, user, setUser } = useAuthStore();
   const [splashAnimDone, setSplashAnimDone] = useState(false);
   const [updateCheckDone, setUpdateCheckDone] = useState(false);
   // Splash stays up until the intro finishes AND any pending OTA has been
@@ -141,6 +141,12 @@ export default function RootLayout() {
     if (Platform.OS !== 'android') return;
     SystemUI.setBackgroundColorAsync(c.background).catch(() => {});
   }, [c.background]);
+
+  // Refresh the cached user from the server once per app start
+  useEffect(() => {
+    if (isLoading || !user) return;
+    authApi.me().then((r) => { if (r?.user) setUser(r.user); }).catch(() => {});
+  }, [isLoading]);
 
   // Register push token once per login session
   useEffect(() => {

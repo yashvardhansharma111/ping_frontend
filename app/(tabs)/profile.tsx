@@ -21,7 +21,7 @@ import { ChartBar, ShieldCheck } from 'phosphor-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import useAuthStore from '@/lib/stores/authStore';
-import { usersApi, friendsApi, uploadApi, activitiesApi } from '@/lib/api';
+import { usersApi, friendsApi, uploadApi, activitiesApi, authApi } from '@/lib/api';
 import HighlightsSection from '@/components/HighlightsSection';
 import { Spacing, Radius, Typography, Colors, Ping } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -181,6 +181,12 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { user, setUser } = useAuthStore();
+
+  // The store's user is a login-time snapshot; pull the live record (trust rate,
+  // verification, plan…) whenever the tab is opened so server-side changes show up.
+  useFocusEffect(useCallback(() => {
+    authApi.me().then((r) => { if (r?.user) setUser(r.user); }).catch(() => {});
+  }, [setUser]));
 
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [activityCount, setActivityCount] = useState<number | null>(null);
