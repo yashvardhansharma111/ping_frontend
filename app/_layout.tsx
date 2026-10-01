@@ -95,6 +95,12 @@ function AuthGuard() {
         case 'ping_new':
           router.push('/(tabs)');
           break;
+        case 'verification_approved':
+          router.push('/(tabs)/profile');
+          break;
+        case 'verification_rejected':
+          router.push('/verification' as any);
+          break;
         case 'chat_message':
           if (payload.roomId) router.push(`/chat/${payload.roomId}` as any);
           break;
@@ -142,10 +148,18 @@ export default function RootLayout() {
     SystemUI.setBackgroundColorAsync(c.background).catch(() => {});
   }, [c.background]);
 
-  // Refresh the cached user from the server once per app start
+  // Refresh the cached user from the server once per app start; celebrate a
+  // verification that was approved while the app was closed.
   useEffect(() => {
     if (isLoading || !user) return;
-    authApi.me().then((r) => { if (r?.user) setUser(r.user); }).catch(() => {});
+    const wasVerified = (user as any)?.verificationStatus === 'verified';
+    authApi.me().then((r) => {
+      if (!r?.user) return;
+      setUser(r.user);
+      if (!wasVerified && (r.user as any)?.verificationStatus === 'verified') {
+        Toast.show({ type: 'success', text1: "You're verified ✓", text2: 'You can now create and join pings.' });
+      }
+    }).catch(() => {});
   }, [isLoading]);
 
   // Register push token once per login session

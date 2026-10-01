@@ -178,7 +178,7 @@ export async function stopSessionTracking(): Promise<void> {
 }
 
 export type NotificationPayload = {
-  type: 'ping_join' | 'ping_cancel' | 'friend_accept' | 'friend_reject' | 'friend_request' | 'participant_nearby' | 'ping_starting' | 'ping_new' | 'chat_message';
+  type: 'ping_join' | 'ping_cancel' | 'friend_accept' | 'friend_reject' | 'friend_request' | 'participant_nearby' | 'ping_starting' | 'ping_new' | 'chat_message' | 'verification_approved' | 'verification_rejected';
   activityId?: string;
   userId?: string;
   roomId?: string;
