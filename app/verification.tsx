@@ -54,20 +54,47 @@ function IntroStep({ onStart, onSkip, c, isDark }: { onStart: () => void; onSkip
         <Animated.View style={[intro.pulseRing, { opacity: pulse }]} />
         <View style={[intro.outerRing, { borderColor: `${Ping.purple}50`, backgroundColor: `${Ping.purple}12` }]}>
           <View style={[intro.iconCircle, { backgroundColor: Ping.purple }]}>
-            <Ionicons name="shield-checkmark" size={38} color="#FFF" />
+            <Ionicons name="shield-checkmark" size={30} color="#FFF" />
           </View>
         </View>
       </View>
 
       <Text style={[intro.title, { color: c.text }]}>Get your Verified badge</Text>
       <Text style={[intro.sub, { color: c.textSecondary }]}>
-        Take a quick selfie to confirm it's really you. Verified profiles get more trust and access to women-only pings.
+        Take a quick selfie so a reviewer can confirm it's really you. It must show <Text style={{ color: c.text, fontWeight: '700' }}>your face, clearly</Text> — anything else gets rejected.
       </Text>
 
+      {/* Good vs bad example */}
+      <View style={intro.examples}>
+        <View style={[intro.exTile, { borderColor: GREEN }]}>
+          <Image
+            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=360&h=440&fit=crop&crop=faces&q=80' }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+          <View style={[intro.exBadge, { backgroundColor: GREEN }]}>
+            <Ionicons name="checkmark" size={12} color="#FFF" />
+            <Text style={intro.exBadgeText}>Like this</Text>
+          </View>
+        </View>
+        <View style={[intro.exTile, { borderColor: '#EF4444', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+          <View style={intro.exBadRows}>
+            <View style={intro.exBadRow}><Ionicons name="image-outline" size={16} color="#EF4444" /><Text style={[intro.exBadText, { color: c.text }]}>Ceiling, wall, blur</Text></View>
+            <View style={intro.exBadRow}><Ionicons name="people-outline" size={16} color="#EF4444" /><Text style={[intro.exBadText, { color: c.text }]}>Group photo</Text></View>
+            <View style={intro.exBadRow}><Ionicons name="glasses-outline" size={16} color="#EF4444" /><Text style={[intro.exBadText, { color: c.text }]}>Sunglasses, mask, filters</Text></View>
+            <View style={intro.exBadRow}><Ionicons name="moon-outline" size={16} color="#EF4444" /><Text style={[intro.exBadText, { color: c.text }]}>Too dark</Text></View>
+          </View>
+          <View style={[intro.exBadge, { backgroundColor: '#EF4444' }]}>
+            <Ionicons name="close" size={12} color="#FFF" />
+            <Text style={intro.exBadgeText}>Not this</Text>
+          </View>
+        </View>
+      </View>
+
       <View style={[intro.bullets, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(143,99,244,0.05)', borderColor: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(143,99,244,0.1)' }]}>
-        <BulletRow text="Takes less than 30 seconds" c={c} />
-        <BulletRow text="Selfie is deleted after verification" c={c} />
-        <BulletRow text="Only your verified status is stored" c={c} />
+        <BulletRow text="Face centred in the oval, good light, phone at eye level" c={c} />
+        <BulletRow text="Follow the on-screen pose — it proves it's live" c={c} />
+        <BulletRow text="Selfie is deleted after review; only your status is kept" c={c} />
       </View>
 
       <View style={intro.actions}>
@@ -97,27 +124,34 @@ function BulletRow({ text, c }: { text: string; c: ThemeColors }) {
 }
 
 const intro = StyleSheet.create({
-  iconWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
+  iconWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   pulseRing: {
     position: 'absolute',
-    width: 140, height: 140, borderRadius: 70,
+    width: 104, height: 104, borderRadius: 52,
     backgroundColor: `${Ping.purple}14`,
   },
   outerRing: {
-    width: 110, height: 110, borderRadius: 55,
+    width: 84, height: 84, borderRadius: 42,
     borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
   },
+  examples: { flexDirection: 'row', gap: 12, width: '100%', paddingHorizontal: 20, marginBottom: 14 },
+  exTile: { flex: 1, height: 150, borderRadius: 16, borderWidth: 2, overflow: 'hidden', justifyContent: 'flex-end' },
+  exBadge: { position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  exBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  exBadRows: { padding: 10, paddingTop: 34, gap: 7 },
+  exBadRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  exBadText: { fontSize: 11, fontWeight: '600', flex: 1 },
   iconCircle: {
-    width: 82, height: 82, borderRadius: 41,
+    width: 62, height: 62, borderRadius: 31,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: Ping.purple, shadowOpacity: 0.55, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
     elevation: 14,
   },
-  title: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 10, paddingHorizontal: 16, letterSpacing: -0.5 },
-  sub: { fontSize: 14, textAlign: 'center', lineHeight: 22, paddingHorizontal: 24, marginBottom: 24, opacity: 0.8 },
+  title: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 8, paddingHorizontal: 16, letterSpacing: -0.5 },
+  sub: { fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginBottom: 16, opacity: 0.85 },
   bullets: {
-    width: '100%', paddingHorizontal: 20, paddingVertical: 16,
-    gap: 12, marginBottom: 36,
+    width: '100%', paddingHorizontal: 16, paddingVertical: 12,
+    gap: 9, marginBottom: 20,
     borderRadius: 16, borderWidth: 1,
   },
   bulletRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
