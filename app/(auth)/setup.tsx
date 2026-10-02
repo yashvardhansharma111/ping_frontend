@@ -413,7 +413,7 @@ export default function SetupScreen() {
             <View style={s.stepWrap}>
               <View style={s.stepHead}>
                 <Text style={s.stepTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Add your photos.</Text>
-                <Text style={s.stepSub}>At least one. Of you, ideally.</Text>
+                <Text style={s.stepSub}>At least one — of you, ideally.</Text>
               </View>
 
               {/* Privacy note */}
